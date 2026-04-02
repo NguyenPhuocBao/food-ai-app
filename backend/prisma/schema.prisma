@@ -1,0 +1,447 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== ENUMS ====================
+enum Role {
+  USER
+  ADMIN
+  MODERATOR
+}
+
+enum MealType {
+  BREAKFAST
+  LUNCH
+  DINNER
+  SNACK
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum NotificationType {
+  INFO
+  WARNING
+  SUCCESS
+  ERROR
+}
+
+enum ActivityLevel {
+  SEDENTARY
+  LIGHT
+  MODERATE
+  ACTIVE
+  VERY_ACTIVE
+}
+
+enum GoalType {
+  WEIGHT_LOSS
+  WEIGHT_GAIN
+  MAINTENANCE
+  MUSCLE_GAIN
+}
+
+// ==================== 1. USER & AUTH ====================
+model User {
+  id            Int            @id @default(autoincrement())
+  email         String         @unique
+  password      String
+  name          String
+  role          Role           @default(USER)
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  
+  profile       UserProfile?
+  healthMetrics UserHealthMetric[]
+  goals         UserGoal[]
+  meals         Meal[]
+  scanHistory   ScanHistory[]
+  favorites     Favorite[]
+  reviews       Review[]
+  notifications Notification[]
+  chatSessions  ChatSession[]
+  dailyNutrition DailyNutrition[]
+  mealPlans     MealPlan[]          // 🔥 Thêm
+  weeklyReports WeeklyReport[]      // 🔥 Thêm
+  recommendations Recommendation[] // 🔥 Thêm
+  auditLogs     AuditLog[]          // 🔥 Thêm
+  
+  @@map("users")
+}
+
+model UserProfile {
+  id             Int           @id @default(autoincrement())
+  userId         Int           @unique
+  fullName       String?
+  avatar         String?
+  gender         String?
+  dateOfBirth    DateTime?
+  height         Float?
+  weight         Float?
+  activityLevel  ActivityLevel @default(MODERATE)
+  dietaryPref    String[]      @default([])
+  allergies      String[]      @default([])
+  targetCalories Int           @default(2000)
+  targetProtein  Float         @default(150)
+  targetFat      Float         @default(55)
+  targetCarbs    Float         @default(250)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("user_profiles")
+}
+
+model UserHealthMetric {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  weight      Float?
+  height      Float?
+  bodyFat     Float?
+  bloodPressure String?
+  recordedAt  DateTime @default(now())
+  
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("user_health_metrics")
+}
+
+model UserGoal {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  goalType    GoalType
+  targetWeight Float?
+  targetCalories Int   @default(2000)
+  targetProtein Float  @default(150)
+  targetFat   Float    @default(55)
+  targetCarbs Float    @default(250)
+  startDate   DateTime @default(now())
+  endDate     DateTime?
+  isActive    Boolean  @default(true)
+  
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("user_goals")
+}
+
+// ==================== 2. FOOD & RECIPE ====================
+model FoodItem {
+  id          Int          @id @default(autoincrement())
+  name        String       @unique
+  slug        String       @unique
+  category    String
+  description String?
+  imageUrl    String?
+  calories    Int
+  protein     Float
+  fat         Float
+  carbs       Float
+  fiber       Float?
+  sugar       Float?
+  popularity  Int          @default(0)
+  isVegetarian Boolean     @default(false)
+  isVegan     Boolean      @default(false)
+  isGlutenFree Boolean     @default(false)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  
+  recipe      Recipe?
+  meals       Meal[]
+  favorites   Favorite[]
+  reviews     Review[]
+  recommendations Recommendation[] // 🔥 Thêm
+  mealPlanDetails   MealPlanDetail[]
+  @@map("food_items")
+}
+
+model Recipe {
+  id          Int              @id @default(autoincrement())
+  foodId      Int              @unique
+  title       String
+  summary     String?
+  prepTime    Int
+  cookTime    Int
+  totalTime   Int
+  servings    Int
+  difficulty  Difficulty
+  tips        String?
+  nutritionNotes String?
+  videoUrl    String?
+  viewCount   Int              @default(0)
+  cookCount   Int              @default(0)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  
+  food        FoodItem         @relation(fields: [foodId], references: [id], onDelete: Cascade)
+  ingredients RecipeIngredient[]
+  steps       RecipeStep[]
+  tools       RecipeTool[]
+  
+  @@map("recipes")
+}
+
+model RecipeIngredient {
+  id          Int      @id @default(autoincrement())
+  recipeId    Int
+  name        String
+  amount      Float
+  unit        String
+  notes       String?
+  alternative String?
+  isOptional  Boolean  @default(false)
+  order       Int      @default(0)
+  
+  recipe      Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  
+  @@map("recipe_ingredients")
+}
+
+model RecipeStep {
+  id          Int      @id @default(autoincrement())
+  recipeId    Int
+  stepNumber  Int
+  description String
+  timer       Int?
+  imageUrl    String?
+  tips        String?
+  order       Int      @default(0)
+  
+  recipe      Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  
+  @@map("recipe_steps")
+}
+
+model RecipeTool {
+  id          Int      @id @default(autoincrement())
+  recipeId    Int
+  name        String
+  isRequired  Boolean  @default(true)
+  
+  recipe      Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  
+  @@map("recipe_tools")
+}
+
+// ==================== 3. MEAL & TRACKING ====================
+model Meal {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  foodId      Int
+  mealType    MealType
+  eatenAt     DateTime @default(now())
+  quantity    Float    @default(1)
+  calories    Int
+  protein     Float
+  fat         Float
+  carbs       Float
+  imageUrl    String?
+  notes       String?
+  isFromAI    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  food        FoodItem @relation(fields: [foodId], references: [id])
+  
+  @@map("meals")
+}
+
+model MealPlan {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  name        String
+  startDate   DateTime
+  endDate     DateTime
+  isActive    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  details     MealPlanDetail[]
+  
+  @@map("meal_plans")
+}
+
+model MealPlanDetail {
+  id          Int      @id @default(autoincrement())
+  mealPlanId  Int
+  foodId      Int
+  mealType    MealType
+  dayOfWeek   Int
+  quantity    Float    @default(1)
+  
+  mealPlan    MealPlan @relation(fields: [mealPlanId], references: [id], onDelete: Cascade)
+  food        FoodItem @relation(fields: [foodId], references: [id])
+  
+  @@map("meal_plan_details")
+}
+
+// ==================== 4. SCAN HISTORY ====================
+model ScanHistory {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  imageUrl    String?
+  result      Json
+  confidence  Float
+  isConfirmed Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("scan_history")
+}
+
+// ==================== 5. STATISTICS ====================
+model DailyNutrition {
+  id            Int      @id @default(autoincrement())
+  userId        Int
+  date          DateTime
+  totalCalories Int      @default(0)
+  totalProtein  Float    @default(0)
+  totalFat      Float    @default(0)
+  totalCarbs    Float    @default(0)
+  totalMeals    Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, date])
+  @@map("daily_nutrition")
+}
+
+model WeeklyReport {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  weekStart   DateTime
+  weekEnd     DateTime
+  avgCalories Float
+  avgProtein  Float
+  avgFat      Float
+  avgCarbs    Float
+  reportData  Json
+  createdAt   DateTime @default(now())
+  
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("weekly_reports")
+}
+
+// ==================== 6. FAVORITE & REVIEW ====================
+model Favorite {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  foodId      Int
+  createdAt   DateTime @default(now())
+  
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  food        FoodItem @relation(fields: [foodId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, foodId])
+  @@map("favorites")
+}
+
+model Review {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  foodId      Int
+  rating      Int
+  comment     String?
+  images      String[] @default([])
+  helpfulCount Int     @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  food        FoodItem @relation(fields: [foodId], references: [id], onDelete: Cascade)
+  
+  @@map("reviews")
+}
+
+// ==================== 7. RECOMMENDATION ====================
+model Recommendation {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  foodId      Int
+  reason      String
+  score       Float
+  isViewed    Boolean  @default(false)
+  isAccepted  Boolean?
+  createdAt   DateTime @default(now())
+  
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  food        FoodItem @relation(fields: [foodId], references: [id])
+  
+  @@map("recommendations")
+}
+
+// ==================== 8. CHATBOT ====================
+model ChatSession {
+  id          Int          @id @default(autoincrement())
+  userId      Int
+  title       String       @default("Cuộc trò chuyện mới")
+  status      String       @default("ACTIVE")
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages    ChatMessage[]
+  
+  @@map("chat_sessions")
+}
+
+model ChatMessage {
+  id          Int      @id @default(autoincrement())
+  sessionId   Int
+  role        String   // USER, ASSISTANT, SYSTEM
+  content     String   @db.Text
+  intent      String?
+  entities    Json?
+  createdAt   DateTime @default(now())
+  
+  session     ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  
+  @@map("chat_messages")
+}
+
+// ==================== 9. NOTIFICATION ====================
+model Notification {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  title       String
+  message     String
+  type        NotificationType @default(INFO)
+  isRead      Boolean  @default(false)
+  data        Json?
+  createdAt   DateTime @default(now())
+  
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("notifications")
+}
+
+// ==================== 10. SYSTEM ====================
+model AuditLog {
+  id          Int      @id @default(autoincrement())
+  userId      Int?
+  action      String
+  entity      String
+  entityId    Int?
+  oldData     Json?
+  newData     Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+  
+  user        User?    @relation(fields: [userId], references: [id])
+  
+  @@map("audit_logs")
+}
