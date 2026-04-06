@@ -271,3 +271,239 @@ export const getAuditLogs = async (req: Request, res: Response) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+export const toggleUserBan = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const user = await prisma.user.findUnique({ where: { id: parseInt(id) } });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    
+    const updated = await prisma.user.update({
+      where: { id: parseInt(id) },
+      data: { isActive: !user.isActive }
+    });
+    
+    await prisma.auditLog.create({
+      data: {
+        userId: (req as any).user.id,
+        action: 'TOGGLE_BAN',
+        entity: 'User',
+        entityId: updated.id,
+        newData: { isActive: updated.isActive }
+      }
+    });
+    
+    res.json({ success: true, data: { isActive: updated.isActive } });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Reset user password về mật khẩu mặc định (ví dụ "123456")
+export const resetUserPassword = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const defaultPassword = '123456';
+    const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+    
+    const user = await prisma.user.update({
+      where: { id: parseInt(id) },
+      data: { password: hashedPassword }
+    });
+    
+    await prisma.auditLog.create({
+      data: {
+        userId: (req as any).user.id,
+        action: 'RESET_PASSWORD',
+        entity: 'User',
+        entityId: user.id
+      }
+    });
+    
+    res.json({ success: true, message: 'Password reset to 123456' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Cập nhật profile của user (chỉ số sức khỏe)
+export const updateUserProfileByAdmin = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { height, weight, targetCalories, targetProtein, targetFat, targetCarbs, allergies } = req.body;
+    
+    const profile = await prisma.userProfile.update({
+      where: { userId: parseInt(id) },
+      data: {
+        height: height !== undefined ? parseFloat(height) : undefined,
+        weight: weight !== undefined ? parseFloat(weight) : undefined,
+        targetCalories: targetCalories ? parseInt(targetCalories) : undefined,
+        targetProtein: targetProtein ? parseFloat(targetProtein) : undefined,
+        targetFat: targetFat ? parseFloat(targetFat) : undefined,
+        targetCarbs: targetCarbs ? parseFloat(targetCarbs) : undefined,
+        allergies: allergies || undefined
+      }
+    });
+    
+    await prisma.auditLog.create({
+      data: {
+        userId: (req as any).user.id,
+        action: 'UPDATE_PROFILE',
+        entity: 'UserProfile',
+        entityId: profile.id,
+        newData: { height, weight, targetCalories }
+      }
+    });
+    
+    res.json({ success: true, data: profile });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+// Lấy danh sách recipe (có phân trang, tìm kiếm)
+export const getAllRecipes = async (req: Request, res: Response) => {
+  try {
+    const { page = 1, limit = 20, search } = req.query;
+    const where: any = {};
+    if (search) where.title = { contains: search as string, mode: 'insensitive' };
+    const recipes = await prisma.recipe.findMany({
+      where,
+      skip: (Number(page) - 1) * Number(limit),
+      take: Number(limit),
+      include: { food: true },
+      orderBy: { createdAt: 'desc' }
+    });
+    const total = await prisma.recipe.count({ where });
+    res.json({
+      success: true,
+      data: recipes,
+      pagination: { page: Number(page), limit: Number(limit), total, totalPages: Math.ceil(total / Number(limit)) }
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Xóa recipe
+export const deleteRecipe = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    await prisma.recipe.delete({ where: { id: parseInt(id) } });
+    res.json({ success: true, message: 'Recipe deleted' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Lấy danh sách reviews
+export const getAllReviews = async (req: Request, res: Response) => {
+  try {
+    const { page = 1, limit = 20, rating } = req.query;
+    const where: any = {};
+    if (rating) where.rating = parseInt(rating as string);
+    const reviews = await prisma.review.findMany({
+      where,
+      skip: (Number(page) - 1) * Number(limit),
+      take: Number(limit),
+      include: { user: { select: { name: true, email: true } }, food: { select: { name: true } } },
+      orderBy: { createdAt: 'desc' }
+    });
+    const total = await prisma.review.count({ where });
+    res.json({
+      success: true,
+      data: reviews,
+      pagination: { page: Number(page), limit: Number(limit), total, totalPages: Math.ceil(total / Number(limit)) }
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Xóa review
+export const deleteReview = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    await prisma.review.delete({ where: { id: parseInt(id) } });
+    res.json({ success: true, message: 'Review deleted' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const getAllNotifications = async (req: Request, res: Response) => {
+  try {
+    const { page = 1, limit = 20 } = req.query;
+    const notifications = await prisma.notification.findMany({
+      skip: (Number(page) - 1) * Number(limit),
+      take: Number(limit),
+      include: { user: { select: { name: true, email: true } } },
+      orderBy: { createdAt: 'desc' }
+    });
+    const total = await prisma.notification.count();
+    res.json({
+      success: true,
+      data: notifications,
+      pagination: { page: Number(page), limit: Number(limit), total, totalPages: Math.ceil(total / Number(limit)) }
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Xóa notification
+export const deleteNotification = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    await prisma.notification.delete({ where: { id: parseInt(id) } });
+    res.json({ success: true, message: 'Notification deleted' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Gửi broadcast notification (tạo mới cho tất cả user)
+export const broadcastNotification = async (req: Request, res: Response) => {
+  try {
+    const { title, message, type = 'INFO' } = req.body;
+    if (!title || !message) return res.status(400).json({ error: 'Title and message required' });
+    const users = await prisma.user.findMany({ select: { id: true } });
+    const notifications = users.map(user => ({
+      userId: user.id,
+      title,
+      message,
+      type
+    }));
+    await prisma.notification.createMany({ data: notifications });
+    res.json({ success: true, message: `Broadcast sent to ${users.length} users` });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// ==================== SETTINGS MANAGEMENT ====================
+export const getAllSettings = async (req: Request, res: Response) => {
+  try {
+    const settings = await prisma.systemSetting.findMany();
+    const result = settings.reduce((acc, s) => ({ ...acc, [s.key]: s.value }), {});
+    res.json({ success: true, data: result });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const updateManySettings = async (req: Request, res: Response) => {
+  try {
+    const updates = req.body; // { key1: value1, key2: value2 }
+    const operations = Object.entries(updates).map(([key, value]) =>
+      prisma.systemSetting.upsert({
+        where: { key },
+        update: { value: String(value) },
+        create: { key, value: String(value), group: 'general' }
+      })
+    );
+    await prisma.$transaction(operations);
+    res.json({ success: true, message: 'Settings updated' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};

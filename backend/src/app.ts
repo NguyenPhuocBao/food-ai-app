@@ -11,6 +11,9 @@ import notificationRoutes from './routes/notification.routes';
 import recipeRoutes from './routes/recipe.routes';
 import chatbotRoutes from './routes/chatbot.routes';
 import adminRoutes from './routes/admin.routes';
+import analyzeRoutes from './routes/analyze.routes';
+import { errorHandler } from './middlewares/error.middleware';
+import settingsRoutes from './routes/settings.routes';
 import path from 'path';
 
 const app = express();
@@ -35,6 +38,10 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/recipes', recipeRoutes);
 app.use('/api/chat', chatbotRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/analyze', analyzeRoutes);
+app.use('/api/admin/settings', settingsRoutes);
+
+app.use(errorHandler);
 
 // Health check
 app.get('/health', (req, res) => {
@@ -56,9 +63,17 @@ app.get('/', (req, res) => {
       notifications: '/api/notifications',
       recipes: '/api/recipes',
       chat: '/api/chat',
+      analyze: '/api/analyze',
       admin: '/api/admin'
     }
+
+
   });
 });
+
+app.use(cors({
+  origin: 'http://localhost:5173',
+  credentials: true
+}));
 
 export default app;

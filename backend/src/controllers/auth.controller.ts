@@ -30,7 +30,11 @@ export const register = async (req: Request, res: Response) => {
       }
     });
     
-    const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign(
+  { id: user.id, email: user.email, role: user.role },
+  JWT_SECRET,
+  { expiresIn: '7d' }
+);
     
     // Tạo audit log
     await prisma.auditLog.create({
@@ -72,7 +76,11 @@ export const login = async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
     
-    const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign(
+  { id: user.id, email: user.email, role: user.role },
+  JWT_SECRET,
+  { expiresIn: '7d' }
+);
     
     await prisma.auditLog.create({
       data: {

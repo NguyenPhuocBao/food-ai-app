@@ -7,7 +7,7 @@ export interface AuthRequest extends Request {
   user?: {
     id: number;
     email: string;
-    role?: string;
+    role: string;
   };
 }
 
@@ -19,7 +19,7 @@ export const authMiddleware = (req: AuthRequest, res: Response, next: NextFuncti
       return res.status(401).json({ error: 'Unauthorized: No token provided' });
     }
     
-    const decoded = jwt.verify(token, JWT_SECRET) as { id: number; email: string; role?: string };
+    const decoded = jwt.verify(token, JWT_SECRET) as { id: number; email: string; role: string };
     req.user = decoded;
     next();
   } catch (error) {
