@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
+import fs from 'fs';
+import { uploadMiddleware } from '../middlewares/upload.middleware';
 
 const prisma = new PrismaClient();
 
@@ -120,6 +122,33 @@ export const getPopularFoods = async (req: Request, res: Response) => {
       take: Number(limit),
     });
     res.json({ success: true, data: foods });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+//EDIT CÔNG THỨC
+export const updateRecipe = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const data = req.body;
+  const recipe = await prisma.recipe.update({ where: { id: parseInt(id) }, data });
+  res.json({ success: true, data: recipe });
+};
+export const createRecipe = async (req: Request, res: Response) => {
+  const { foodId, ...data } = req.body;
+  const recipe = await prisma.recipe.create({ data: { ...data, foodId } });
+  res.json({ success: true, data: recipe });
+};
+
+export const uploadFoodImage = async (req: any, res: Response) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const foodId = parseInt(req.params.id);
+    const imageUrl = `/uploads/${req.file.filename}`;
+    const food = await prisma.foodItem.update({
+      where: { id: foodId },
+      data: { imageUrl },
+    });
+    res.json({ success: true, data: { imageUrl } });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

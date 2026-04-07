@@ -19,6 +19,9 @@ import AdminNotifications from './pages/admin/AdminNotifications';
 import AdminSettings from './pages/admin/AdminSettings';
 import AdminUserDetail from './pages/admin/AdminUserDetail';
 import AdminFoodDetail from './pages/admin/AdminFoodDetail';
+import AdminRecipeDetail from './pages/admin/AdminRecipeDetail';
+import AdminRecipeEdit from './pages/admin/AdminRecipeEdit';
+import AdminMealPlans from './pages/admin/AdminMealPlans';
 
 function App() {
   return (
@@ -44,7 +47,10 @@ function App() {
               <Route path="notifications" element={<AdminNotifications />} />
               <Route path="settings" element={<AdminSettings />} />
               <Route path="foods/:id" element={<AdminFoodDetail />} />
+              <Route path="recipes/:foodId" element={<AdminRecipeDetail />} />
+              <Route path="recipes/:foodId/edit" element={<AdminRecipeEdit />} />
               <Route path="users/:id" element={<AdminUserDetail />} />
+              <Route path="users/:userId/meal-plans" element={<AdminMealPlans />} />
             </Route>
           </Route>
         </Routes>

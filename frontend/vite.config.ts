@@ -3,9 +3,6 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
-  resolve: {
-    dedupe: ['react', 'react-dom']
-  },
   server: {
     port: 5173,
     proxy: {
@@ -13,6 +10,10 @@ export default defineConfig({
         target: 'http://localhost:5000',
         changeOrigin: true,
       },
+      '/uploads': {
+        target: 'http://localhost:5000',
+        changeOrigin: true,
+      },
     },
   },
-})
+});

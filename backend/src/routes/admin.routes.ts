@@ -7,7 +7,8 @@ import {
   resetUserPassword,
   toggleUserBan, broadcastNotification, 
   getAllRecipes, deleteRecipe, getAllReviews, deleteReview, 
-  getAllNotifications, deleteNotification, getAllSettings, updateManySettings
+  getAllNotifications, deleteNotification, getAllSettings, updateManySettings,
+  createRecipe, updateRecipe, getUserMealPlans, createMealPlan, updateMealPlan, deleteMealPlan
 } from '../controllers/admin.controller';
 import { authMiddleware, adminMiddleware } from '../middlewares/auth.middleware';
 
@@ -50,5 +51,13 @@ router.post('/notifications/broadcast', authMiddleware, adminMiddleware, broadca
 // Settings – nếu chưa có
 router.get('/settings', authMiddleware, adminMiddleware, getAllSettings);
 router.put('/settings', authMiddleware, adminMiddleware, updateManySettings);
+
+router.put('/recipes/:id', authMiddleware, adminMiddleware, updateRecipe);
+router.post('/recipes', authMiddleware, adminMiddleware, createRecipe);
+
+router.get('/users/:userId/meal-plans', authMiddleware, adminMiddleware, getUserMealPlans);
+router.post('/meal-plans', authMiddleware, adminMiddleware, createMealPlan);
+router.put('/meal-plans/:id', authMiddleware, adminMiddleware, updateMealPlan);
+router.delete('/meal-plans/:id', authMiddleware, adminMiddleware, deleteMealPlan);
 
 export default router;

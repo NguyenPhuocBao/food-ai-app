@@ -1,18 +1,18 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { getFoodsAdmin, deleteFood } from '../../services/admin.service';
-import { Search, Trash, Plus } from 'lucide-react';
+import { Search, Trash, Eye } from 'lucide-react';
 import toast from 'react-hot-toast';
 import EmptyState from '../../components/admin/EmptyState';
-import { useNavigate } from 'react-router-dom';
 
 const AdminFoods = () => {
+  const navigate = useNavigate();
   const [foods, setFoods] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch] = useState('');
   const [searchInput, setSearchInput] = useState('');
-  const navigate = useNavigate();
 
   const loadFoods = async () => {
     setLoading(true);
@@ -25,7 +25,7 @@ const AdminFoods = () => {
   useEffect(() => { loadFoods(); }, [page, search]);
 
   const handleSearch = () => { setSearch(searchInput); setPage(1); };
-  const handleDelete = async (id: number) => { if (confirm('Xóa món ăn này?')) { await deleteFood(id); toast.success('Đã xóa'); loadFoods(); } };
+  const handleDelete = async (id: number) => { if (confirm('Xóa món ăn?')) { await deleteFood(id); toast.success('Đã xóa'); loadFoods(); } };
 
   if (loading && page===1) {
     return <div className="space-y-6"><div className="h-12 w-48 bg-gray-200 dark:bg-gray-700 rounded-2xl animate-pulse"></div><div className="h-12 bg-gray-200 dark:bg-gray-700 rounded-2xl animate-pulse"></div><div className="h-96 bg-gray-200 dark:bg-gray-700 rounded-3xl animate-pulse"></div></div>;
@@ -62,23 +62,42 @@ const AdminFoods = () => {
         <div className="overflow-x-auto">
           <table className="min-w-full">
             <thead className="bg-gray-50 dark:bg-gray-900/60 text-xs font-semibold uppercase tracking-widest">
-              <tr><th className="px-6 py-4 text-left">ID</th><th className="px-6 py-4 text-left">Tên món</th><th className="px-6 py-4 text-left">Danh mục</th><th className="px-6 py-4 text-left">Calo</th><th className="px-6 py-4 text-left">Ngày tạo</th><th className="px-6 py-4 text-left">Hành động</th></tr>
+              <tr>
+                <th className="px-6 py-4 text-left">ID</th>
+                <th className="px-6 py-4 text-left">Ảnh</th>
+                <th className="px-6 py-4 text-left">Tên món</th>
+                <th className="px-6 py-4 text-left">Danh mục</th>
+                <th className="px-6 py-4 text-left">Calo</th>
+                <th className="px-6 py-4 text-left">Ngày tạo</th>
+                <th className="px-6 py-4 text-left">Hành động</th>
+              </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
               {foods.map((food) => (
                 <tr key={food.id} className="group hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                   <td className="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400">{food.id}</td>
-                  <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900 dark:text-white">
-                    <button onClick={() => navigate(`/admin/foods/${food.id}`)} className="hover:text-blue-600 hover:underline cursor-pointer">
-                      {food.name}
-                    </button>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {food.imageUrl ? (
+                      <img src={food.imageUrl} alt={food.name} className="w-10 h-10 rounded-full object-cover" />
+                    ) : (
+                      <span className="text-gray-400">—</span>
+                    )}
+                  </td>
+                  <td 
+                    className="px-6 py-4 whitespace-nowrap font-medium text-blue-600 dark:text-blue-400 cursor-pointer hover:underline"
+                    onClick={() => navigate(`/admin/foods/${food.id}`)}
+                  >
+                    {food.name}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400">{food.category}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400">{food.calories}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400">{new Date(food.createdAt).toLocaleDateString()}</td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => handleDelete(food.id)} className="text-red-600 hover:text-red-800 transition" title="Xóa">
+                      <button onClick={() => navigate(`/admin/foods/${food.id}`)} className="text-blue-600 hover:text-blue-800" title="Xem chi tiết">
+                        <Eye size={18} />
+                      </button>
+                      <button onClick={() => handleDelete(food.id)} className="text-red-600 hover:text-red-800" title="Xóa">
                         <Trash size={18} />
                       </button>
                     </div>

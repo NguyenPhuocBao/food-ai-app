@@ -507,3 +507,135 @@ export const updateManySettings = async (req: Request, res: Response) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+export const updateRecipe = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const data = req.body;
+    const { ingredients, steps, tools, ...rest } = data;
+    await prisma.recipe.update({
+      where: { id: parseInt(id) },
+      data: {
+        ...rest,
+        ingredients: { deleteMany: {}, create: ingredients?.create || [] },
+        steps: { deleteMany: {}, create: steps?.create || [] },
+        tools: { deleteMany: {}, create: tools?.create || [] },
+      },
+    });
+    res.json({ success: true, message: 'Cập nhật thành công' });
+  } catch (error: any) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const createRecipe = async (req: Request, res: Response) => {
+  try {
+    const { foodId, ...data } = req.body;
+    const { ingredients, steps, tools } = data;
+    const recipe = await prisma.recipe.create({
+      data: {
+        foodId,
+        title: data.title,
+        summary: data.summary,
+        prepTime: data.prepTime,
+        cookTime: data.cookTime,
+        totalTime: data.totalTime,
+        servings: data.servings,
+        difficulty: data.difficulty,
+        tips: data.tips,
+        nutritionNotes: data.nutritionNotes,
+        ingredients: { create: ingredients?.create || [] },
+        steps: { create: steps?.create || [] },
+        tools: { create: tools?.create || [] },
+      },
+    });
+    res.json({ success: true, data: recipe });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// ==================== MEAL PLAN MANAGEMENT ====================
+export const getUserMealPlans = async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+    const plans = await prisma.mealPlan.findMany({
+      where: { userId: parseInt(userId) },
+      include: {
+        details: {
+          include: { food: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json({ success: true, data: plans });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const createMealPlan = async (req: Request, res: Response) => {
+  try {
+    const { userId, name, startDate, endDate, details } = req.body;
+    const plan = await prisma.mealPlan.create({
+      data: {
+        userId: parseInt(userId),
+        name,
+        startDate: new Date(startDate),
+        endDate: new Date(endDate),
+        isActive: true,
+        details: {
+          create: details.map((d: any) => ({
+            foodId: d.foodId,
+            mealType: d.mealType,
+            dayOfWeek: d.dayOfWeek,
+            quantity: d.quantity || 1,
+          })),
+        },
+      },
+      include: { details: true },
+    });
+    res.json({ success: true, data: plan });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const updateMealPlan = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { name, startDate, endDate, isActive, details } = req.body;
+    await prisma.mealPlan.update({
+      where: { id: parseInt(id) },
+      data: {
+        name,
+        startDate: new Date(startDate),
+        endDate: new Date(endDate),
+        isActive,
+        details: {
+          deleteMany: {},
+          create: details.map((d: any) => ({
+            foodId: d.foodId,
+            mealType: d.mealType,
+            dayOfWeek: d.dayOfWeek,
+            quantity: d.quantity || 1,
+          })),
+        },
+      },
+    });
+    res.json({ success: true, message: 'Cập nhật thành công' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const deleteMealPlan = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    await prisma.mealPlan.delete({ where: { id: parseInt(id) } });
+    res.json({ success: true, message: 'Đã xóa' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
