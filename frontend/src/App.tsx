@@ -7,26 +7,35 @@ import AdminLayout from './components/admin/AdminLayout';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import HomePage from './pages/HomePage';
-import ScanPage from './pages/ScanPage';
+import ScanPage from './pages/ScanRealPageV2';
 import DiaryPage from './pages/DiaryPage';
 import ChatPage from './pages/ChatPage';
 import ProfilePage from './pages/ProfilePage';
-import UserLayout from './components/user/UserLayout';
-import AdminDashboard from './pages/admin/AdminDashboard';
+import StatisticsPage from './pages/StatisticsPage';
+import FoodsPage from './pages/FoodsPage';
+import FoodDetailPage from './pages/FoodDetailViewPage';
+import RecipesPage from './pages/RecipesPage';
+import MealPlansPage from './pages/MealPlansPage';
+import LibraryPage from './pages/LibraryPage';
+import RecommendationsPage from './pages/RecommendationsPage';
+import WeeklyReportsPage from './pages/WeeklyReportsPage';
+import UserLayout from './components/user/UserShell';
+import AdminDashboard from './pages/admin/AdminDashboardV2';
 import AdminUsers from './pages/admin/AdminUsers';
 import AdminFoods from './pages/admin/AdminFoods';
 import AdminRecipes from './pages/admin/AdminRecipes';
-import AdminReviews from './pages/admin/AdminReviews';
+import AdminReviews from './pages/admin/AdminReviewsV2';
 import AdminChatHistory from './pages/admin/AdminChatHistory';
 import AdminConfigs from './pages/admin/AdminConfigs';
-import AdminAuditLogs from './pages/admin/AdminAuditLogs';
-import AdminNotifications from './pages/admin/AdminNotifications';
+import AdminAuditLogs from './pages/admin/AdminAuditLogsV2';
+import AdminNotifications from './pages/admin/AdminNotificationsV2';
 import AdminSettings from './pages/admin/AdminSettings';
 import AdminUserDetail from './pages/admin/AdminUserDetail';
 import AdminFoodDetail from './pages/admin/AdminFoodDetail';
 import AdminRecipeDetail from './pages/admin/AdminRecipeDetail';
 import AdminRecipeEdit from './pages/admin/AdminRecipeEdit';
 import AdminMealPlans from './pages/admin/AdminMealPlans';
+import AdminMealDetail from './pages/admin/AdminMealDetail';
 
 function App() {
   return (
@@ -43,6 +52,14 @@ function App() {
               <Route path="/diary" element={<DiaryPage />} />
               <Route path="/chat-ai" element={<ChatPage />} />
               <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/statistics" element={<StatisticsPage />} />
+              <Route path="/foods" element={<FoodsPage />} />
+              <Route path="/foods/:id" element={<FoodDetailPage />} />
+              <Route path="/recipes" element={<RecipesPage />} />
+              <Route path="/meal-plans" element={<MealPlansPage />} />
+              <Route path="/library" element={<LibraryPage />} />
+              <Route path="/recommendations" element={<RecommendationsPage />} />
+              <Route path="/weekly-reports" element={<WeeklyReportsPage />} />
             </Route>
           </Route>
           <Route element={<AdminRoute />}>
@@ -62,6 +79,7 @@ function App() {
               <Route path="recipes/:foodId/edit" element={<AdminRecipeEdit />} />
               <Route path="users/:id" element={<AdminUserDetail />} />
               <Route path="users/:userId/meal-plans" element={<AdminMealPlans />} />
+              <Route path="meals/:id" element={<AdminMealDetail />} />
             </Route>
           </Route>
         </Routes>

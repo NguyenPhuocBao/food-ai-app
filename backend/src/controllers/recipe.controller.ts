@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { PrismaClient, Difficulty } from '@prisma/client';
+import { recalculateDailyNutrition } from '../services/nutrition.service';
 
 const prisma = new PrismaClient();
 
@@ -136,7 +137,12 @@ export const getSavedRecipes = async (req: any, res: Response) => {
       include: { food: { include: { recipe: true } } },
       orderBy: { createdAt: 'desc' },
     });
-    res.json({ success: true, data: favorites.map(f => ({ ...f.food, savedAt: f.createdAt })) });
+    res.json({
+      success: true,
+      data: favorites
+        .filter((favorite) => favorite.food.recipe)
+        .map((favorite) => ({ ...favorite.food, savedAt: favorite.createdAt })),
+    });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -169,7 +175,7 @@ export const markAsCooked = async (req: any, res: Response) => {
 
     const food = await prisma.foodItem.findUnique({ where: { id: recipe.foodId } });
     if (food) {
-      await prisma.meal.create({
+      const meal = await prisma.meal.create({
         data: {
           userId,
           foodId: recipe.foodId,
@@ -182,6 +188,8 @@ export const markAsCooked = async (req: any, res: Response) => {
           notes: `Đã nấu từ công thức: ${recipe.title}`,
         },
       });
+
+      await recalculateDailyNutrition(userId, meal.eatenAt);
     }
 
     res.json({ success: true, message: 'Marked as cooked!' });

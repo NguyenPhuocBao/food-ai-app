@@ -1,0 +1,13 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const mealplan_controller_1 = require("../controllers/mealplan.controller");
+const auth_middleware_1 = require("../middlewares/auth.middleware");
+const router = (0, express_1.Router)();
+router.get('/', auth_middleware_1.authMiddleware, mealplan_controller_1.getMealPlans);
+router.get('/active', auth_middleware_1.authMiddleware, mealplan_controller_1.getActiveMealPlan);
+router.post('/', auth_middleware_1.authMiddleware, mealplan_controller_1.createMealPlan);
+router.post('/:id/details', auth_middleware_1.authMiddleware, mealplan_controller_1.addDetailToMealPlan);
+router.patch('/:id/activate', auth_middleware_1.authMiddleware, mealplan_controller_1.setActiveMealPlan);
+router.delete('/:id', auth_middleware_1.authMiddleware, mealplan_controller_1.deleteMealPlan);
+exports.default = router;

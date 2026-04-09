@@ -13,6 +13,7 @@ import {
   sendNotificationToMultipleUsers,
   sendNotificationToUser
 } from '../controllers/admin.controller';
+import { deleteMeal, getMealById } from '../controllers/meal.controller';
 import { authMiddleware, adminMiddleware } from '../middlewares/auth.middleware';
 
 
@@ -63,6 +64,8 @@ router.put('/recipes/:id', authMiddleware, adminMiddleware, updateRecipe);
 router.post('/recipes', authMiddleware, adminMiddleware, createRecipe);
 
 router.get('/users/:userId/meal-plans', authMiddleware, adminMiddleware, getUserMealPlans);
+router.get('/meals/:id', authMiddleware, adminMiddleware, getMealById);
+router.delete('/meals/:id', authMiddleware, adminMiddleware, deleteMeal);
 router.post('/meal-plans', authMiddleware, adminMiddleware, createMealPlan);
 router.put('/meal-plans/:id', authMiddleware, adminMiddleware, updateMealPlan);
 router.delete('/meal-plans/:id', authMiddleware, adminMiddleware, deleteMealPlan);

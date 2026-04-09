@@ -12,6 +12,9 @@ import recipeRoutes from './routes/recipe.routes';
 import chatbotRoutes from './routes/chatbot.routes';
 import adminRoutes from './routes/admin.routes';
 import analyzeRoutes from './routes/analyze.routes';
+import mealPlanRoutes from './routes/mealplan.routes';
+import recommendationRoutes from './routes/recommendation.routes';
+import weeklyReportRoutes from './routes/weekly-report.routes';
 import { errorHandler } from './middlewares/error.middleware';
 import settingsRoutes from './routes/settings.routes';
 import path from 'path';
@@ -43,6 +46,9 @@ app.use('/api/recipes', recipeRoutes);
 app.use('/api/chat', chatbotRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/analyze', analyzeRoutes);
+app.use('/api/meal-plans', mealPlanRoutes);
+app.use('/api/recommendations', recommendationRoutes);
+app.use('/api/weekly-reports', weeklyReportRoutes);
 app.use('/api/admin/settings', settingsRoutes);
 
 app.use(errorHandler);
@@ -68,6 +74,8 @@ app.get('/', (req, res) => {
       recipes: '/api/recipes',
       chat: '/api/chat',
       analyze: '/api/analyze',
+      recommendations: '/api/recommendations',
+      weeklyReports: '/api/weekly-reports',
       admin: '/api/admin'
     }
 

@@ -1,12 +1,26 @@
 import { Request, Response } from 'express';
 import { PrismaClient, Role } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import {
+  getActiveUserIds,
+  getActiveProvider,
+  getActiveWindowMinutes,
+} from '../services/active-user.service';
+import {
+  shiftAppDays,
+  toAppDateKey,
+  toAppDayStart,
+} from '../utils/timezone.util';
 
 const prisma = new PrismaClient();
+
+const toLocalDateKey = (date: Date) => toAppDateKey(date);
 
 export const getAllUsers = async (req: Request, res: Response) => {
   try {
     const { page = 1, limit = 20, search } = req.query;
+    const activeUserIds = await getActiveUserIds();
+    const activeUserSet = new Set(activeUserIds);
     const where: any = {};
     if (search) {
       where.OR = [
@@ -22,10 +36,19 @@ export const getAllUsers = async (req: Request, res: Response) => {
       orderBy: { createdAt: 'desc' },
     });
     const total = await prisma.user.count({ where });
+    const usersWithActivity = users.map((user) => ({
+      ...user,
+      isOnline: user.isActive && activeUserSet.has(user.id),
+    }));
+
     res.json({
       success: true,
-      data: users,
+      data: usersWithActivity,
       pagination: { page: Number(page), limit: Number(limit), total, totalPages: Math.ceil(total / Number(limit)) },
+      meta: {
+        activeProvider: getActiveProvider(),
+        activeWindowMinutes: getActiveWindowMinutes(),
+      },
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -35,8 +58,9 @@ export const getAllUsers = async (req: Request, res: Response) => {
 export const getUserById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    const parsedId = parseInt(id);
     const user = await prisma.user.findUnique({
-      where: { id: parseInt(id) },
+      where: { id: parsedId },
       include: {
         profile: true,
         goals: true,
@@ -46,7 +70,18 @@ export const getUserById = async (req: Request, res: Response) => {
       },
     });
     if (!user) return res.status(404).json({ error: 'User not found' });
-    res.json({ success: true, data: user });
+    const activeUserSet = new Set(await getActiveUserIds());
+    res.json({
+      success: true,
+      data: {
+        ...user,
+        isOnline: user.isActive && activeUserSet.has(parsedId),
+      },
+      meta: {
+        activeProvider: getActiveProvider(),
+        activeWindowMinutes: getActiveWindowMinutes(),
+      },
+    });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -220,27 +255,195 @@ export const deleteFood = async (req: Request, res: Response) => {
 
 export const getSystemStats = async (req: Request, res: Response) => {
   try {
-    const [totalUsers, totalFoods, totalMeals, totalScans, totalReviews, activeUsers] = await Promise.all([
+    const startOfToday = toAppDayStart(new Date());
+    const startOfWindow = shiftAppDays(startOfToday, -6);
+
+    const activeUserIds = await getActiveUserIds();
+    const activeUserSet = new Set(activeUserIds);
+
+    const [
+      totalUsers,
+      newUsersThisWeek,
+      totalFoods,
+      totalRecipes,
+      totalMeals,
+      mealsToday,
+      totalScans,
+      scansToday,
+      confirmedScans,
+      totalReviews,
+      totalFavorites,
+      totalMealPlans,
+      activeMealPlans,
+      topCategories,
+      popularFoods,
+      recentUsers,
+      recentMeals,
+      recentScans,
+      recentFavorites,
+      recentUserSignups,
+      activeUsers,
+    ] = await Promise.all([
       prisma.user.count(),
+      prisma.user.count({ where: { createdAt: { gte: startOfWindow } } }),
       prisma.foodItem.count(),
+      prisma.recipe.count(),
       prisma.meal.count(),
+      prisma.meal.count({ where: { eatenAt: { gte: startOfToday } } }),
       prisma.scanHistory.count(),
+      prisma.scanHistory.count({ where: { createdAt: { gte: startOfToday } } }),
+      prisma.scanHistory.count({ where: { isConfirmed: true } }),
       prisma.review.count(),
-      prisma.user.count({ where: { isActive: true } }),
+      prisma.favorite.count(),
+      prisma.mealPlan.count(),
+      prisma.mealPlan.count({ where: { isActive: true } }),
+      prisma.foodItem.groupBy({
+        by: ['category'],
+        _count: { category: true },
+        orderBy: { _count: { category: 'desc' } },
+        take: 6,
+      }),
+      prisma.foodItem.findMany({
+        orderBy: [{ popularity: 'desc' }, { updatedAt: 'desc' }],
+        take: 6,
+        include: {
+          recipe: { select: { id: true, title: true } },
+          _count: { select: { favorites: true, reviews: true, meals: true } },
+        },
+      }),
+      prisma.user.findMany({
+        take: 5,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          profile: true,
+          _count: { select: { meals: true, scanHistory: true, favorites: true, mealPlans: true } },
+        },
+      }),
+      prisma.meal.findMany({
+        where: { eatenAt: { gte: startOfWindow } },
+        select: { eatenAt: true, calories: true },
+      }),
+      prisma.scanHistory.findMany({
+        where: { createdAt: { gte: startOfWindow } },
+        select: { createdAt: true, isConfirmed: true },
+      }),
+      prisma.favorite.findMany({
+        where: { createdAt: { gte: startOfWindow } },
+        select: { createdAt: true },
+      }),
+      prisma.user.findMany({
+        where: { createdAt: { gte: startOfWindow } },
+        select: { createdAt: true },
+      }),
+      activeUserIds.length > 0
+        ? prisma.user.count({
+            where: {
+              id: { in: activeUserIds },
+              isActive: true,
+            },
+          })
+        : Promise.resolve(0),
     ]);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayMeals = await prisma.meal.count({ where: { eatenAt: { gte: today } } });
-    const popularFoods = await prisma.foodItem.findMany({ orderBy: { popularity: 'desc' }, take: 5 });
+
+    const dailyMap = new Map<string, {
+      date: string;
+      meals: number;
+      calories: number;
+      scans: number;
+      confirmedScans: number;
+      saves: number;
+      newUsers: number;
+    }>();
+
+    for (let offset = 0; offset < 7; offset += 1) {
+      const current = shiftAppDays(startOfWindow, offset);
+      const key = toLocalDateKey(current);
+
+      dailyMap.set(key, {
+        date: key,
+        meals: 0,
+        calories: 0,
+        scans: 0,
+        confirmedScans: 0,
+        saves: 0,
+        newUsers: 0,
+      });
+    }
+
+    recentMeals.forEach((meal) => {
+      const key = toLocalDateKey(meal.eatenAt);
+      const bucket = dailyMap.get(key);
+      if (!bucket) return;
+      bucket.meals += 1;
+      bucket.calories += meal.calories;
+    });
+
+    recentScans.forEach((scan) => {
+      const key = toLocalDateKey(scan.createdAt);
+      const bucket = dailyMap.get(key);
+      if (!bucket) return;
+      bucket.scans += 1;
+      if (scan.isConfirmed) bucket.confirmedScans += 1;
+    });
+
+    recentFavorites.forEach((favorite) => {
+      const key = toLocalDateKey(favorite.createdAt);
+      const bucket = dailyMap.get(key);
+      if (!bucket) return;
+      bucket.saves += 1;
+    });
+
+    recentUserSignups.forEach((user) => {
+      const key = toLocalDateKey(user.createdAt);
+      const bucket = dailyMap.get(key);
+      if (!bucket) return;
+      bucket.newUsers += 1;
+    });
+
     res.json({
       success: true,
       data: {
-        users: { total: totalUsers, active: activeUsers },
-        foods: { total: totalFoods },
-        meals: { total: totalMeals, today: todayMeals },
-        scans: totalScans,
-        reviews: totalReviews,
+        users: {
+          total: totalUsers,
+          active: activeUsers,
+          newThisWeek: newUsersThisWeek,
+        },
+        foods: {
+          total: totalFoods,
+          withRecipes: totalRecipes,
+        },
+        recipes: {
+          total: totalRecipes,
+        },
+        meals: {
+          total: totalMeals,
+          today: mealsToday,
+        },
+        scans: {
+          total: totalScans,
+          today: scansToday,
+          confirmed: confirmedScans,
+        },
+        library: {
+          favorites: totalFavorites,
+          reviews: totalReviews,
+        },
+        mealPlans: {
+          total: totalMealPlans,
+          active: activeMealPlans,
+        },
+        topCategories: topCategories.map((item) => ({
+          name: item.category,
+          value: item._count.category,
+        })),
         popularFoods,
+        recentUsers: recentUsers.map((user) => ({
+          ...user,
+          isOnline: user.isActive && activeUserSet.has(user.id),
+        })),
+        weeklyOverview: Array.from(dailyMap.values()),
+        activeProvider: getActiveProvider(),
+        activeWindowMinutes: getActiveWindowMinutes(),
       },
     });
   } catch (error: any) {
@@ -398,9 +601,11 @@ export const deleteRecipe = async (req: Request, res: Response) => {
 // Lấy danh sách reviews
 export const getAllReviews = async (req: Request, res: Response) => {
   try {
-    const { page = 1, limit = 20, rating } = req.query;
+    const { page = 1, limit = 20, rating, userId, foodId } = req.query;
     const where: any = {};
     if (rating) where.rating = parseInt(rating as string);
+    if (userId) where.userId = parseInt(userId as string);
+    if (foodId) where.foodId = parseInt(foodId as string);
     const reviews = await prisma.review.findMany({
       where,
       skip: (Number(page) - 1) * Number(limit),

@@ -50,7 +50,9 @@ export const createSession = async (req: any, res: Response) => {
 // Lấy danh sách các phiên chat của user
 export const getSessions = async (req: any, res: Response) => {
     try {
-        const userId = req.user.id;
+        const userId = (req.user.role === 'ADMIN' && req.query.userId) 
+          ? parseInt(req.query.userId as string) 
+          : req.user.id;
         const sessions = await prisma.chatSession.findMany({
             where: { userId },
             include: { _count: { select: { messages: true } } },

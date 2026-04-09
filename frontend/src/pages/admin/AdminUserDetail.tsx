@@ -15,6 +15,7 @@ import api from '../../services/api';
 import toast from 'react-hot-toast';
 import ConfirmModal from '../../components/admin/ConfirmModal';
 import EmptyState from '../../components/admin/EmptyState';
+import { formatAdminDate, formatAdminDateTime } from '../../utils/adminDateTime';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
 
@@ -23,7 +24,6 @@ const AdminUserDetail = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<any>(null);
   const [meals, setMeals] = useState<any[]>([]);
   const [mealPlans, setMealPlans] = useState<any[]>([]);
   const [chats, setChats] = useState<any[]>([]);
@@ -36,20 +36,18 @@ const AdminUserDetail = () => {
   useEffect(() => {
   const fetchData = async () => {
     try {
-      const [userRes, mealsRes, plansRes, chatsRes, reviewsRes, statsRes] = await Promise.all([
+      const [userRes, mealsRes, plansRes, chatsRes, reviewsRes] = await Promise.all([
         api.get(`/admin/users/${id}`),
         api.get(`/meals/history?userId=${id}&limit=10`).catch(() => ({ data: { data: [] } })),
         api.get(`/admin/users/${id}/meal-plans`).catch(() => ({ data: { data: [] } })), 
         api.get(`/chat/sessions?userId=${id}`).catch(() => ({ data: { data: [] } })),
-        api.get(`/reviews?userId=${id}`).catch(() => ({ data: { data: [] } })), 
-        api.get('/admin/statistics').catch(() => ({ data: { data: {} } }))
+        api.get(`/admin/reviews?userId=${id}`).catch(() => ({ data: { data: [] } })),
       ]);
       setUser(userRes.data.data);
       setMeals(mealsRes.data.data || []);
       setMealPlans(plansRes.data.data || []);
       setChats(chatsRes.data.data || []);
       setReviews(reviewsRes.data.data || []);
-      setStats(statsRes.data.data);
       // Lấy dữ liệu calo tuần (có thể cần userId)
       const weekly = await api.get(`/statistics/weekly?userId=${id}`).catch(() => ({ data: { data: { daily: [] } } }));
       setWeeklyCalories(weekly.data.data.daily || []);
@@ -115,7 +113,7 @@ const AdminUserDetail = () => {
   const bmi = calculateBMI(profile.height, profile.weight);
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6 p-6 text-gray-900 dark:text-slate-100">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
@@ -156,7 +154,7 @@ const AdminUserDetail = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-gray-500 text-sm">Tổng lượt scan</p>
-              <p className="text-2xl font-bold">{stats?.scans || 0}</p>
+              <p className="text-2xl font-bold">{user?._count?.scanHistory ?? 0}</p>
             </div>
             <Camera size={28} className="text-green-500" />
           </div>
@@ -188,8 +186,17 @@ const AdminUserDetail = () => {
           <div className="space-y-3">
             <div className="flex justify-between"><span className="text-gray-500">Email</span><span>{user.email}</span></div>
             <div className="flex justify-between"><span className="text-gray-500">Vai trò</span><span className="capitalize">{user.role}</span></div>
-            <div className="flex justify-between"><span className="text-gray-500">Trạng thái</span>{user.isActive ? <span className="text-green-600 flex items-center gap-1"><CheckCircle size={16} /> Hoạt động</span> : <span className="text-red-600 flex items-center gap-1"><XCircle size={16} /> Bị khóa</span>}</div>
-            <div className="flex justify-between"><span className="text-gray-500">Ngày tham gia</span>{new Date(user.createdAt).toLocaleDateString()}</div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Trạng thái</span>
+              {!user.isActive ? (
+                <span className="text-red-600 flex items-center gap-1"><XCircle size={16} /> Bị khóa</span>
+              ) : user.isOnline ? (
+                <span className="text-green-600 flex items-center gap-1"><CheckCircle size={16} /> Đang online</span>
+              ) : (
+                <span className="text-gray-600 dark:text-gray-300 flex items-center gap-1"><CheckCircle size={16} /> Offline</span>
+              )}
+            </div>
+            <div className="flex justify-between"><span className="text-gray-500">Ngày tham gia</span>{formatAdminDate(user.createdAt)}</div>
           </div>
         </div>
 
@@ -249,7 +256,7 @@ const AdminUserDetail = () => {
                   {meal.food?.imageUrl && <img src={meal.food.imageUrl} alt={meal.food.name} className="w-12 h-12 rounded-full object-cover" />}
                   <div>
                     <div className="font-medium">{meal.food?.name}</div>
-                    <div className="text-sm text-gray-500">{new Date(meal.eatenAt).toLocaleString()} - {meal.mealType}</div>
+                    <div className="text-sm text-gray-500">{formatAdminDateTime(meal.eatenAt)} - {meal.mealType}</div>
                   </div>
                 </div>
                 <div className="text-right">
@@ -284,7 +291,7 @@ const AdminUserDetail = () => {
           <div>
             <div className="font-medium">{plan.name}</div>
             <div className="text-sm text-gray-500">
-              {new Date(plan.startDate).toLocaleDateString()} - {new Date(plan.endDate).toLocaleDateString()}
+              {formatAdminDate(plan.startDate)} - {formatAdminDate(plan.endDate)}
             </div>
           </div>
           <span className={`px-2 py-1 rounded-full text-xs ${
@@ -316,7 +323,7 @@ const AdminUserDetail = () => {
                   <div className="font-medium">{chat.title}</div>
                   <div className="text-sm text-gray-500">Tin nhắn: {chat._count?.messages || 0}</div>
                 </div>
-                <div className="text-xs text-gray-400">{new Date(chat.updatedAt).toLocaleDateString()}</div>
+                <div className="text-xs text-gray-400">{formatAdminDate(chat.updatedAt)}</div>
               </div>
             ))}
           </div>
@@ -337,7 +344,7 @@ const AdminUserDetail = () => {
                   <div className="flex items-center gap-0.5">{[...Array(review.rating)].map((_, i) => <Star key={i} size={14} className="fill-yellow-400 text-yellow-400" />)}</div>
                 </div>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{review.comment}</p>
-                <div className="text-xs text-gray-400 mt-1">{new Date(review.createdAt).toLocaleDateString()}</div>
+                <div className="text-xs text-gray-400 mt-1">{formatAdminDate(review.createdAt)}</div>
               </div>
             ))}
           </div>

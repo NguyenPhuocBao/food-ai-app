@@ -1,0 +1,11 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const auth_middleware_1 = require("../middlewares/auth.middleware");
+const weekly_report_controller_1 = require("../controllers/weekly-report.controller");
+const router = (0, express_1.Router)();
+router.get('/', auth_middleware_1.authMiddleware, weekly_report_controller_1.getWeeklyReports);
+router.get('/latest', auth_middleware_1.authMiddleware, weekly_report_controller_1.getLatestWeeklyReport);
+router.post('/generate', auth_middleware_1.authMiddleware, weekly_report_controller_1.generateWeeklyReport);
+router.delete('/:id', auth_middleware_1.authMiddleware, weekly_report_controller_1.deleteWeeklyReport);
+exports.default = router;

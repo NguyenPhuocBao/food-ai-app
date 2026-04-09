@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, Trash2, Edit, Save, X } from 'lucide-react';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
+import { formatAdminDate } from '../../utils/adminDateTime';
 
 const AdminMealPlans = () => {
   const { userId } = useParams();
@@ -143,10 +144,10 @@ const AdminMealPlans = () => {
             <div className="flex justify-between items-start">
               <div>
                 <h3 className="text-lg font-semibold">{plan.name}</h3>
-                <p className="text-sm text-gray-500">
-                  {new Date(plan.startDate).toLocaleDateString()} - {new Date(plan.endDate).toLocaleDateString()}
+                <p className="text-sm text-gray-500 dark:text-slate-400">
+                  {formatAdminDate(plan.startDate)} - {formatAdminDate(plan.endDate)}
                 </p>
-                <p className="text-xs mt-1">Trạng thái: {plan.isActive ? 'Đang hoạt động' : 'Đã kết thúc'}</p>
+                <p className="text-xs mt-1 text-gray-600 dark:text-slate-300">Trạng thái: {plan.isActive ? 'Đang hoạt động' : 'Đã kết thúc'}</p>
               </div>
               <div className="flex gap-2">
                 <button onClick={() => handleEdit(plan)} className="text-blue-600">

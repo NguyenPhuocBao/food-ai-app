@@ -17,6 +17,14 @@ export const getAllFoods = async (req: Request, res: Response) => {
       where,
       skip: (Number(page) - 1) * Number(limit),
       take: Number(limit),
+      include: {
+        recipe: {
+          select: {
+            id: true,
+            title: true,
+          },
+        },
+      },
       orderBy: { [sort as string]: order },
     });
 

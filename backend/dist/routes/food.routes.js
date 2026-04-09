@@ -1,0 +1,14 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const food_controller_1 = require("../controllers/food.controller");
+const auth_middleware_1 = require("../middlewares/auth.middleware");
+const upload_middleware_1 = require("../middlewares/upload.middleware");
+const router = (0, express_1.Router)();
+router.get('/', auth_middleware_1.authMiddleware, food_controller_1.getAllFoods);
+router.get('/search', auth_middleware_1.authMiddleware, food_controller_1.searchFoods);
+router.get('/categories', auth_middleware_1.authMiddleware, food_controller_1.getCategories);
+router.get('/popular', auth_middleware_1.authMiddleware, food_controller_1.getPopularFoods);
+router.post('/:id/upload-image', auth_middleware_1.authMiddleware, upload_middleware_1.uploadMiddleware.single('image'), food_controller_1.uploadFoodImage);
+router.get('/:id', auth_middleware_1.authMiddleware, food_controller_1.getFoodById);
+exports.default = router;

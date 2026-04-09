@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import api from '../../services/api';
 import { MessageSquare, Bot, User } from 'lucide-react';
 import EmptyState from '../../components/admin/EmptyState';
+import { formatAdminDate, formatAdminTime } from '../../utils/adminDateTime';
 
 const AdminChatHistory = () => {
   const [sessions, setSessions] = useState<any[]>([]);
@@ -55,9 +56,9 @@ const AdminChatHistory = () => {
                     <MessageSquare size={18} className="text-blue-500" />
                     <span className="font-medium text-gray-800 dark:text-white truncate">{s.title}</span>
                   </div>
-                  <span className="text-xs text-gray-400">{new Date(s.updatedAt).toLocaleDateString()}</span>
+                  <span className="text-xs text-gray-400 dark:text-slate-500">{formatAdminDate(s.updatedAt)}</span>
                 </div>
-                <div className="text-xs text-gray-500 mt-1">Tin nhắn: {s._count?.messages || 0}</div>
+                <div className="text-xs text-gray-500 dark:text-slate-400 mt-1">Tin nhắn: {s._count?.messages || 0}</div>
               </div>
             ))}
           </div>
@@ -91,7 +92,7 @@ const AdminChatHistory = () => {
                   }`}>
                     <div className="text-sm">{m.content}</div>
                     <div className={`text-xs mt-1 ${m.role === 'USER' ? 'text-blue-100' : 'text-gray-400'}`}>
-                      {new Date(m.createdAt).toLocaleTimeString()}
+                      {formatAdminTime(m.createdAt)}
                     </div>
                   </div>
                 </div>

@@ -1,0 +1,16 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const recipe_controller_1 = require("../controllers/recipe.controller");
+const auth_middleware_1 = require("../middlewares/auth.middleware");
+const router = (0, express_1.Router)();
+router.get('/popular', recipe_controller_1.getPopularRecipes);
+router.get('/recent', recipe_controller_1.getRecentRecipes);
+router.get('/search', recipe_controller_1.searchRecipes);
+router.get('/by-difficulty/:difficulty', recipe_controller_1.getRecipesByDifficulty);
+router.get('/by-time', recipe_controller_1.getRecipesByTime);
+router.post('/:id/save', auth_middleware_1.authMiddleware, recipe_controller_1.saveRecipe);
+router.delete('/:id/save', auth_middleware_1.authMiddleware, recipe_controller_1.unsaveRecipe);
+router.get('/saved', auth_middleware_1.authMiddleware, recipe_controller_1.getSavedRecipes);
+router.post('/:id/cook', auth_middleware_1.authMiddleware, recipe_controller_1.markAsCooked);
+exports.default = router;

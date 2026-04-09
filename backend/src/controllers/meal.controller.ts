@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
 import { PrismaClient, MealType } from '@prisma/client';
+import { recalculateDailyNutrition } from '../services/nutrition.service';
+import { toAppDayRange } from '../utils/timezone.util';
 
 const prisma = new PrismaClient();
 
@@ -27,35 +29,7 @@ export const addMeal = async (req: any, res: Response) => {
       include: { food: true },
     });
 
-    const date = new Date(meal.eatenAt);
-    date.setHours(0, 0, 0, 0);
-
-    const dailyMeals = await prisma.meal.findMany({
-      where: {
-        userId,
-        eatenAt: {
-          gte: date,
-          lt: new Date(date.getTime() + 86400000),
-        },
-      },
-    });
-
-    const totals = dailyMeals.reduce(
-      (acc, m) => ({
-        totalCalories: acc.totalCalories + m.calories,
-        totalProtein: acc.totalProtein + m.protein,
-        totalFat: acc.totalFat + m.fat,
-        totalCarbs: acc.totalCarbs + m.carbs,
-        totalMeals: acc.totalMeals + 1,
-      }),
-      { totalCalories: 0, totalProtein: 0, totalFat: 0, totalCarbs: 0, totalMeals: 0 }
-    );
-
-    await prisma.dailyNutrition.upsert({
-      where: { userId_date: { userId, date } },
-      update: totals,
-      create: { userId, date, ...totals },
-    });
+    await recalculateDailyNutrition(userId, meal.eatenAt);
 
     res.json({ success: true, data: meal });
   } catch (error: any) {
@@ -67,21 +41,19 @@ export const addMeal = async (req: any, res: Response) => {
 export const getMealsByDate = async (req: any, res: Response) => {
   try {
     const { date } = req.query;
-    const userId = req.user.id;
-    
-    const startDate = date ? new Date(date as string) : new Date();
-    startDate.setHours(0, 0, 0, 0);
-    const endDate = new Date(startDate);
-    endDate.setHours(23, 59, 59, 999);
+    const userId = (req.user.role === 'ADMIN' && req.query.userId) 
+      ? parseInt(req.query.userId as string) 
+      : req.user.id;
+    const { start, endExclusive } = toAppDayRange(date ? String(date) : new Date());
     
     const meals = await prisma.meal.findMany({
-      where: { userId, eatenAt: { gte: startDate, lte: endDate } },
+      where: { userId, eatenAt: { gte: start, lt: endExclusive } },
       include: { food: true },
       orderBy: { eatenAt: 'asc' }
     });
     
     const nutrition = await prisma.dailyNutrition.findUnique({
-      where: { userId_date: { userId, date: startDate } }
+      where: { userId_date: { userId, date: start } }
     });
     
     res.json({ success: true, data: { meals, nutrition } });
@@ -93,7 +65,9 @@ export const getMealsByDate = async (req: any, res: Response) => {
 export const getMealHistory = async (req: any, res: Response) => {
   try {
     const { limit = 50, startDate, endDate } = req.query;
-    const userId = req.user.id;
+    const userId = (req.user.role === 'ADMIN' && req.query.userId) 
+      ? parseInt(req.query.userId as string) 
+      : req.user.id;
     
     const where: any = { userId };
     if (startDate) where.eatenAt = { gte: new Date(startDate as string) };
@@ -112,13 +86,46 @@ export const getMealHistory = async (req: any, res: Response) => {
   }
 };
 
+export const getMealById = async (req: any, res: Response) => {
+  try {
+    const mealId = parseInt(req.params.id);
+    if (!Number.isFinite(mealId)) {
+      return res.status(400).json({ error: 'Invalid meal id' });
+    }
+
+    const where: any = { id: mealId };
+    if (req.user.role !== 'ADMIN') {
+      where.userId = req.user.id;
+    }
+
+    const meal = await prisma.meal.findFirst({
+      where,
+      include: {
+        food: true,
+        user: {
+          select: { id: true, name: true, email: true },
+        },
+      },
+    });
+
+    if (!meal) return res.status(404).json({ error: 'Meal not found' });
+    res.json({ success: true, data: meal });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 export const updateMeal = async (req: any, res: Response) => {
   try {
     const { id } = req.params;
     const { quantity, notes } = req.body;
-    const userId = req.user.id;
-    
-    const existingMeal = await prisma.meal.findFirst({ where: { id: parseInt(id), userId }, include: { food: true } });
+
+    const where: any = { id: parseInt(id) };
+    if (req.user.role !== 'ADMIN') {
+      where.userId = req.user.id;
+    }
+
+    const existingMeal = await prisma.meal.findFirst({ where, include: { food: true } });
     if (!existingMeal) return res.status(404).json({ error: 'Meal not found' });
     
     const updatedMeal = await prisma.meal.update({
@@ -135,26 +142,7 @@ export const updateMeal = async (req: any, res: Response) => {
     });
     
     // Recalculate daily nutrition
-    const date = new Date(existingMeal.eatenAt);
-    date.setHours(0, 0, 0, 0);
-    
-    const dailyMeals = await prisma.meal.findMany({
-      where: { userId, eatenAt: { gte: date, lt: new Date(date.getTime() + 86400000) } }
-    });
-    
-    const totals = dailyMeals.reduce((acc, m) => ({
-      totalCalories: acc.totalCalories + m.calories,
-      totalProtein: acc.totalProtein + m.protein,
-      totalFat: acc.totalFat + m.fat,
-      totalCarbs: acc.totalCarbs + m.carbs,
-      totalMeals: acc.totalMeals + 1
-    }), { totalCalories: 0, totalProtein: 0, totalFat: 0, totalCarbs: 0, totalMeals: 0 });
-    
-    await prisma.dailyNutrition.upsert({
-      where: { userId_date: { userId, date } },
-      update: totals,
-      create: { userId, date, ...totals }
-    });
+    await recalculateDailyNutrition(existingMeal.userId, existingMeal.eatenAt);
     
     res.json({ success: true, data: updatedMeal });
   } catch (error: any) {
@@ -165,38 +153,19 @@ export const updateMeal = async (req: any, res: Response) => {
 export const deleteMeal = async (req: any, res: Response) => {
   try {
     const { id } = req.params;
-    const userId = req.user.id;
-    
-    const meal = await prisma.meal.findFirst({ where: { id: parseInt(id), userId } });
+    const where: any = { id: parseInt(id) };
+
+    if (req.user.role !== 'ADMIN') {
+      where.userId = req.user.id;
+    }
+
+    const meal = await prisma.meal.findFirst({ where });
     if (!meal) return res.status(404).json({ error: 'Meal not found' });
     
     await prisma.meal.delete({ where: { id: parseInt(id) } });
     
     // Recalculate daily nutrition
-    const date = new Date(meal.eatenAt);
-    date.setHours(0, 0, 0, 0);
-    
-    const dailyMeals = await prisma.meal.findMany({
-      where: { userId, eatenAt: { gte: date, lt: new Date(date.getTime() + 86400000) } }
-    });
-    
-    const totals = dailyMeals.reduce((acc, m) => ({
-      totalCalories: acc.totalCalories + m.calories,
-      totalProtein: acc.totalProtein + m.protein,
-      totalFat: acc.totalFat + m.fat,
-      totalCarbs: acc.totalCarbs + m.carbs,
-      totalMeals: acc.totalMeals + 1
-    }), { totalCalories: 0, totalProtein: 0, totalFat: 0, totalCarbs: 0, totalMeals: 0 });
-    
-    if (dailyMeals.length === 0) {
-      await prisma.dailyNutrition.delete({ where: { userId_date: { userId, date } } });
-    } else {
-      await prisma.dailyNutrition.upsert({
-        where: { userId_date: { userId, date } },
-        update: totals,
-        create: { userId, date, ...totals }
-      });
-    }
+    await recalculateDailyNutrition(meal.userId, meal.eatenAt);
     
     res.json({ success: true, message: 'Meal deleted' });
   } catch (error: any) {

@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { markUserActive, markUserInactive } from '../services/active-user.service';
 
 const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'food-ai-secret-key-2024';
@@ -35,6 +36,7 @@ export const register = async (req: Request, res: Response) => {
   JWT_SECRET,
   { expiresIn: '7d' }
 );
+    await markUserActive(user.id);
     
     // Tạo audit log
     await prisma.auditLog.create({
@@ -81,6 +83,7 @@ export const login = async (req: Request, res: Response) => {
   JWT_SECRET,
   { expiresIn: '7d' }
 );
+    await markUserActive(user.id);
     
     await prisma.auditLog.create({
       data: {
@@ -101,6 +104,7 @@ export const login = async (req: Request, res: Response) => {
 
 export const logout = async (req: any, res: Response) => {
   try {
+    await markUserInactive(req.user.id);
     await prisma.auditLog.create({
       data: {
         userId: req.user.id,
@@ -118,6 +122,7 @@ export const logout = async (req: any, res: Response) => {
 export const refreshToken = async (req: any, res: Response) => {
   try {
     const token = jwt.sign({ id: req.user.id, email: req.user.email }, JWT_SECRET, { expiresIn: '7d' });
+    await markUserActive(req.user.id);
     res.json({ success: true, token });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -138,31 +143,163 @@ export const getMe = async (req: any, res: Response) => {
 
 export const updateProfile = async (req: any, res: Response) => {
   try {
-    const { fullName, gender, dateOfBirth, height, weight, activityLevel, dietaryPref, allergies, targetCalories, targetProtein, targetFat, targetCarbs } = req.body;
-    
-    const profile = await prisma.userProfile.upsert({
-      where: { userId: req.user.id },
-      update: {
-        fullName, gender, dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : undefined,
-        height: height ? parseFloat(height) : undefined, weight: weight ? parseFloat(weight) : undefined,
-        activityLevel, dietaryPref, allergies,
-        targetCalories: targetCalories ? parseInt(targetCalories) : undefined,
-        targetProtein: targetProtein ? parseFloat(targetProtein) : undefined,
-        targetFat: targetFat ? parseFloat(targetFat) : undefined,
-        targetCarbs: targetCarbs ? parseFloat(targetCarbs) : undefined
-      },
-      create: {
-        userId: req.user.id, fullName, gender, dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : undefined,
-        height: height ? parseFloat(height) : undefined, weight: weight ? parseFloat(weight) : undefined,
-        activityLevel, dietaryPref, allergies,
-        targetCalories: targetCalories ? parseInt(targetCalories) : 2000,
-        targetProtein: targetProtein ? parseFloat(targetProtein) : 150,
-        targetFat: targetFat ? parseFloat(targetFat) : 55,
-        targetCarbs: targetCarbs ? parseFloat(targetCarbs) : 250
+    const {
+      fullName,
+      gender,
+      dateOfBirth,
+      height,
+      weight,
+      activityLevel,
+      dietaryPref,
+      allergies,
+      targetCalories,
+      targetProtein,
+      targetFat,
+      targetCarbs,
+      goalType,
+      targetWeight,
+    } = req.body;
+
+    const userId = req.user.id;
+    const parsedHeight = height !== undefined && height !== null && height !== '' ? parseFloat(height) : undefined;
+    const parsedWeight = weight !== undefined && weight !== null && weight !== '' ? parseFloat(weight) : undefined;
+    const parsedTargetCalories = targetCalories !== undefined && targetCalories !== null && targetCalories !== '' ? parseInt(targetCalories, 10) : undefined;
+    const parsedTargetProtein = targetProtein !== undefined && targetProtein !== null && targetProtein !== '' ? parseFloat(targetProtein) : undefined;
+    const parsedTargetFat = targetFat !== undefined && targetFat !== null && targetFat !== '' ? parseFloat(targetFat) : undefined;
+    const parsedTargetCarbs = targetCarbs !== undefined && targetCarbs !== null && targetCarbs !== '' ? parseFloat(targetCarbs) : undefined;
+    const parsedTargetWeight = targetWeight !== undefined && targetWeight !== null && targetWeight !== '' ? parseFloat(targetWeight) : undefined;
+    const parsedDateOfBirth = dateOfBirth ? new Date(dateOfBirth) : undefined;
+
+    const user = await prisma.$transaction(async (tx) => {
+      if (fullName && typeof fullName === 'string' && fullName.trim()) {
+        await tx.user.update({
+          where: { id: userId },
+          data: { name: fullName.trim() },
+        });
       }
+
+      const profile = await tx.userProfile.upsert({
+        where: { userId },
+        update: {
+          fullName,
+          gender,
+          dateOfBirth: parsedDateOfBirth,
+          height: parsedHeight,
+          weight: parsedWeight,
+          activityLevel,
+          dietaryPref,
+          allergies,
+          targetCalories: parsedTargetCalories,
+          targetProtein: parsedTargetProtein,
+          targetFat: parsedTargetFat,
+          targetCarbs: parsedTargetCarbs,
+        },
+        create: {
+          userId,
+          fullName,
+          gender,
+          dateOfBirth: parsedDateOfBirth,
+          height: parsedHeight,
+          weight: parsedWeight,
+          activityLevel,
+          dietaryPref: dietaryPref || [],
+          allergies: allergies || [],
+          targetCalories: parsedTargetCalories ?? 2000,
+          targetProtein: parsedTargetProtein ?? 150,
+          targetFat: parsedTargetFat ?? 55,
+          targetCarbs: parsedTargetCarbs ?? 250,
+        },
+      });
+
+      if (parsedHeight !== undefined || parsedWeight !== undefined) {
+        await tx.userHealthMetric.create({
+          data: {
+            userId,
+            height: parsedHeight,
+            weight: parsedWeight,
+          },
+        });
+      }
+
+      const hasGoalPayload =
+        goalType !== undefined ||
+        parsedTargetWeight !== undefined ||
+        parsedTargetCalories !== undefined ||
+        parsedTargetProtein !== undefined ||
+        parsedTargetFat !== undefined ||
+        parsedTargetCarbs !== undefined;
+
+      if (hasGoalPayload) {
+        const activeGoal = await tx.userGoal.findFirst({
+          where: { userId, isActive: true },
+          orderBy: { startDate: 'desc' },
+        });
+
+        if (activeGoal) {
+          await tx.userGoal.update({
+            where: { id: activeGoal.id },
+            data: {
+              goalType: goalType ?? activeGoal.goalType,
+              targetWeight: parsedTargetWeight ?? activeGoal.targetWeight,
+              targetCalories: parsedTargetCalories ?? activeGoal.targetCalories,
+              targetProtein: parsedTargetProtein ?? activeGoal.targetProtein,
+              targetFat: parsedTargetFat ?? activeGoal.targetFat,
+              targetCarbs: parsedTargetCarbs ?? activeGoal.targetCarbs,
+            },
+          });
+        } else {
+          await tx.userGoal.create({
+            data: {
+              userId,
+              goalType: goalType ?? 'MAINTENANCE',
+              targetWeight: parsedTargetWeight,
+              targetCalories: parsedTargetCalories ?? 2000,
+              targetProtein: parsedTargetProtein ?? 150,
+              targetFat: parsedTargetFat ?? 55,
+              targetCarbs: parsedTargetCarbs ?? 250,
+              isActive: true,
+            },
+          });
+        }
+      }
+
+      await tx.auditLog.create({
+        data: {
+          userId,
+          action: 'UPDATE_PROFILE',
+          entity: 'UserProfile',
+          entityId: profile.id,
+          newData: {
+            fullName,
+            height: parsedHeight,
+            weight: parsedWeight,
+            activityLevel,
+            targetCalories: parsedTargetCalories,
+            targetProtein: parsedTargetProtein,
+            targetFat: parsedTargetFat,
+            targetCarbs: parsedTargetCarbs,
+            goalType,
+            targetWeight: parsedTargetWeight,
+          },
+          ipAddress: req.ip,
+          userAgent: req.get('user-agent'),
+        },
+      });
+
+      return tx.user.findUnique({
+        where: { id: userId },
+        include: {
+          profile: true,
+          goals: { where: { isActive: true } },
+          healthMetrics: {
+            orderBy: { recordedAt: 'desc' },
+            take: 5,
+          },
+        },
+      });
     });
-    
-    res.json({ success: true, data: profile });
+
+    res.json({ success: true, data: user });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

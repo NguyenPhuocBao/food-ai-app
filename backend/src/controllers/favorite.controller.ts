@@ -7,18 +7,25 @@ export const addFavorite = async (req: any, res: Response) => {
   try {
     const { foodId } = req.params;
     const userId = req.user.id;
+    const parsedFoodId = parseInt(foodId);
 
-    const food = await prisma.foodItem.findUnique({ where: { id: parseInt(foodId) } });
+    const food = await prisma.foodItem.findUnique({ where: { id: parsedFoodId } });
     if (!food) return res.status(404).json({ error: 'Food not found' });
 
-    const favorite = await prisma.favorite.upsert({
-      where: { userId_foodId: { userId, foodId: parseInt(foodId) } },
-      update: {},
-      create: { userId, foodId: parseInt(foodId) },
+    const existingFavorite = await prisma.favorite.findUnique({
+      where: { userId_foodId: { userId, foodId: parsedFoodId } },
+    });
+
+    if (existingFavorite) {
+      return res.json({ success: true, data: existingFavorite });
+    }
+
+    const favorite = await prisma.favorite.create({
+      data: { userId, foodId: parsedFoodId },
     });
 
     await prisma.foodItem.update({
-      where: { id: parseInt(foodId) },
+      where: { id: parsedFoodId },
       data: { popularity: { increment: 1 } },
     });
 
@@ -32,13 +39,22 @@ export const removeFavorite = async (req: any, res: Response) => {
   try {
     const { foodId } = req.params;
     const userId = req.user.id;
+    const parsedFoodId = parseInt(foodId);
+
+    const existingFavorite = await prisma.favorite.findUnique({
+      where: { userId_foodId: { userId, foodId: parsedFoodId } },
+    });
+
+    if (!existingFavorite) {
+      return res.json({ success: true, message: 'Favorite already removed' });
+    }
 
     await prisma.favorite.delete({
-      where: { userId_foodId: { userId, foodId: parseInt(foodId) } },
+      where: { userId_foodId: { userId, foodId: parsedFoodId } },
     });
 
     await prisma.foodItem.update({
-      where: { id: parseInt(foodId) },
+      where: { id: parsedFoodId },
       data: { popularity: { decrement: 1 } },
     });
 
@@ -55,12 +71,19 @@ export const getFavorites = async (req: any, res: Response) => {
 
     const favorites = await prisma.favorite.findMany({
       where: { userId },
-      include: { food: true },
+      include: { food: { include: { recipe: true } } },
       take: Number(limit),
       orderBy: { createdAt: 'desc' },
     });
 
-    res.json({ success: true, data: favorites.map(f => f.food), count: favorites.length });
+    res.json({
+      success: true,
+      data: favorites.map((favorite) => ({
+        ...favorite.food,
+        savedAt: favorite.createdAt,
+      })),
+      count: favorites.length,
+    });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

@@ -6,4 +6,28 @@
   body {
     @apply bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100;
   }
+
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']),
+  select,
+  textarea {
+    @apply text-gray-900 placeholder:text-gray-400;
+  }
+
+  .dark input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']),
+  .dark select,
+  .dark textarea {
+    @apply text-slate-100 placeholder:text-slate-500;
+  }
+
+  .dark input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):not([class*='bg-']),
+  .dark select:not([class*='bg-']),
+  .dark textarea:not([class*='bg-']) {
+    @apply bg-slate-900 border-slate-700;
+  }
+
+  .admin-shell input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  .admin-shell select,
+  .admin-shell textarea {
+    @apply bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500;
+  }
 }

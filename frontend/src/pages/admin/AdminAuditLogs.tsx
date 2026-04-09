@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { getAuditLogs } from '../../services/admin.service';
 import { Filter, X } from 'lucide-react';
 import EmptyState from '../../components/admin/EmptyState';
+import { formatAdminDateTime } from '../../utils/adminDateTime';
 
 const AdminAuditLogs = () => {
   const [logs, setLogs] = useState<any[]>([]);
@@ -66,7 +67,7 @@ const AdminAuditLogs = () => {
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
               {logs.map((log) => (
                 <tr key={log.id} className="group hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                  <td className="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400">{new Date(log.createdAt).toLocaleString()}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400">{formatAdminDateTime(log.createdAt)}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-gray-300">{log.user?.name || 'Hệ thống'}</td>
                   <td className="px-6 py-4 whitespace-nowrap"><span className="px-2 py-1 rounded-full text-xs bg-gray-100 dark:bg-gray-700">{log.action}</span></td>
                   <td className="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400">{log.entity}</td>
