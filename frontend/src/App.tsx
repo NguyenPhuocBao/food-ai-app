@@ -7,6 +7,11 @@ import AdminLayout from './components/admin/AdminLayout';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import HomePage from './pages/HomePage';
+import ScanPage from './pages/ScanPage';
+import DiaryPage from './pages/DiaryPage';
+import ChatPage from './pages/ChatPage';
+import ProfilePage from './pages/ProfilePage';
+import UserLayout from './components/user/UserLayout';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminUsers from './pages/admin/AdminUsers';
 import AdminFoods from './pages/admin/AdminFoods';
@@ -32,7 +37,13 @@ function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route element={<ProtectedRoute />}>
-            <Route path="/" element={<HomePage />} />
+            <Route element={<UserLayout />}>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/scan" element={<ScanPage />} />
+              <Route path="/diary" element={<DiaryPage />} />
+              <Route path="/chat-ai" element={<ChatPage />} />
+              <Route path="/profile" element={<ProfilePage />} />
+            </Route>
           </Route>
           <Route element={<AdminRoute />}>
             <Route path="/admin" element={<AdminLayout />}>

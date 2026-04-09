@@ -77,3 +77,8 @@ export const getFoodById = async (foodId: number) => {
   const response = await api.get(`/admin/foods/${foodId}`);
   return response.data.data;
 }
+
+export const sendToUsers = async (title: string, message: string, type: string, userIds: number[]) => {
+  const response = await api.post('/admin/notifications/send-to-users', { title, message, type, userIds });
+  return response.data;
+};

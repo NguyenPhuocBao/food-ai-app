@@ -8,7 +8,10 @@ import {
   toggleUserBan, broadcastNotification, 
   getAllRecipes, deleteRecipe, getAllReviews, deleteReview, 
   getAllNotifications, deleteNotification, getAllSettings, updateManySettings,
-  createRecipe, updateRecipe, getUserMealPlans, createMealPlan, updateMealPlan, deleteMealPlan
+  createRecipe, updateRecipe, getUserMealPlans, createMealPlan, updateMealPlan, deleteMealPlan,
+  sendToUsers,
+  sendNotificationToMultipleUsers,
+  sendNotificationToUser
 } from '../controllers/admin.controller';
 import { authMiddleware, adminMiddleware } from '../middlewares/auth.middleware';
 
@@ -47,6 +50,10 @@ router.delete('/reviews/:id', authMiddleware, adminMiddleware, deleteReview);
 router.get('/notifications', authMiddleware, adminMiddleware, getAllNotifications);
 router.delete('/notifications/:id', authMiddleware, adminMiddleware, deleteNotification);
 router.post('/notifications/broadcast', authMiddleware, adminMiddleware, broadcastNotification);
+router.post('/notifications/send-to-users', authMiddleware, adminMiddleware, sendToUsers);
+router.post('/notifications/send-to-user/:userId', authMiddleware, adminMiddleware, sendNotificationToUser);
+router.post('/notifications/send-to-multiple', authMiddleware, adminMiddleware, sendNotificationToMultipleUsers);
+router.post('/broadcast', authMiddleware, adminMiddleware, broadcastNotification);
 
 // Settings – nếu chưa có
 router.get('/settings', authMiddleware, adminMiddleware, getAllSettings);

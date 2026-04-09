@@ -461,24 +461,7 @@ export const deleteNotification = async (req: Request, res: Response) => {
   }
 };
 
-// Gửi broadcast notification (tạo mới cho tất cả user)
-export const broadcastNotification = async (req: Request, res: Response) => {
-  try {
-    const { title, message, type = 'INFO' } = req.body;
-    if (!title || !message) return res.status(400).json({ error: 'Title and message required' });
-    const users = await prisma.user.findMany({ select: { id: true } });
-    const notifications = users.map(user => ({
-      userId: user.id,
-      title,
-      message,
-      type
-    }));
-    await prisma.notification.createMany({ data: notifications });
-    res.json({ success: true, message: `Broadcast sent to ${users.length} users` });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
-  }
-};
+
 
 // ==================== SETTINGS MANAGEMENT ====================
 export const getAllSettings = async (req: Request, res: Response) => {
@@ -639,3 +622,100 @@ export const deleteMealPlan = async (req: Request, res: Response) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+// Gửi thông báo cho một hoặc nhiều user (danh sách userIds)
+export const sendToUsers = async (req: Request, res: Response) => {
+  try {
+    const { title, message, type, userIds } = req.body;
+    if (!title || !message) return res.status(400).json({ error: 'Title and message required' });
+    if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
+      return res.status(400).json({ error: 'userIds must be a non-empty array' });
+    }
+    const notifications = userIds.map(userId => ({
+      userId,
+      title,
+      message,
+      type: type || 'INFO',
+    }));
+    await prisma.notification.createMany({ data: notifications });
+    res.json({ success: true, message: `Sent to ${userIds.length} users` });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+// Gửi thông báo cho một user cụ thể
+export const sendNotificationToUser = async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+    const { title, message, type = 'INFO' } = req.body;
+    if (!title || !message) return res.status(400).json({ error: 'Title and message required' });
+    const notification = await prisma.notification.create({
+      data: { userId: parseInt(userId), title, message, type },
+    });
+    // Ghi audit log
+    await prisma.auditLog.create({
+      data: {
+        userId: (req as any).user.id,
+        action: 'SEND_NOTIFICATION',
+        entity: 'Notification',
+        entityId: notification.id,
+        newData: { userId: parseInt(userId), title, message, type },
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+      },
+    });
+    res.json({ success: true, data: notification });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const sendNotificationToMultipleUsers = async (req: Request, res: Response) => {
+  try {
+    const { userIds, title, message, type = 'INFO' } = req.body;
+    if (!userIds || !userIds.length) return res.status(400).json({ error: 'User IDs required' });
+    const notifications = userIds.map((userId: number) => ({
+      userId, title, message, type,
+    }));
+    await prisma.notification.createMany({ data: notifications });
+    // Ghi audit log (lưu danh sách userIds)
+    await prisma.auditLog.create({
+      data: {
+        userId: (req as any).user.id,
+        action: 'SEND_NOTIFICATION_MULTIPLE',
+        entity: 'Notification',
+        newData: { userIds, title, message, type },
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+      },
+    });
+    res.json({ success: true, message: `Sent to ${userIds.length} users` });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const broadcastNotification = async (req: Request, res: Response) => {
+  try {
+    const { title, message, type = 'INFO' } = req.body;
+    const users = await prisma.user.findMany({ select: { id: true } });
+    const notifications = users.map(user => ({ userId: user.id, title, message, type }));
+    await prisma.notification.createMany({ data: notifications });
+    // Ghi audit log
+    await prisma.auditLog.create({
+      data: {
+        userId: (req as any).user.id,
+        action: 'BROADCAST_NOTIFICATION',
+        entity: 'Notification',
+        newData: { title, message, type, totalUsers: users.length },
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+      },
+    });
+    res.json({ success: true, message: `Sent to ${users.length} users` });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+
