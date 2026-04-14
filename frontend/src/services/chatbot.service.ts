@@ -7,6 +7,11 @@ export interface ChatSession {
   createdAt: string;
   updatedAt: string;
   _count?: { messages: number };
+  user?: {
+    id: number;
+    name: string;
+    email: string;
+  };
 }
 
 export interface ChatMessage {
@@ -18,25 +23,25 @@ export interface ChatMessage {
 }
 
 export const getSessions = async (): Promise<ChatSession[]> => {
-  const response = await api.get('/chatbot/sessions');
+  const response = await api.get('/chat/sessions');
   return response.data.data;
 };
 
 export const createSession = async (title?: string): Promise<ChatSession> => {
-  const response = await api.post('/chatbot/sessions', { title });
+  const response = await api.post('/chat/sessions', { title });
   return response.data.data;
 };
 
 export const getSession = async (id: number): Promise<ChatSession & { messages: ChatMessage[] }> => {
-  const response = await api.get(`/chatbot/sessions/${id}`);
+  const response = await api.get(`/chat/sessions/${id}`);
   return response.data.data;
 };
 
 export const sendMessage = async (sessionId: number, content: string): Promise<ChatMessage> => {
-  const response = await api.post(`/chatbot/sessions/${sessionId}/messages`, { content });
+  const response = await api.post(`/chat/sessions/${sessionId}/messages`, { content });
   return response.data.data;
 };
 
 export const deleteSession = async (id: number): Promise<void> => {
-  await api.delete(`/chatbot/sessions/${id}`);
+  await api.delete(`/chat/sessions/${id}`);
 };

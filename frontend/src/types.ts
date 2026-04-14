@@ -15,6 +15,7 @@ export interface UserProfile {
   userId: number;
   fullName?: string;
   gender?: string;
+  dateOfBirth?: string;
   height?: number;
   weight?: number;
   targetCalories: number;

@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import OpenAI from 'openai';
+import { toAppDateKey, toAppDayRange } from '../utils/timezone.util';
 
 const prisma = new PrismaClient();
 
@@ -9,6 +10,12 @@ const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
 });
 
+const CHAT_MODEL = process.env.OPENAI_CHAT_MODEL || 'gpt-4o-mini';
+const MAX_HISTORY_MESSAGES = Number(process.env.CHAT_HISTORY_LIMIT || 20);
+
+const toAssistantRole = (role: string): 'user' | 'assistant' =>
+  role === 'USER' ? 'user' : 'assistant';
+
 // Hàm lấy thông tin người dùng để tạo system prompt
 const getSystemPrompt = async (userId: number) => {
     const user = await prisma.user.findUnique({
@@ -16,21 +23,54 @@ const getSystemPrompt = async (userId: number) => {
         include: { profile: true, goals: { where: { isActive: true } } },
     });
 
-    if (!user) return 'Bạn là AI Health Coach - Chuyên gia dinh dưỡng và sức khỏe.';
+    if (!user) return 'Ban la AI Health Coach - chuyen gia dinh duong va suc khoe.';
 
     const profile = user.profile;
     const goal = user.goals[0];
+    const today = new Date();
+    const todayKey = toAppDateKey(today);
+    const { start, endExclusive } = toAppDayRange(today);
 
-    return `Bạn là AI Health Coach - Chuyên gia dinh dưỡng và sức khỏe thông minh.
+    const [dailyNutrition, recentMeals] = await Promise.all([
+      prisma.dailyNutrition.findUnique({
+        where: { userId_date: { userId, date: start } },
+      }),
+      prisma.meal.findMany({
+        where: { userId, eatenAt: { gte: start, lt: endExclusive } },
+        include: { food: { select: { name: true } } },
+        orderBy: { eatenAt: 'desc' },
+        take: 5,
+      }),
+    ]);
 
-THÔNG TIN NGƯỜI DÙNG:
-- Tên: ${profile?.fullName || user.name}
-- Cân nặng: ${profile?.weight || 'Chưa cập nhật'} kg
-- Chiều cao: ${profile?.height || 'Chưa cập nhật'} cm
-- Mục tiêu: ${goal?.goalType === 'WEIGHT_LOSS' ? 'Giảm cân' : goal?.goalType === 'WEIGHT_GAIN' ? 'Tăng cân' : 'Duy trì cân nặng'}
-- Dị ứng: ${profile?.allergies?.join(', ') || 'Không có'}
+    const mealSummary = recentMeals.length
+      ? recentMeals
+          .map((meal) => `${meal.mealType}: ${meal.food?.name || 'Unknown'} x${meal.quantity}`)
+          .join('; ')
+      : 'Chua co bua an nao hom nay';
 
-Hãy trả lời ngắn gọn, thân thiện, có gợi ý cụ thể. Luôn ưu tiên sức khỏe và an toàn.`;
+    const nutritionSummary = dailyNutrition
+      ? `${dailyNutrition.totalCalories} kcal, P ${Math.round(dailyNutrition.totalProtein)}g, C ${Math.round(dailyNutrition.totalCarbs)}g, F ${Math.round(dailyNutrition.totalFat)}g`
+      : 'Chua co du lieu dinh duong hom nay';
+
+    return `Ban la AI Health Coach chuyen ve dinh duong va theo doi bua an.
+
+THONG TIN NGUOI DUNG:
+- Ten: ${profile?.fullName || user.name}
+- Can nang: ${profile?.weight || 'Chua cap nhat'} kg
+- Chieu cao: ${profile?.height || 'Chua cap nhat'} cm
+- Muc tieu: ${goal?.goalType === 'WEIGHT_LOSS' ? 'Giam can' : goal?.goalType === 'WEIGHT_GAIN' ? 'Tang can' : goal?.goalType === 'MUSCLE_GAIN' ? 'Tang co' : 'Duy tri can nang'}
+- Di ung: ${profile?.allergies?.join(', ') || 'Khong co'}
+- Calo muc tieu: ${goal?.targetCalories || profile?.targetCalories || 2000}
+- Dinh duong hom nay (${todayKey}): ${nutritionSummary}
+- Cac bua an da ghi nhan: ${mealSummary}
+
+NGUYEN TAC TRA LOI:
+1) Ngan gon, ro rang, ton trong boi canh cua user.
+2) Neu user hoi ve bua an, uu tien de xuat co dinh luong va macro du kien.
+3) Neu user co di ung/han che, KHONG de xuat mon vi pham.
+4) Khong dua ra chan doan y te. Neu dau hieu bat thuong, khuyen user di kham.
+5) Muc tieu la giup user ghi nhat ky de theo doi du lieu chinh xac.`;
 };
 
 // Tạo phiên chat mới
@@ -50,12 +90,18 @@ export const createSession = async (req: any, res: Response) => {
 // Lấy danh sách các phiên chat của user
 export const getSessions = async (req: any, res: Response) => {
     try {
-        const userId = (req.user.role === 'ADMIN' && req.query.userId) 
-          ? parseInt(req.query.userId as string) 
-          : req.user.id;
+        const isAdmin = req.user.role === 'ADMIN';
+        const requestedUserId = req.query.userId ? parseInt(req.query.userId as string) : null;
+        const where = isAdmin
+          ? (requestedUserId ? { userId: requestedUserId } : {})
+          : { userId: req.user.id };
+
         const sessions = await prisma.chatSession.findMany({
-            where: { userId },
-            include: { _count: { select: { messages: true } } },
+            where,
+            include: {
+              _count: { select: { messages: true } },
+              user: { select: { id: true, name: true, email: true } },
+            },
             orderBy: { updatedAt: 'desc' },
         });
         res.json({ success: true, data: sessions });
@@ -68,9 +114,14 @@ export const getSessions = async (req: any, res: Response) => {
 export const getSession = async (req: any, res: Response) => {
     try {
         const { id } = req.params;
-        const userId = req.user.id;
+        const isAdmin = req.user.role === 'ADMIN';
+        const requestedUserId = req.query.userId ? parseInt(req.query.userId as string) : null;
+        const where = isAdmin
+          ? { id: parseInt(id), ...(requestedUserId ? { userId: requestedUserId } : {}) }
+          : { id: parseInt(id), userId: req.user.id };
+
         const session = await prisma.chatSession.findFirst({
-            where: { id: parseInt(id), userId },
+            where,
             include: { messages: { orderBy: { createdAt: 'asc' } } },
         });
         if (!session) return res.status(404).json({ error: 'Session not found' });
@@ -84,8 +135,10 @@ export const getSession = async (req: any, res: Response) => {
 export const deleteSession = async (req: any, res: Response) => {
     try {
         const { id } = req.params;
-        const userId = req.user.id;
-        const session = await prisma.chatSession.findFirst({ where: { id: parseInt(id), userId } });
+        const isAdmin = req.user.role === 'ADMIN';
+        const session = await prisma.chatSession.findFirst({
+          where: isAdmin ? { id: parseInt(id) } : { id: parseInt(id), userId: req.user.id },
+        });
         if (!session) return res.status(404).json({ error: 'Session not found' });
         await prisma.chatSession.delete({ where: { id: parseInt(id) } });
         res.json({ success: true, message: 'Session deleted' });
@@ -98,37 +151,39 @@ export const deleteSession = async (req: any, res: Response) => {
 export const sendMessage = async (req: any, res: Response) => {
     try {
         const { id } = req.params;
-        const { content } = req.body;
+        const content = String(req.body?.content || '').trim();
         const userId = req.user.id;
+        if (!content) return res.status(400).json({ error: 'Message content is required' });
+        if (!process.env.OPENAI_API_KEY) return res.status(500).json({ error: 'OPENAI_API_KEY is not configured' });
 
         const session = await prisma.chatSession.findFirst({ where: { id: parseInt(id), userId } });
         if (!session) return res.status(404).json({ error: 'Session not found' });
 
         // Lưu tin nhắn của người dùng
-        await prisma.chatMessage.create({ data: { sessionId: session.id, role: 'USER', content } });
+        const userMessage = await prisma.chatMessage.create({ data: { sessionId: session.id, role: 'USER', content } });
 
-        // Lấy lịch sử tin nhắn (tối đa 10 tin nhắn gần nhất)
+        // Lấy lịch sử tin nhắn gần nhất (đã gồm tin vừa gửi)
         const previousMessages = await prisma.chatMessage.findMany({
             where: { sessionId: session.id },
-            orderBy: { createdAt: 'asc' },
-            take: 10,
+            orderBy: { createdAt: 'desc' },
+            take: Number.isFinite(MAX_HISTORY_MESSAGES) ? MAX_HISTORY_MESSAGES : 20,
         });
+        previousMessages.reverse();
 
         const systemPrompt = await getSystemPrompt(userId);
 
         // Xây dựng mảng messages cho OpenAI API
         const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
             { role: 'system', content: systemPrompt },
-            ...previousMessages.map(m => ({
-                role: m.role === 'USER' ? 'user' : 'assistant',
+            ...previousMessages.map((m) => ({
+                role: toAssistantRole(m.role),
                 content: m.content,
             })) as OpenAI.Chat.ChatCompletionMessageParam[],
-            { role: 'user', content: content },
         ];
 
         // Gọi OpenAI Chat Completion API
         const completion = await openai.chat.completions.create({
-            model: 'gpt-3.5-turbo', // Có thể đổi thành 'gpt-4-turbo' hoặc 'gpt-4o-mini' nếu cần
+            model: CHAT_MODEL,
             messages: messages,
             temperature: 0.7,
         });
@@ -141,24 +196,30 @@ export const sendMessage = async (req: any, res: Response) => {
         });
 
         // Cập nhật thời gian của phiên chat
+        const shouldUpdateTitle = session.title.startsWith('Cuộc trò chuyện') || session.title.startsWith('Cuoc tro chuyen');
+        const nextTitle = shouldUpdateTitle
+          ? content.slice(0, 60)
+          : session.title;
+
         await prisma.chatSession.update({
             where: { id: session.id },
-            data: { updatedAt: new Date() },
+            data: { updatedAt: new Date(), title: nextTitle || session.title },
         });
 
-        res.json({ success: true, data: assistantMessage });
+        res.json({ success: true, data: assistantMessage, meta: { userMessageId: userMessage.id } });
     } catch (error: any) {
         console.error('OpenAI API error:', error);
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: error?.message || 'ChatAI internal error' });
     }
 };
 
 // Hỏi nhanh (không lưu phiên, chỉ trả lời một câu)
 export const quickChat = async (req: any, res: Response) => {
     try {
-        const { question } = req.body;
+        const question = String(req.body?.question || '').trim();
         const userId = req.user.id;
         if (!question) return res.status(400).json({ error: 'Question required' });
+        if (!process.env.OPENAI_API_KEY) return res.status(500).json({ error: 'OPENAI_API_KEY is not configured' });
 
         const systemPrompt = await getSystemPrompt(userId);
 
@@ -168,7 +229,7 @@ export const quickChat = async (req: any, res: Response) => {
         ];
 
         const completion = await openai.chat.completions.create({
-            model: 'gpt-3.5-turbo',
+            model: CHAT_MODEL,
             messages: messages,
             temperature: 0.7,
         });
@@ -177,6 +238,6 @@ export const quickChat = async (req: any, res: Response) => {
         res.json({ success: true, data: { answer } });
     } catch (error: any) {
         console.error('OpenAI API error:', error);
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: error?.message || 'Quick chat internal error' });
     }
 };

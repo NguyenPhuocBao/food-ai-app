@@ -1,6 +1,19 @@
 import app from './app';
+import { startMealReminderScheduler, stopMealReminderScheduler } from './services/meal-reminder.service';
 
 const PORT = process.env.PORT || 5000;
+
+startMealReminderScheduler();
+
+process.on('SIGINT', () => {
+  stopMealReminderScheduler();
+  process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+  stopMealReminderScheduler();
+  process.exit(0);
+});
 
 app.listen(PORT, () => {
   console.log(`🚀 Food AI System API running on http://localhost:${PORT}`);

@@ -4,7 +4,17 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const app_1 = __importDefault(require("./app"));
+const meal_reminder_service_1 = require("./services/meal-reminder.service");
 const PORT = process.env.PORT || 5000;
+(0, meal_reminder_service_1.startMealReminderScheduler)();
+process.on('SIGINT', () => {
+    (0, meal_reminder_service_1.stopMealReminderScheduler)();
+    process.exit(0);
+});
+process.on('SIGTERM', () => {
+    (0, meal_reminder_service_1.stopMealReminderScheduler)();
+    process.exit(0);
+});
 app_1.default.listen(PORT, () => {
     console.log(`🚀 Food AI System API running on http://localhost:${PORT}`);
     console.log(`📊 Total endpoints: 60+`);

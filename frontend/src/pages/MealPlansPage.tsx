@@ -1,14 +1,22 @@
 import { useEffect, useState } from 'react';
-import { CalendarDays, Loader2, Plus, Trash2 } from 'lucide-react';
+import { CalendarDays, Check, Loader2, Plus, ShoppingBasket, Sparkles, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getFoods } from '../services/food.service';
 import {
   addDetailToMealPlan,
+  applyActiveMealPlanToday,
   createMealPlan,
   deleteMealPlan,
+  generateAutoMealPlan,
+  getMealPlanInsights,
+  getMealPlanShoppingList,
   getMealPlans,
+  resetMealPlanShoppingListChecks,
   setActiveMealPlan,
+  toggleMealPlanShoppingItem,
   type MealPlan,
+  type MealPlanInsights,
+  type MealPlanShoppingList,
 } from '../services/mealplan.service';
 import type { FoodItem } from '../types';
 
@@ -26,15 +34,31 @@ const MealPlansPage = () => {
   const [foods, setFoods] = useState<FoodItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [autoGenerating, setAutoGenerating] = useState(false);
+  const [applyingToday, setApplyingToday] = useState(false);
   const [form, setForm] = useState({
     name: '',
     startDate: '',
     endDate: '',
     activateAfterCreate: true,
   });
+  const [autoConfig, setAutoConfig] = useState({
+    goalTemplate: 'AUTO' as 'AUTO' | 'WEIGHT_LOSS' | 'WEIGHT_GAIN' | 'MAINTENANCE' | 'MUSCLE_GAIN',
+    macroStrategy: 'AUTO' as 'AUTO' | 'BALANCED' | 'HIGH_PROTEIN' | 'LOW_CARB',
+    includeSnack: true,
+    useCustomTargets: false,
+    targetCalories: '',
+    targetProtein: '',
+    targetFat: '',
+    targetCarbs: '',
+  });
   const [details, setDetails] = useState<DraftDetail[]>([
     { foodId: 0, mealType: 'BREAKFAST', dayOfWeek: 1, quantity: 1 },
   ]);
+  const [shoppingPlanId, setShoppingPlanId] = useState<number | null>(null);
+  const [shoppingList, setShoppingList] = useState<MealPlanShoppingList | null>(null);
+  const [shoppingLoading, setShoppingLoading] = useState(false);
+  const [insightsByPlanId, setInsightsByPlanId] = useState<Record<number, MealPlanInsights>>({});
 
   const loadData = async () => {
     setLoading(true);
@@ -45,6 +69,23 @@ const MealPlansPage = () => {
       ]);
       setPlans(planData);
       setFoods(foodResult.items);
+
+      const insightEntries = await Promise.all(
+        planData.map(async (plan) => {
+          try {
+            const insight = await getMealPlanInsights(plan.id);
+            return [plan.id, insight] as const;
+          } catch {
+            return [plan.id, null] as const;
+          }
+        })
+      );
+
+      const nextInsights: Record<number, MealPlanInsights> = {};
+      insightEntries.forEach(([planId, insight]) => {
+        if (insight) nextInsights[planId] = insight;
+      });
+      setInsightsByPlanId(nextInsights);
     } catch {
       toast.error('Không thể tải dữ liệu meal plan');
     } finally {
@@ -62,6 +103,16 @@ const MealPlansPage = () => {
       startDate: '',
       endDate: '',
       activateAfterCreate: true,
+    });
+    setAutoConfig({
+      goalTemplate: 'AUTO',
+      macroStrategy: 'AUTO',
+      includeSnack: true,
+      useCustomTargets: false,
+      targetCalories: '',
+      targetProtein: '',
+      targetFat: '',
+      targetCarbs: '',
     });
     setDetails([{ foodId: 0, mealType: 'BREAKFAST', dayOfWeek: 1, quantity: 1 }]);
   };
@@ -108,6 +159,41 @@ const MealPlansPage = () => {
     }
   };
 
+  const handleAutoGeneratePlan = async () => {
+    setAutoGenerating(true);
+    try {
+      const customTargets = autoConfig.useCustomTargets
+        ? {
+            targetCalories: autoConfig.targetCalories ? Number(autoConfig.targetCalories) : undefined,
+            targetProtein: autoConfig.targetProtein ? Number(autoConfig.targetProtein) : undefined,
+            targetFat: autoConfig.targetFat ? Number(autoConfig.targetFat) : undefined,
+            targetCarbs: autoConfig.targetCarbs ? Number(autoConfig.targetCarbs) : undefined,
+          }
+        : {};
+
+      const payload = {
+        name: form.name || undefined,
+        startDate: form.startDate || undefined,
+        endDate: form.endDate || undefined,
+        activate: form.activateAfterCreate,
+        days: form.startDate || form.endDate ? undefined : 7,
+        includeSnack: autoConfig.includeSnack,
+        goalTemplate: autoConfig.goalTemplate,
+        macroStrategy: autoConfig.macroStrategy,
+        ...customTargets,
+      };
+
+      await generateAutoMealPlan(payload);
+      toast.success('Da tao meal plan tu dong theo muc tieu');
+      resetForm();
+      await loadData();
+    } catch {
+      toast.error('Khong the tao meal plan tu dong');
+    } finally {
+      setAutoGenerating(false);
+    }
+  };
+
   const handleActivate = async (planId: number) => {
     try {
       await setActiveMealPlan(planId);
@@ -118,13 +204,95 @@ const MealPlansPage = () => {
     }
   };
 
+  const handleApplyToday = async () => {
+    setApplyingToday(true);
+    try {
+      const result = await applyActiveMealPlanToday();
+      if (result.createdCount > 0 && result.skippedCount > 0) {
+        toast.success(`Da them ${result.createdCount} bua, bo qua ${result.skippedCount} bua da ton tai`);
+      } else if (result.createdCount > 0) {
+        toast.success(`Da ap dung ${result.createdCount} bua an hom nay`);
+      } else {
+        toast('Tat ca bua hom nay da ton tai, khong tao moi');
+      }
+      await loadData();
+    } catch {
+      toast.error('Khong the ap dung meal plan cho hom nay');
+    } finally {
+      setApplyingToday(false);
+    }
+  };
+
   const handleDelete = async (planId: number) => {
     try {
       await deleteMealPlan(planId);
+      if (shoppingPlanId === planId) {
+        setShoppingPlanId(null);
+        setShoppingList(null);
+      }
       toast.success('Đã xóa meal plan');
       await loadData();
     } catch {
       toast.error('Không thể xóa meal plan');
+    }
+  };
+
+  const handleOpenShoppingList = async (planId: number) => {
+    if (shoppingPlanId === planId) {
+      setShoppingPlanId(null);
+      setShoppingList(null);
+      return;
+    }
+
+    setShoppingLoading(true);
+    try {
+      const result = await getMealPlanShoppingList(planId);
+      setShoppingPlanId(planId);
+      setShoppingList(result);
+    } catch {
+      toast.error('Khong the tai shopping list');
+    } finally {
+      setShoppingLoading(false);
+    }
+  };
+
+  const handleToggleShoppingItem = async (planId: number, itemKey: string, checked: boolean) => {
+    try {
+      await toggleMealPlanShoppingItem(planId, itemKey, checked);
+      setShoppingList((current) => {
+        if (!current || current.mealPlanId !== planId) return current;
+        const items = current.items.map((item) =>
+          item.itemKey === itemKey ? { ...item, checked } : item
+        );
+        const checkedItems = items.filter((item) => item.checked).length;
+
+        return {
+          ...current,
+          items,
+          checkedItems,
+          completionRate: items.length ? Number(((checkedItems / items.length) * 100).toFixed(1)) : 0,
+        };
+      });
+    } catch {
+      toast.error('Khong the cap nhat trang thai item');
+    }
+  };
+
+  const handleResetShoppingChecks = async (planId: number) => {
+    try {
+      await resetMealPlanShoppingListChecks(planId);
+      setShoppingList((current) => {
+        if (!current || current.mealPlanId !== planId) return current;
+        return {
+          ...current,
+          checkedItems: 0,
+          completionRate: 0,
+          items: current.items.map((item) => ({ ...item, checked: false })),
+        };
+      });
+      toast.success('Da reset danh sach mua sam');
+    } catch {
+      toast.error('Khong the reset shopping list');
     }
   };
 
@@ -271,6 +439,127 @@ const MealPlansPage = () => {
               Kích hoạt ngay sau khi tạo
             </label>
 
+            <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4 space-y-3">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-700">Auto Generate Nang Cao</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 mb-1">Goal template</label>
+                  <select
+                    value={autoConfig.goalTemplate}
+                    onChange={(event) =>
+                      setAutoConfig((current) => ({
+                        ...current,
+                        goalTemplate: event.target.value as typeof current.goalTemplate,
+                      }))
+                    }
+                    className="w-full rounded-xl bg-white border border-blue-100 px-3 py-2 text-sm"
+                  >
+                    <option value="AUTO">Tu dong theo profile</option>
+                    <option value="WEIGHT_LOSS">Giam can</option>
+                    <option value="WEIGHT_GAIN">Tang can</option>
+                    <option value="MUSCLE_GAIN">Tang co</option>
+                    <option value="MAINTENANCE">Duy tri</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 mb-1">Macro strategy</label>
+                  <select
+                    value={autoConfig.macroStrategy}
+                    onChange={(event) =>
+                      setAutoConfig((current) => ({
+                        ...current,
+                        macroStrategy: event.target.value as typeof current.macroStrategy,
+                      }))
+                    }
+                    className="w-full rounded-xl bg-white border border-blue-100 px-3 py-2 text-sm"
+                  >
+                    <option value="AUTO">Tu dong theo goal</option>
+                    <option value="BALANCED">Balanced</option>
+                    <option value="HIGH_PROTEIN">High protein</option>
+                    <option value="LOW_CARB">Low carb</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-4">
+                <label className="flex items-center gap-2 text-xs font-semibold text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={autoConfig.includeSnack}
+                    onChange={(event) =>
+                      setAutoConfig((current) => ({ ...current, includeSnack: event.target.checked }))
+                    }
+                  />
+                  Bao gom bua phu
+                </label>
+                <label className="flex items-center gap-2 text-xs font-semibold text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={autoConfig.useCustomTargets}
+                    onChange={(event) =>
+                      setAutoConfig((current) => ({ ...current, useCustomTargets: event.target.checked }))
+                    }
+                  />
+                  Tu dat macro/calories
+                </label>
+              </div>
+
+              {autoConfig.useCustomTargets && (
+                <div className="grid grid-cols-2 gap-3">
+                  <input
+                    type="number"
+                    min="800"
+                    placeholder="Calories/ngay"
+                    value={autoConfig.targetCalories}
+                    onChange={(event) =>
+                      setAutoConfig((current) => ({ ...current, targetCalories: event.target.value }))
+                    }
+                    className="rounded-xl bg-white border border-blue-100 px-3 py-2 text-sm"
+                  />
+                  <input
+                    type="number"
+                    min="30"
+                    placeholder="Protein (g)"
+                    value={autoConfig.targetProtein}
+                    onChange={(event) =>
+                      setAutoConfig((current) => ({ ...current, targetProtein: event.target.value }))
+                    }
+                    className="rounded-xl bg-white border border-blue-100 px-3 py-2 text-sm"
+                  />
+                  <input
+                    type="number"
+                    min="20"
+                    placeholder="Fat (g)"
+                    value={autoConfig.targetFat}
+                    onChange={(event) =>
+                      setAutoConfig((current) => ({ ...current, targetFat: event.target.value }))
+                    }
+                    className="rounded-xl bg-white border border-blue-100 px-3 py-2 text-sm"
+                  />
+                  <input
+                    type="number"
+                    min="30"
+                    placeholder="Carbs (g)"
+                    value={autoConfig.targetCarbs}
+                    onChange={(event) =>
+                      setAutoConfig((current) => ({ ...current, targetCarbs: event.target.value }))
+                    }
+                    className="rounded-xl bg-white border border-blue-100 px-3 py-2 text-sm"
+                  />
+                </div>
+              )}
+            </div>
+
+            <button
+              type="button"
+              disabled={autoGenerating}
+              onClick={handleAutoGeneratePlan}
+              className="w-full rounded-2xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-black py-3.5 flex items-center justify-center gap-2 disabled:opacity-60"
+            >
+              {autoGenerating ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
+              {autoGenerating ? 'Dang tao tu dong...' : 'Tao nhanh theo muc tieu'}
+            </button>
+
             <button
               type="submit"
               disabled={submitting}
@@ -304,8 +593,32 @@ const MealPlansPage = () => {
                       <p className="text-sm text-gray-500 mt-2">
                         {new Date(plan.startDate).toLocaleDateString('vi-VN')} đến {new Date(plan.endDate).toLocaleDateString('vi-VN')}
                       </p>
+                      {insightsByPlanId[plan.id] && (
+                        <p className="mt-2 text-xs font-bold text-blue-700">
+                          Hom nay: {insightsByPlanId[plan.id].completedMealsToday}/{insightsByPlanId[plan.id].plannedMealsToday} bua
+                          ({insightsByPlanId[plan.id].adherenceRateToday}%)
+                        </p>
+                      )}
                     </div>
                     <div className="flex gap-3">
+                      <button
+                        onClick={() => handleOpenShoppingList(plan.id)}
+                        className={`rounded-2xl px-4 py-2 text-sm font-bold inline-flex items-center gap-2 ${
+                          shoppingPlanId === plan.id ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-700'
+                        }`}
+                      >
+                        <ShoppingBasket size={16} />
+                        Mua sam
+                      </button>
+                      {plan.isActive && (
+                        <button
+                          onClick={handleApplyToday}
+                          disabled={applyingToday}
+                          className="rounded-2xl bg-emerald-500 text-white px-4 py-2 text-sm font-bold disabled:opacity-60"
+                        >
+                          {applyingToday ? 'Dang ap dung...' : 'Ap dung hom nay'}
+                        </button>
+                      )}
                       {!plan.isActive && (
                         <button
                           onClick={() => handleActivate(plan.id)}
@@ -340,6 +653,62 @@ const MealPlansPage = () => {
                       </div>
                     ))}
                   </div>
+
+                  {shoppingPlanId === plan.id && (
+                    <div className="px-6 pb-6">
+                      <div className="rounded-[24px] border border-blue-100 bg-blue-50/60 p-5">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                          <div>
+                            <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-600">Shopping List</p>
+                            <p className="text-sm text-blue-800 mt-1">
+                              {shoppingList?.checkedItems ?? 0}/{shoppingList?.totalItems ?? 0} item da check
+                              {typeof shoppingList?.completionRate === 'number' ? ` (${shoppingList.completionRate}%)` : ''}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => handleResetShoppingChecks(plan.id)}
+                            className="rounded-xl px-3 py-2 text-xs font-bold bg-white text-blue-700 border border-blue-200"
+                          >
+                            Reset checklist
+                          </button>
+                        </div>
+
+                        {shoppingLoading ? (
+                          <div className="py-6 flex items-center justify-center">
+                            <Loader2 size={20} className="animate-spin text-blue-600" />
+                          </div>
+                        ) : !shoppingList?.items.length ? (
+                          <p className="text-sm text-blue-800">Chua co nguyen lieu de tong hop cho plan nay.</p>
+                        ) : (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {shoppingList.items.map((item) => (
+                              <button
+                                key={item.itemKey}
+                                onClick={() => handleToggleShoppingItem(plan.id, item.itemKey, !item.checked)}
+                                className={`w-full text-left rounded-2xl border px-4 py-3 flex items-center gap-3 ${
+                                  item.checked ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-blue-100'
+                                }`}
+                              >
+                                <span
+                                  className={`w-5 h-5 rounded-md border inline-flex items-center justify-center shrink-0 ${
+                                    item.checked ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-gray-300'
+                                  }`}
+                                >
+                                  {item.checked && <Check size={13} />}
+                                </span>
+                                <span className="min-w-0">
+                                  <span className="block text-sm font-bold text-gray-900">{item.name}</span>
+                                  <span className="block text-xs text-gray-600 mt-0.5">
+                                    {item.amount} {item.unit} · {item.recipeCount} cong thuc
+                                  </span>
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
 
