@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import { 
   LayoutDashboard, Users, Utensils, BookOpen, Star, MessageSquare, 
-  Settings, History, Bell, Sun, Moon 
+  Settings, History, Bell, Sun, Moon, Brain, Database
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -13,10 +13,11 @@ const menuItems = [
   { path: '/admin/recipes', name: 'Recipes', icon: BookOpen },
   { path: '/admin/reviews', name: 'Reviews', icon: Star },
   { path: '/admin/chat-ai', name: 'Chat AI', icon: MessageSquare },
+  { path: '/admin/chatbot-ops', name: 'Chatbot Ops', icon: Brain },
   { path: '/admin/configs', name: 'Configs', icon: Settings },
   { path: '/admin/logs', name: 'Logs', icon: History },
   { path: '/admin/notifications', name: 'Notifications', icon: Bell },
-  { path: '/admin/settings', name: 'Settings', icon: Settings },
+  { path: '/admin/settings', name: 'Settings DB', icon: Database },
 ];
 
 const Sidebar = () => {

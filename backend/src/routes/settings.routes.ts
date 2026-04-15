@@ -1,5 +1,12 @@
 import { Router } from 'express';
-import { getAllSettings, getSetting, updateSetting, updateManySettings } from '../controllers/settings.controller';
+import {
+  getAllSettings,
+  getAllSettingsRows,
+  getSetting,
+  updateSetting,
+  updateManySettings,
+  deleteSetting,
+} from '../controllers/settings.controller';
 import { authMiddleware, adminMiddleware } from '../middlewares/auth.middleware';
 
 const router = Router();
@@ -8,8 +15,11 @@ const router = Router();
 router.use(authMiddleware, adminMiddleware);
 
 router.get('/', getAllSettings);
+router.get('/rows', getAllSettingsRows);
+router.post('/batch', updateManySettings);
+router.put('/batch', updateManySettings);
 router.get('/:key', getSetting);
 router.put('/:key', updateSetting);
-router.post('/batch', updateManySettings);
+router.delete('/:key', deleteSetting);
 
 export default router;

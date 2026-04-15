@@ -1,18 +1,18 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { User } from '../types';
-import { getMe, login as apiLogin, register as apiRegister } from '../services/auth.service';
+import { login as apiLogin, register as apiRegister } from '../services/auth.service';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 
 interface AuthContextType {
-  user: User | null;      // Phiên của người dùng
-  admin: User | null;     // Phiên của quản trị viên
+  user: User | null;
+  admin: User | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<User>;
   register: (email: string, password: string, name: string) => Promise<void>;
-  logout: () => void;      // Đăng xuất phiên hiện tại (dựa trên context)
-  logoutUser: () => void;  // Đăng xuất riêng cho user
-  logoutAdmin: () => void; // Đăng xuất riêng cho admin
+  logout: () => void;
+  logoutUser: () => void;
+  logoutAdmin: () => void;
   refreshUser: () => Promise<void>;
 }
 
@@ -23,35 +23,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [admin, setAdmin] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Khởi tạo: kiểm tra cả 2 loại token
+  const getMeWithToken = async (token: string): Promise<User> => {
+    const response = await api.get('/auth/me', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data.data;
+  };
+
   useEffect(() => {
     const initAuth = async () => {
       const userToken = localStorage.getItem('token');
       const adminToken = localStorage.getItem('admin_token');
 
-      const loaders = [];
-
-      if (userToken) {
-        loaders.push(
-          getMeWithToken(userToken)
-            .then(u => setUser(u))
-            .catch(() => localStorage.removeItem('token'))
-        );
-      }
-
-      if (adminToken) {
-        loaders.push(
-          getMeWithToken(adminToken)
-            .then(u => {
-              if (u.role === 'ADMIN') setAdmin(u);
-              else localStorage.removeItem('admin_token');
-            })
-            .catch(() => localStorage.removeItem('admin_token'))
-        );
-      }
-
       try {
-        await Promise.all(loaders);
+        const [adminResult, userResult] = await Promise.all([
+          adminToken ? getMeWithToken(adminToken).catch(() => null) : Promise.resolve(null),
+          userToken ? getMeWithToken(userToken).catch(() => null) : Promise.resolve(null),
+        ]);
+
+        if (adminResult?.role === 'ADMIN') {
+          setAdmin(adminResult);
+        } else {
+          setAdmin(null);
+          if (adminToken) localStorage.removeItem('admin_token');
+        }
+
+        if (userResult && userResult.role !== 'ADMIN') {
+          setUser(userResult);
+        } else {
+          setUser(null);
+          if (userToken) localStorage.removeItem('token');
+        }
       } finally {
         setLoading(false);
       }
@@ -60,33 +62,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     initAuth();
   }, []);
 
-  // Helper để lấy info user với token cụ thể (không phụ thuộc global axios header lúc đó)
-  const getMeWithToken = async (token: string) => {
-    const response = await api.get('/auth/me', {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    return response.data.data;
-  };
-
   const login = useCallback(async (email: string, password: string) => {
     try {
       const loginData = await apiLogin(email, password);
       const token = loginData.token!;
-      
-      // Lấy info đầy đủ
       const freshUser = await getMeWithToken(token);
 
       if (freshUser.role === 'ADMIN') {
         localStorage.setItem('admin_token', token);
         setAdmin(freshUser);
-        toast.success(`Chào mừng Admin, ${freshUser.name}!`);
+        toast.success(`Chao mung Admin, ${freshUser.name}!`);
       } else {
         localStorage.setItem('token', token);
         setUser(freshUser);
-        toast.success(`Chào mừng, ${freshUser.name}!`);
+        toast.success(`Chao mung, ${freshUser.name}!`);
       }
+
+      return freshUser;
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Đăng nhập thất bại');
+      toast.error(error.response?.data?.error || 'Dang nhap that bai');
       throw error;
     }
   }, []);
@@ -96,12 +90,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const registerData = await apiRegister(email, password, name);
       const token = registerData.token!;
       localStorage.setItem('token', token);
-      
+
       const freshUser = await getMeWithToken(token);
       setUser(freshUser);
-      toast.success('Đăng ký thành công!');
+      toast.success('Dang ky thanh cong!');
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Đăng ký thất bại');
+      toast.error(error.response?.data?.error || 'Dang ky that bai');
       throw error;
     }
   }, []);
@@ -109,56 +103,79 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logoutUser = useCallback(() => {
     localStorage.removeItem('token');
     setUser(null);
-    toast.success('Đã đăng xuất tài khoản người dùng');
-    if (window.location.pathname === '/' || !window.location.pathname.startsWith('/admin')) {
-        window.location.href = '/login';
+    toast.success('Dang xuat tai khoan nguoi dung thanh cong');
+    if (!window.location.pathname.startsWith('/admin')) {
+      const hasAdminToken = Boolean(localStorage.getItem('admin_token'));
+      window.location.href = hasAdminToken ? '/admin' : '/login';
     }
   }, []);
 
   const logoutAdmin = useCallback(() => {
     localStorage.removeItem('admin_token');
     setAdmin(null);
-    toast.success('Đã đăng xuất quyền quản trị');
+    toast.success('Dang xuat quyen quan tri thanh cong');
     if (window.location.pathname.startsWith('/admin')) {
-        window.location.href = '/login';
+      const hasUserToken = Boolean(localStorage.getItem('token'));
+      window.location.href = hasUserToken ? '/' : '/login';
     }
   }, []);
 
-  // Logout chung (ví dụ từ trang profile)
   const logout = useCallback(() => {
-      // Nếu đang ở /admin thì logout admin, ngược lại logout user
-      if (window.location.pathname.startsWith('/admin')) {
-          logoutAdmin();
-      } else {
-          logoutUser();
-      }
+    if (window.location.pathname.startsWith('/admin')) {
+      logoutAdmin();
+    } else {
+      logoutUser();
+    }
   }, [logoutUser, logoutAdmin]);
 
   const refreshUser = useCallback(async () => {
     const userToken = localStorage.getItem('token');
     if (userToken) {
+      try {
         const u = await getMeWithToken(userToken);
-        setUser(u);
+        if (u.role !== 'ADMIN') {
+          setUser(u);
+        } else {
+          localStorage.removeItem('token');
+          setUser(null);
+        }
+      } catch {
+        localStorage.removeItem('token');
+        setUser(null);
+      }
     }
+
     const adminToken = localStorage.getItem('admin_token');
     if (adminToken) {
+      try {
         const a = await getMeWithToken(adminToken);
-        if (a.role === 'ADMIN') setAdmin(a);
+        if (a.role === 'ADMIN') {
+          setAdmin(a);
+        } else {
+          localStorage.removeItem('admin_token');
+          setAdmin(null);
+        }
+      } catch {
+        localStorage.removeItem('admin_token');
+        setAdmin(null);
+      }
     }
   }, []);
 
   return (
-    <AuthContext.Provider value={{ 
-        user, 
-        admin, 
-        loading, 
-        login, 
-        register, 
-        logout, 
-        logoutUser, 
-        logoutAdmin, 
-        refreshUser 
-    }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        admin,
+        loading,
+        login,
+        register,
+        logout,
+        logoutUser,
+        logoutAdmin,
+        refreshUser,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

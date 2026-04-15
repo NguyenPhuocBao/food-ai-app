@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import { Loader2, Lock, LogOut, Save } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { changePassword, updateProfile } from '../services/auth.service';
+import { getPersonalization, updateRoutine } from '../services/health.service';
 import type { User } from '../types';
 
 type ActivityLevel = 'SEDENTARY' | 'LIGHT' | 'MODERATE' | 'ACTIVE' | 'VERY_ACTIVE';
@@ -24,6 +25,26 @@ type ProfileFormState = {
   targetCarbs: string;
   goalType: GoalType;
   targetWeight: string;
+};
+
+type RoutineFormState = {
+  wakeUpAt: string;
+  sleepAt: string;
+  breakfastAt: string;
+  lunchAt: string;
+  dinnerAt: string;
+  waterGoalMl: string;
+  remindersEnabled: boolean;
+};
+
+const DEFAULT_ROUTINE: RoutineFormState = {
+  wakeUpAt: '06:30',
+  sleepAt: '23:00',
+  breakfastAt: '07:30',
+  lunchAt: '12:30',
+  dinnerAt: '19:00',
+  waterGoalMl: '2200',
+  remindersEnabled: true,
 };
 
 const ACTIVITY_OPTIONS: Array<{ value: ActivityLevel; label: string }> = [
@@ -111,6 +132,9 @@ const ProfilePageV2 = () => {
   const [initialForm, setInitialForm] = useState<ProfileFormState>(buildInitialForm(user));
   const [form, setForm] = useState<ProfileFormState>(buildInitialForm(user));
   const [isSaving, setIsSaving] = useState(false);
+  const [routine, setRoutine] = useState<RoutineFormState>(DEFAULT_ROUTINE);
+  const [routineLoading, setRoutineLoading] = useState(true);
+  const [routineSaving, setRoutineSaving] = useState(false);
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -122,6 +146,35 @@ const ProfilePageV2 = () => {
     setInitialForm(nextForm);
     setForm(nextForm);
   }, [user]);
+
+  useEffect(() => {
+    let mounted = true;
+    getPersonalization()
+      .then((data) => {
+        if (!mounted) return;
+        const source = data?.routine;
+        if (!source) {
+          setRoutine(DEFAULT_ROUTINE);
+          return;
+        }
+        setRoutine({
+          wakeUpAt: source.wakeUpAt || DEFAULT_ROUTINE.wakeUpAt,
+          sleepAt: source.sleepAt || DEFAULT_ROUTINE.sleepAt,
+          breakfastAt: source.breakfastAt || DEFAULT_ROUTINE.breakfastAt,
+          lunchAt: source.lunchAt || DEFAULT_ROUTINE.lunchAt,
+          dinnerAt: source.dinnerAt || DEFAULT_ROUTINE.dinnerAt,
+          waterGoalMl: String(source.waterGoalMl || DEFAULT_ROUTINE.waterGoalMl),
+          remindersEnabled: source.remindersEnabled !== false,
+        });
+      })
+      .finally(() => {
+        if (mounted) setRoutineLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const isDirty = JSON.stringify(form) !== JSON.stringify(initialForm);
   const bmi = (() => {
@@ -136,6 +189,10 @@ const ProfilePageV2 = () => {
   ) => {
     const { name, value } = event.target;
     setForm((current) => ({ ...current, [name]: value }));
+  };
+
+  const handleRoutineChange = (field: keyof RoutineFormState, value: string | boolean) => {
+    setRoutine((current) => ({ ...current, [field]: value }));
   };
 
   const handleSaveProfile = async () => {
@@ -169,6 +226,26 @@ const ProfilePageV2 = () => {
 
   const handleResetForm = () => {
     setForm(initialForm);
+  };
+
+  const handleSaveRoutine = async () => {
+    setRoutineSaving(true);
+    try {
+      await updateRoutine({
+        wakeUpAt: routine.wakeUpAt,
+        sleepAt: routine.sleepAt,
+        breakfastAt: routine.breakfastAt,
+        lunchAt: routine.lunchAt,
+        dinnerAt: routine.dinnerAt,
+        waterGoalMl: Number(routine.waterGoalMl) || 2200,
+        remindersEnabled: routine.remindersEnabled,
+      });
+      toast.success('Da cap nhat lich sinh hoat');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.error || 'Khong the cap nhat lich sinh hoat');
+    } finally {
+      setRoutineSaving(false);
+    }
   };
 
   const handleChangePassword = async () => {
@@ -411,6 +488,91 @@ const ProfilePageV2 = () => {
             </div>
           </div>
 
+          <div className="border-t border-gray-100 dark:border-slate-700 pt-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-black text-gray-900 dark:text-slate-100">Lich sinh hoat & nhac nuoc</h2>
+              {routineLoading && <Loader2 size={16} className="animate-spin text-gray-400" />}
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <label className="block">
+                <span className="text-sm font-bold text-gray-700 dark:text-slate-300">Thuc day</span>
+                <input
+                  type="time"
+                  value={routine.wakeUpAt}
+                  onChange={(event) => handleRoutineChange('wakeUpAt', event.target.value)}
+                  className="mt-2 w-full rounded-xl border border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-800 px-4 py-2.5 text-gray-900 dark:text-slate-100"
+                />
+              </label>
+              <label className="block">
+                <span className="text-sm font-bold text-gray-700 dark:text-slate-300">An sang</span>
+                <input
+                  type="time"
+                  value={routine.breakfastAt}
+                  onChange={(event) => handleRoutineChange('breakfastAt', event.target.value)}
+                  className="mt-2 w-full rounded-xl border border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-800 px-4 py-2.5 text-gray-900 dark:text-slate-100"
+                />
+              </label>
+              <label className="block">
+                <span className="text-sm font-bold text-gray-700 dark:text-slate-300">An trua</span>
+                <input
+                  type="time"
+                  value={routine.lunchAt}
+                  onChange={(event) => handleRoutineChange('lunchAt', event.target.value)}
+                  className="mt-2 w-full rounded-xl border border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-800 px-4 py-2.5 text-gray-900 dark:text-slate-100"
+                />
+              </label>
+              <label className="block">
+                <span className="text-sm font-bold text-gray-700 dark:text-slate-300">An toi</span>
+                <input
+                  type="time"
+                  value={routine.dinnerAt}
+                  onChange={(event) => handleRoutineChange('dinnerAt', event.target.value)}
+                  className="mt-2 w-full rounded-xl border border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-800 px-4 py-2.5 text-gray-900 dark:text-slate-100"
+                />
+              </label>
+              <label className="block">
+                <span className="text-sm font-bold text-gray-700 dark:text-slate-300">Di ngu</span>
+                <input
+                  type="time"
+                  value={routine.sleepAt}
+                  onChange={(event) => handleRoutineChange('sleepAt', event.target.value)}
+                  className="mt-2 w-full rounded-xl border border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-800 px-4 py-2.5 text-gray-900 dark:text-slate-100"
+                />
+              </label>
+              <label className="block">
+                <span className="text-sm font-bold text-gray-700 dark:text-slate-300">Muc nuoc (ml)</span>
+                <input
+                  type="number"
+                  value={routine.waterGoalMl}
+                  onChange={(event) => handleRoutineChange('waterGoalMl', event.target.value)}
+                  className="mt-2 w-full rounded-xl border border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-800 px-4 py-2.5 text-gray-900 dark:text-slate-100"
+                />
+              </label>
+            </div>
+
+            <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-slate-300">
+              <input
+                type="checkbox"
+                checked={routine.remindersEnabled}
+                onChange={(event) => handleRoutineChange('remindersEnabled', event.target.checked)}
+              />
+              Bat nhac nho uong nuoc va bua an
+            </label>
+
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={handleSaveRoutine}
+                disabled={routineSaving}
+                className="inline-flex items-center gap-2 rounded-xl bg-sky-500 hover:bg-sky-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-60"
+              >
+                {routineSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                {routineSaving ? 'Dang luu lich...' : 'Luu lich sinh hoat'}
+              </button>
+            </div>
+          </div>
+
           <div className="border-t border-gray-100 dark:border-slate-700 pt-5 flex flex-wrap items-center justify-end gap-3">
             <button
               type="button"
@@ -483,4 +645,3 @@ const ProfilePageV2 = () => {
 };
 
 export default ProfilePageV2;
-

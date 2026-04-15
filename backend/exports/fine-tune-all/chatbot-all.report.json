@@ -1,0 +1,32 @@
+{
+  "generatedAt": "2026-04-15T08:56:06.296Z",
+  "source": "custom",
+  "dbError": null,
+  "config": {
+    "targetCount": 50000,
+    "valRatio": 0.08,
+    "testRatio": 0.04,
+    "syncDb": false,
+    "syncDbLimit": 0
+  },
+  "totals": {
+    "baseExamples": 1000,
+    "expandedExamples": 50000,
+    "train": 43967,
+    "validation": 4040,
+    "test": 1993
+  },
+  "quality": {
+    "shortQuestions": 0,
+    "shortAnswers": 0,
+    "longAnswers": 0,
+    "missingTags": 0
+  },
+  "output": {
+    "trainPath": "D:\\food-ai-app\\backend\\exports\\fine-tune-all\\chatbot-all.train.jsonl",
+    "valPath": "D:\\food-ai-app\\backend\\exports\\fine-tune-all\\chatbot-all.val.jsonl",
+    "testPath": "D:\\food-ai-app\\backend\\exports\\fine-tune-all\\chatbot-all.test.jsonl",
+    "rawPath": "D:\\food-ai-app\\backend\\exports\\fine-tune-all\\chatbot-all.raw.json",
+    "reportPath": "D:\\food-ai-app\\backend\\exports\\fine-tune-all\\chatbot-all.report.json"
+  }
+}

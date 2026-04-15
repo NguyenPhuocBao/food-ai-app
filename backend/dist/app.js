@@ -22,6 +22,7 @@ const recommendation_routes_1 = __importDefault(require("./routes/recommendation
 const weekly_report_routes_1 = __importDefault(require("./routes/weekly-report.routes"));
 const error_middleware_1 = require("./middlewares/error.middleware");
 const settings_routes_1 = __importDefault(require("./routes/settings.routes"));
+const health_routes_1 = __importDefault(require("./routes/health.routes"));
 const path_1 = __importDefault(require("path"));
 const app = (0, express_1.default)();
 // Middleware
@@ -51,6 +52,7 @@ app.use('/api/meal-plans', mealplan_routes_1.default);
 app.use('/api/recommendations', recommendation_routes_1.default);
 app.use('/api/weekly-reports', weekly_report_routes_1.default);
 app.use('/api/admin/settings', settings_routes_1.default);
+app.use('/api/health', health_routes_1.default);
 app.use(error_middleware_1.errorHandler);
 // Health check
 app.get('/health', (req, res) => {
@@ -72,6 +74,7 @@ app.get('/', (req, res) => {
             recipes: '/api/recipes',
             chat: '/api/chat',
             analyze: '/api/analyze',
+            health: '/api/health',
             recommendations: '/api/recommendations',
             weeklyReports: '/api/weekly-reports',
             admin: '/api/admin'

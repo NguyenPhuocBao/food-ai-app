@@ -1,11 +1,17 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.sendNoMealReminderEmail = void 0;
+exports.sendPasswordResetEmail = exports.sendNoMealReminderEmail = void 0;
 let transporter = null;
 let transporterInitialized = false;
 let nodemailerWarningShown = false;
 let smtpWarningShown = false;
 const getEnv = (key) => (process.env[key] || '').trim();
+const escapeHtml = (value) => value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 const getTransporter = () => {
     if (transporterInitialized)
         return transporter;
@@ -81,3 +87,47 @@ const sendNoMealReminderEmail = async (params) => {
     }
 };
 exports.sendNoMealReminderEmail = sendNoMealReminderEmail;
+const sendPasswordResetEmail = async (params) => {
+    const from = getEnv('SMTP_FROM');
+    const mailer = getTransporter();
+    if (!mailer || !from)
+        return false;
+    const safeName = escapeHtml(params.userName || 'ban');
+    const safeUrl = escapeHtml(params.resetUrl);
+    const subject = '[FoodAI] Huong dan dat lai mat khau';
+    const text = [
+        `Xin chao ${params.userName || 'ban'},`,
+        '',
+        'Ban vua yeu cau dat lai mat khau FoodAI.',
+        `Nhan vao link sau de dat lai mat khau (co hieu luc trong ${params.expiresInMinutes} phut):`,
+        params.resetUrl,
+        '',
+        'Neu ban khong thuc hien yeu cau nay, vui long bo qua email.',
+        '',
+        'FoodAI',
+    ].join('\n');
+    const html = [
+        `<p>Xin chao <strong>${safeName}</strong>,</p>`,
+        '<p>Ban vua yeu cau dat lai mat khau FoodAI.</p>',
+        `<p>Nhan vao link sau de dat lai mat khau (co hieu luc trong <strong>${params.expiresInMinutes} phut</strong>):</p>`,
+        `<p><a href="${safeUrl}" target="_blank" rel="noopener noreferrer">Dat lai mat khau</a></p>`,
+        `<p>Neu nut khong hoat dong, hay copy link nay vao trinh duyet:<br /><span>${safeUrl}</span></p>`,
+        '<p>Neu ban khong thuc hien yeu cau nay, vui long bo qua email.</p>',
+        '<p>FoodAI</p>',
+    ].join('');
+    try {
+        await mailer.sendMail({
+            from,
+            to: params.toEmail,
+            subject,
+            text,
+            html,
+        });
+        return true;
+    }
+    catch (error) {
+        console.error('[auth] Failed to send password reset email:', error);
+        return false;
+    }
+};
+exports.sendPasswordResetEmail = sendPasswordResetEmail;

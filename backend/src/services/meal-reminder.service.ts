@@ -2,6 +2,7 @@ import { MealType, NotificationType, Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
 import { getAppTimeZone, toAppDateKey, toAppDayRange } from '../utils/timezone.util';
 import { sendNoMealReminderEmail } from './email.service';
+import { getHydrationRecord, getPersonalRoutine } from './personalization.service';
 
 type ReminderWindow = {
   mealType: MealType;
@@ -49,6 +50,13 @@ const REMINDER_WINDOWS: ReminderWindow[] = [
   { mealType: MealType.DINNER, ...DINNER_AT },
 ];
 
+const WATER_CHECKPOINTS = [
+  { hour: 10, minute: 0, ratio: 0.25 },
+  { hour: 14, minute: 0, ratio: 0.5 },
+  { hour: 18, minute: 0, ratio: 0.75 },
+  { hour: 21, minute: 0, ratio: 1 },
+];
+
 const getReminderMessage = (mealType: MealType) => {
   if (mealType === MealType.BREAKFAST) {
     return {
@@ -71,6 +79,11 @@ const getReminderMessage = (mealType: MealType) => {
 const getNoMealDayMessage = (dateKey: string) => ({
   title: 'Hom nay chua co bua an nao',
   message: `He thong chua ghi nhan bua an nao trong ngay ${dateKey}. Hay them mon an ngay.`,
+});
+
+const getWaterReminderMessage = (remainingMl: number, goalMl: number) => ({
+  title: 'Nho uong nuoc',
+  message: `Ban con thieu ${Math.max(0, remainingMl)}ml nuoc so voi muc tieu ${goalMl}ml hom nay.`,
 });
 
 const getAppTimeParts = (date = new Date()) => {
@@ -210,6 +223,35 @@ const runMealReminderCycle = async () => {
 
         sentKeys.add(reminderKey);
         await markReminderSent(reminderKey);
+      }
+
+      const [routine, hydration] = await Promise.all([
+        getPersonalRoutine(user.id),
+        getHydrationRecord(user.id, now),
+      ]);
+
+      if (routine.remindersEnabled) {
+        for (let index = 0; index < WATER_CHECKPOINTS.length; index++) {
+          const checkpoint = WATER_CHECKPOINTS[index];
+          if (!isAfterTime(hour, minute, checkpoint.hour, checkpoint.minute)) continue;
+
+          const expectedMl = Math.round(routine.waterGoalMl * checkpoint.ratio);
+          if (hydration.totalMl >= expectedMl) continue;
+
+          const waterKey = buildReminderKey(`water_checkpoint_${index + 1}`, dateKey, user.id);
+          if (sentKeys.has(waterKey)) continue;
+
+          const reminder = getWaterReminderMessage(routine.waterGoalMl - hydration.totalMl, routine.waterGoalMl);
+          await createNotification(user.id, reminder.title, reminder.message, {
+            source: 'hydration_reminder',
+            reminderType: `water_checkpoint_${index + 1}`,
+            dateKey,
+            totalMl: hydration.totalMl,
+            goalMl: routine.waterGoalMl,
+          });
+          sentKeys.add(waterKey);
+          await markReminderSent(waterKey);
+        }
       }
 
       if (!isAfterTime(hour, minute, NO_MEAL_EMAIL_AT.hour, NO_MEAL_EMAIL_AT.minute)) {

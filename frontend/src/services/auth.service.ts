@@ -29,3 +29,11 @@ export const updateProfile = async (data: UpdateProfilePayload): Promise<UserPro
 export const changePassword = async (currentPassword: string, newPassword: string): Promise<void> => {
   await api.put('/auth/change-password', { currentPassword, newPassword });
 };
+
+export const forgotPassword = async (email: string): Promise<void> => {
+  await api.post('/auth/forgot-password', { email });
+};
+
+export const resetPassword = async (token: string, newPassword: string): Promise<void> => {
+  await api.post('/auth/reset-password', { token, newPassword });
+};

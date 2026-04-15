@@ -116,12 +116,12 @@ const AdminUsers = () => {
     );
   }
 
-  if (!loading && filteredUsers.length === 0) {
+  if (!loading && allUsers.length === 0) {
     return (
       <EmptyState
         icon={Search}
         title="Khong co nguoi dung"
-        description="Khong tim thay nguoi dung nao phu hop voi tu khoa tim kiem."
+        description="He thong chua co du lieu nguoi dung."
       />
     );
   }
@@ -160,64 +160,72 @@ const AdminUsers = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
-              {paginatedUsers.map((user) => (
-                <tr key={user.id} className="group hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors">
-                  <td className="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-slate-300">{user.id}</td>
-                  <td
-                    className="px-6 py-4 whitespace-nowrap font-medium text-blue-600 dark:text-blue-400 cursor-pointer hover:underline"
-                    onClick={() => navigate(`/admin/users/${user.id}`)}
-                  >
-                    {user.name}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-slate-300">{user.email}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <select
-                      value={user.role}
-                      onChange={(event) => handleRoleChange(user.id, event.target.value as AdminUser['role'])}
-                      className="border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 rounded-xl px-2 py-1 text-sm text-gray-700 dark:text-slate-200"
-                    >
-                      <option value="USER">USER</option>
-                      <option value="MODERATOR">MODERATOR</option>
-                      <option value="ADMIN">ADMIN</option>
-                    </select>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    {!user.isActive ? (
-                      <span className="px-2 py-1 rounded-full text-xs bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300">
-                        Bi khoa
-                      </span>
-                    ) : user.isOnline ? (
-                      <span className="px-2 py-1 rounded-full text-xs bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
-                        Dang online
-                      </span>
-                    ) : (
-                      <span className="px-2 py-1 rounded-full text-xs bg-gray-100 text-gray-700 dark:bg-slate-700 dark:text-slate-300">
-                        Offline
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={() => handleBanToggle(user.id, user.isActive)}
-                        className="text-yellow-600 dark:text-yellow-400"
-                        title={user.isActive ? 'Khoa tai khoan' : 'Mo khoa tai khoan'}
-                      >
-                        {user.isActive ? <Lock size={18} /> : <Unlock size={18} />}
-                      </button>
-                      <button onClick={() => handleResetPassword(user.id)} className="text-blue-600 dark:text-blue-400" title="Reset mat khau">
-                        <Key size={18} />
-                      </button>
-                      <button onClick={() => navigate(`/admin/users/${user.id}`)} className="text-green-600 dark:text-green-400" title="Xem chi tiet">
-                        <Edit size={18} />
-                      </button>
-                      <button onClick={() => handleDelete(user.id)} className="text-red-600 dark:text-red-400" title="Xoa tai khoan">
-                        <Trash size={18} />
-                      </button>
-                    </div>
+              {paginatedUsers.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-10 text-center text-gray-500 dark:text-slate-400">
+                    Khong co du lieu
                   </td>
                 </tr>
-              ))}
+              ) : (
+                paginatedUsers.map((user) => (
+                  <tr key={user.id} className="group hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors">
+                    <td className="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-slate-300">{user.id}</td>
+                    <td
+                      className="px-6 py-4 whitespace-nowrap font-medium text-blue-600 dark:text-blue-400 cursor-pointer hover:underline"
+                      onClick={() => navigate(`/admin/users/${user.id}`)}
+                    >
+                      {user.name}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-slate-300">{user.email}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <select
+                        value={user.role}
+                        onChange={(event) => handleRoleChange(user.id, event.target.value as AdminUser['role'])}
+                        className="border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 rounded-xl px-2 py-1 text-sm text-gray-700 dark:text-slate-200"
+                      >
+                        <option value="USER">USER</option>
+                        <option value="MODERATOR">MODERATOR</option>
+                        <option value="ADMIN">ADMIN</option>
+                      </select>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {!user.isActive ? (
+                        <span className="px-2 py-1 rounded-full text-xs bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300">
+                          Bi khoa
+                        </span>
+                      ) : user.isOnline ? (
+                        <span className="px-2 py-1 rounded-full text-xs bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
+                          Dang online
+                        </span>
+                      ) : (
+                        <span className="px-2 py-1 rounded-full text-xs bg-gray-100 text-gray-700 dark:bg-slate-700 dark:text-slate-300">
+                          Offline
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => handleBanToggle(user.id, user.isActive)}
+                          className="text-yellow-600 dark:text-yellow-400"
+                          title={user.isActive ? 'Khoa tai khoan' : 'Mo khoa tai khoan'}
+                        >
+                          {user.isActive ? <Lock size={18} /> : <Unlock size={18} />}
+                        </button>
+                        <button onClick={() => handleResetPassword(user.id)} className="text-blue-600 dark:text-blue-400" title="Reset mat khau">
+                          <Key size={18} />
+                        </button>
+                        <button onClick={() => navigate(`/admin/users/${user.id}`)} className="text-green-600 dark:text-green-400" title="Xem chi tiet">
+                          <Edit size={18} />
+                        </button>
+                        <button onClick={() => handleDelete(user.id)} className="text-red-600 dark:text-red-400" title="Xoa tai khoan">
+                          <Trash size={18} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

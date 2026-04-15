@@ -1,0 +1,23 @@
+{
+  "generatedAt": "2026-04-15T08:49:59.165Z",
+  "source": "custom",
+  "dbError": null,
+  "totals": {
+    "examples": 1000,
+    "train": 943,
+    "validation": 57,
+    "validationRatio": 0.057
+  },
+  "quality": {
+    "shortQuestions": 0,
+    "shortAnswers": 0,
+    "longAnswers": 0,
+    "missingTags": 0,
+    "potentialMedicalClaims": 0
+  },
+  "output": {
+    "trainPath": "D:\\food-ai-app\\backend\\exports\\fine-tune\\chatbot-finetune.train.jsonl",
+    "valPath": "D:\\food-ai-app\\backend\\exports\\fine-tune\\chatbot-finetune.val.jsonl",
+    "reportPath": "D:\\food-ai-app\\backend\\exports\\fine-tune\\chatbot-finetune.report.json"
+  }
+}

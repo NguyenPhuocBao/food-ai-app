@@ -6,13 +6,21 @@ import {
   toAppDateKey,
   toAppDayStart,
 } from '../utils/timezone.util';
+import {
+  buildWeeklyRecommendations,
+  evaluateDailyHealth,
+} from '../services/health-engine.service';
+import {
+  getHydrationSummaryForRange,
+  resolvePersonalTargets,
+} from '../services/personalization.service';
 
 const prisma = new PrismaClient();
 const OFFSET_HOURS = getAppUtcOffsetHours();
 
 const resolveUserId = (req: any) =>
   (req.user.role === 'ADMIN' && req.query.userId)
-    ? parseInt(req.query.userId as string)
+    ? parseInt(req.query.userId as string, 10)
     : req.user.id;
 
 const getWeekRange = (anchor?: string | Date) => {
@@ -32,6 +40,7 @@ const computeWeeklySnapshot = async (userId: number, weekStart: Date, weekEndExc
       eatenAt: { gte: weekStart, lt: weekEndExclusive },
     },
     select: {
+      id: true,
       eatenAt: true,
       calories: true,
       protein: true,
@@ -39,6 +48,14 @@ const computeWeeklySnapshot = async (userId: number, weekStart: Date, weekEndExc
       carbs: true,
       mealType: true,
       foodId: true,
+      notes: true,
+      food: {
+        select: {
+          name: true,
+          category: true,
+          description: true,
+        },
+      },
     },
   });
 
@@ -88,6 +105,23 @@ const computeWeeklySnapshot = async (userId: number, weekStart: Date, weekEndExc
   const bestDay = daily.reduce((best, current) => (current.calories > best.calories ? current : best), daily[0]);
   const worstDay = daily.reduce((worst, current) => (current.calories < worst.calories ? current : worst), daily[0]);
 
+  const dailyHealth = Array.from({ length: 7 }, (_, index) => {
+    const dayStart = shiftAppDays(weekStart, index);
+    const nextDay = shiftAppDays(dayStart, 1);
+    const dayMeals = meals.filter((meal) => meal.eatenAt >= dayStart && meal.eatenAt < nextDay);
+    return evaluateDailyHealth(dayStart, dayMeals as any);
+  });
+
+  const [targets, hydrationSummary] = await Promise.all([
+    resolvePersonalTargets(userId),
+    getHydrationSummaryForRange(userId, weekStart, weekEndExclusive),
+  ]);
+
+  const weeklyHealth = buildWeeklyRecommendations(dailyHealth, targets.targetCalories, {
+    avgMl: hydrationSummary.avgMl,
+    goalMl: targets.routine.waterGoalMl,
+  });
+
   return {
     avgCalories: average.calories,
     avgProtein: average.protein,
@@ -99,6 +133,20 @@ const computeWeeklySnapshot = async (userId: number, weekStart: Date, weekEndExc
       daily,
       bestDay,
       worstDay,
+      dailyHealth,
+      healthScore: weeklyHealth.avgScore,
+      alerts: weeklyHealth.alerts,
+      recommendations: weeklyHealth.recommendations,
+      hydration: {
+        ...hydrationSummary,
+        goalMl: targets.routine.waterGoalMl,
+      },
+      target: {
+        calories: targets.targetCalories,
+        protein: targets.targetProtein,
+        fat: targets.targetFat,
+        carbs: targets.targetCarbs,
+      },
       generatedAt: new Date().toISOString(),
     },
   };
@@ -171,7 +219,7 @@ export const getLatestWeeklyReport = async (req: any, res: Response) => {
 export const deleteWeeklyReport = async (req: any, res: Response) => {
   try {
     const userId = resolveUserId(req);
-    const reportId = parseInt(req.params.id);
+    const reportId = parseInt(req.params.id, 10);
     if (!Number.isFinite(reportId)) return res.status(400).json({ error: 'Invalid report id' });
 
     const report = await prisma.weeklyReport.findFirst({
@@ -185,4 +233,3 @@ export const deleteWeeklyReport = async (req: any, res: Response) => {
     res.status(500).json({ error: error.message });
   }
 };
-

@@ -1,31 +1,46 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Flame, Loader2, Search, Sparkles } from 'lucide-react';
-import { getCategories, getFoods, getPopularFoods } from '../services/food.service';
+import toast from 'react-hot-toast';
+import { getCategories, getFoods, getPopularFoods, createCustomFood, getMyCustomFoods, bootstrapPopularFoods } from '../services/food.service';
 import { getAssetUrl } from '../services/api';
 import { useDebounce } from '../hooks/useDebounce';
 import type { FoodItem } from '../types';
+import { useAuth } from '../contexts/AuthContext';
 
 const FoodsPage = () => {
+  const { user } = useAuth();
   const [foods, setFoods] = useState<FoodItem[]>([]);
   const [popularFoods, setPopularFoods] = useState<FoodItem[]>([]);
+  const [customFoods, setCustomFoods] = useState<FoodItem[]>([]);
   const [categories, setCategories] = useState<{ category: string; _count: number }[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [creatingCustom, setCreatingCustom] = useState(false);
+  const [bootstrapping, setBootstrapping] = useState(false);
+  const [customForm, setCustomForm] = useState({
+    name: '',
+    calories: '',
+    protein: '',
+    fat: '',
+    carbs: '',
+  });
 
   const debouncedSearch = useDebounce(search, 350);
 
   useEffect(() => {
     const fetchMeta = async () => {
-      const [categoryData, popularData] = await Promise.all([
+      const [categoryData, popularData, myCustomFoods] = await Promise.all([
         getCategories().catch(() => []),
         getPopularFoods(6).catch(() => []),
+        getMyCustomFoods().catch(() => []),
       ]);
       setCategories(categoryData);
       setPopularFoods(popularData);
+      setCustomFoods(myCustomFoods);
     };
 
     fetchMeta();
@@ -49,6 +64,60 @@ const FoodsPage = () => {
   useEffect(() => {
     setPage(1);
   }, [selectedCategory, debouncedSearch]);
+
+  const handleCreateCustomFood = async () => {
+    const calories = Number(customForm.calories);
+    const protein = Number(customForm.protein);
+    const fat = Number(customForm.fat);
+    const carbs = Number(customForm.carbs);
+
+    if (!customForm.name.trim() || !Number.isFinite(calories) || !Number.isFinite(protein) || !Number.isFinite(fat) || !Number.isFinite(carbs)) {
+      toast.error('Nhap du thong tin mon ca nhan');
+      return;
+    }
+
+    setCreatingCustom(true);
+    try {
+      await createCustomFood({
+        name: customForm.name.trim(),
+        calories,
+        protein,
+        fat,
+        carbs,
+      });
+      setCustomForm({ name: '', calories: '', protein: '', fat: '', carbs: '' });
+      toast.success('Da tao mon ca nhan');
+      const [myFoods, result] = await Promise.all([
+        getMyCustomFoods().catch(() => []),
+        getFoods(page, 12, selectedCategory || undefined, debouncedSearch || undefined),
+      ]);
+      setCustomFoods(myFoods);
+      setFoods(result.items);
+      setTotalPages(result.pagination.totalPages || 1);
+    } catch {
+      toast.error('Khong the tao mon ca nhan');
+    } finally {
+      setCreatingCustom(false);
+    }
+  };
+
+  const handleBootstrapPopularFoods = async () => {
+    setBootstrapping(true);
+    try {
+      const result = await bootstrapPopularFoods(240);
+      toast.success(`Da bo sung ${result.inserted} mon pho bien`);
+      const [categoryData, popularData] = await Promise.all([
+        getCategories().catch(() => []),
+        getPopularFoods(6).catch(() => []),
+      ]);
+      setCategories(categoryData);
+      setPopularFoods(popularData);
+    } catch {
+      toast.error('Khong bootstrap duoc danh muc mon pho bien');
+    } finally {
+      setBootstrapping(false);
+    }
+  };
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
@@ -142,6 +211,74 @@ const FoodsPage = () => {
               ))}
             </div>
           </div>
+
+          <div className="bg-white rounded-[28px] border border-gray-100 shadow-sm p-5 space-y-3">
+            <p className="font-black text-gray-900">Mon ca nhan</p>
+            <input
+              value={customForm.name}
+              onChange={(event) => setCustomForm((prev) => ({ ...prev, name: event.target.value }))}
+              placeholder="Ten mon"
+              className="w-full rounded-xl bg-gray-50 border-0 px-3 py-2 text-sm"
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                value={customForm.calories}
+                onChange={(event) => setCustomForm((prev) => ({ ...prev, calories: event.target.value }))}
+                placeholder="Kcal"
+                className="w-full rounded-xl bg-gray-50 border-0 px-3 py-2 text-sm"
+              />
+              <input
+                value={customForm.protein}
+                onChange={(event) => setCustomForm((prev) => ({ ...prev, protein: event.target.value }))}
+                placeholder="Protein"
+                className="w-full rounded-xl bg-gray-50 border-0 px-3 py-2 text-sm"
+              />
+              <input
+                value={customForm.carbs}
+                onChange={(event) => setCustomForm((prev) => ({ ...prev, carbs: event.target.value }))}
+                placeholder="Carbs"
+                className="w-full rounded-xl bg-gray-50 border-0 px-3 py-2 text-sm"
+              />
+              <input
+                value={customForm.fat}
+                onChange={(event) => setCustomForm((prev) => ({ ...prev, fat: event.target.value }))}
+                placeholder="Fat"
+                className="w-full rounded-xl bg-gray-50 border-0 px-3 py-2 text-sm"
+              />
+            </div>
+            <button
+              onClick={handleCreateCustomFood}
+              disabled={creatingCustom}
+              className="w-full rounded-xl bg-emerald-500 text-white text-sm font-bold py-2 hover:bg-emerald-600 disabled:opacity-60"
+            >
+              {creatingCustom ? 'Dang tao...' : 'Tao mon ca nhan'}
+            </button>
+            <div className="max-h-40 overflow-y-auto space-y-2">
+              {customFoods.slice(0, 6).map((food) => (
+                <div key={food.id} className="rounded-xl bg-gray-50 px-3 py-2">
+                  <p className="text-sm font-semibold text-gray-900">{food.name}</p>
+                  <p className="text-xs text-gray-500">{food.calories} kcal</p>
+                </div>
+              ))}
+              {!customFoods.length && (
+                <p className="text-xs text-gray-400">Chua co mon ca nhan.</p>
+              )}
+            </div>
+          </div>
+
+          {user?.role === 'ADMIN' && (
+            <div className="bg-white rounded-[28px] border border-gray-100 shadow-sm p-5 space-y-3">
+              <p className="font-black text-gray-900">Data Strategy</p>
+              <p className="text-xs text-gray-500">Khoi tao 200+ mon pho bien de nang cap du lieu ban dau.</p>
+              <button
+                onClick={handleBootstrapPopularFoods}
+                disabled={bootstrapping}
+                className="w-full rounded-xl bg-gray-900 text-white text-sm font-bold py-2 hover:bg-black disabled:opacity-60"
+              >
+                {bootstrapping ? 'Dang bootstrap...' : 'Bootstrap mon pho bien'}
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="xl:col-span-3">

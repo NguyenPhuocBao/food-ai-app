@@ -41,3 +41,36 @@ export const getPopularFoods = async (limit = 8): Promise<FoodItem[]> => {
   const response = await api.get(`/foods/popular?limit=${limit}`);
   return response.data.data;
 };
+
+export const getMyCustomFoods = async (): Promise<FoodItem[]> => {
+  try {
+    const response = await api.get('/foods/custom/mine');
+    return response.data.data;
+  } catch {
+    return [];
+  }
+};
+
+export type CreateCustomFoodPayload = {
+  name: string;
+  description?: string;
+  calories: number;
+  protein: number;
+  fat: number;
+  carbs: number;
+  fiber?: number;
+  sugar?: number;
+  isVegetarian?: boolean;
+  isVegan?: boolean;
+  isGlutenFree?: boolean;
+};
+
+export const createCustomFood = async (payload: CreateCustomFoodPayload): Promise<FoodItem> => {
+  const response = await api.post('/foods/custom', payload);
+  return response.data.data;
+};
+
+export const bootstrapPopularFoods = async (limit = 240) => {
+  const response = await api.post('/foods/bootstrap-popular', { limit });
+  return response.data.data as { inserted: number; skipped: number; totalFoods: number };
+};

@@ -7,7 +7,10 @@ const router = (0, express_1.Router)();
 // Tất cả các route đều yêu cầu xác thực và quyền ADMIN
 router.use(auth_middleware_1.authMiddleware, auth_middleware_1.adminMiddleware);
 router.get('/', settings_controller_1.getAllSettings);
+router.get('/rows', settings_controller_1.getAllSettingsRows);
+router.post('/batch', settings_controller_1.updateManySettings);
+router.put('/batch', settings_controller_1.updateManySettings);
 router.get('/:key', settings_controller_1.getSetting);
 router.put('/:key', settings_controller_1.updateSetting);
-router.post('/batch', settings_controller_1.updateManySettings);
+router.delete('/:key', settings_controller_1.deleteSetting);
 exports.default = router;

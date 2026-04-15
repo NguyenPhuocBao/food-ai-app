@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, ChevronLeft, ChevronRight, BarChart2, Calendar as CalendarIcon, Droplets, Target, Flame, Loader2, Trash2, Search, X, CheckCircle } from 'lucide-react';
+import { Plus, ChevronLeft, ChevronRight, BarChart2, Calendar as CalendarIcon, Droplets, Target, Flame, Loader2, Trash2, Search, X, CheckCircle, ShieldAlert, GlassWater } from 'lucide-react';
 import { getMealsByDate, addMeal, deleteMeal } from '../services/meal.service';
 import { getDailyStats } from '../services/statistics.service';
 import { searchFoods } from '../services/food.service';
-import { useAuth } from '../contexts/AuthContext';
+import { getDailyHealth, logHydration } from '../services/health.service';
 import type { Meal, FoodItem } from '../types';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -171,11 +171,12 @@ const AddMealModal = ({
 
 // ── Main Page ───────────────────────────────────────────────────────────────
 const DiaryPage = () => {
-  const { user } = useAuth();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [meals, setMeals] = useState<Meal[]>([]);
   const [dailyStats, setDailyStats] = useState<any>(null);
+  const [dailyHealth, setDailyHealth] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoggingWater, setIsLoggingWater] = useState(false);
   const [addModal, setAddModal] = useState<{ mealType: string } | null>(null);
 
   const dateStr = currentDate.toISOString().split('T')[0];
@@ -183,12 +184,14 @@ const DiaryPage = () => {
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [mealData, statsData] = await Promise.all([
+      const [mealData, statsData, healthData] = await Promise.all([
         getMealsByDate(dateStr),
         getDailyStats(dateStr),
+        getDailyHealth(dateStr),
       ]);
       setMeals(mealData.meals);
       setDailyStats(statsData);
+      setDailyHealth(healthData);
     } catch {
       toast.error('Không thể tải dữ liệu nhật ký');
     } finally {
@@ -205,6 +208,26 @@ const DiaryPage = () => {
       fetchData();
     } catch {
       toast.error('Không thể xoá món ăn');
+    }
+  };
+
+  const handleLogWater = async (amountMl: number) => {
+    setIsLoggingWater(true);
+    try {
+      const updated = await logHydration(amountMl);
+      setDailyHealth((prev: any) => ({
+        ...(prev || {}),
+        hydration: {
+          totalMl: updated.totalMl,
+          goalMl: updated.goalMl,
+          percent: updated.percent,
+        },
+      }));
+      toast.success(`Da ghi nhan ${amountMl}ml nuoc`);
+    } catch {
+      toast.error('Khong the ghi nhan nuoc uong luc nay');
+    } finally {
+      setIsLoggingWater(false);
     }
   };
 
@@ -226,6 +249,13 @@ const DiaryPage = () => {
 
   const nutrition = dailyStats?.nutrition || { totalCalories: 0, totalProtein: 0, totalFat: 0, totalCarbs: 0 };
   const goal = dailyStats?.goal || { calories: 2000, protein: 150, fat: 55, carbs: 250 };
+  const healthSummary = dailyHealth || {
+    score: 0,
+    grade: 'D',
+    alerts: [],
+    recommendations: [],
+    hydration: { totalMl: 0, goalMl: 2200, percent: 0 },
+  };
 
   const caloriesPercent = Math.min(100, Math.round((nutrition.totalCalories / goal.calories) * 100));
   const proteinPercent = Math.min(100, Math.round((nutrition.totalProtein / goal.protein) * 100));
@@ -344,6 +374,63 @@ const DiaryPage = () => {
                   </div>
                 </div>
               )}
+            </div>
+
+            <div className="bg-white rounded-[24px] p-5 shadow-sm border border-gray-100 space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="font-bold text-gray-900 flex items-center gap-2">
+                  <ShieldAlert size={16} className="text-amber-500" />
+                  Health Engine
+                </h4>
+                <span className="text-sm font-black text-gray-900">
+                  {healthSummary.score}/100
+                </span>
+              </div>
+
+              <div className="text-xs text-gray-500">
+                Xep hang: <span className="font-bold text-gray-800">{healthSummary.grade}</span>
+              </div>
+
+              <div className="space-y-2">
+                {(healthSummary.alerts || []).slice(0, 2).map((alert: string, index: number) => (
+                  <div key={index} className="rounded-xl bg-amber-50 text-amber-700 px-3 py-2 text-xs font-semibold">
+                    {alert}
+                  </div>
+                ))}
+                {!healthSummary.alerts?.length && (
+                  <div className="rounded-xl bg-emerald-50 text-emerald-700 px-3 py-2 text-xs font-semibold">
+                    Khong co canh bao lon trong ngay.
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-xl border border-blue-100 bg-blue-50 p-3">
+                <div className="flex items-center justify-between text-xs font-bold text-blue-700 mb-2">
+                  <span className="flex items-center gap-1">
+                    <GlassWater size={14} />
+                    Nuoc uong
+                  </span>
+                  <span>{healthSummary.hydration?.totalMl || 0}/{healthSummary.hydration?.goalMl || 2200} ml</span>
+                </div>
+                <div className="h-2 bg-blue-100 rounded-full overflow-hidden mb-3">
+                  <div
+                    className="h-full bg-blue-500 rounded-full transition-all duration-500"
+                    style={{ width: `${Math.min(100, healthSummary.hydration?.percent || 0)}%` }}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {[250, 500].map((amount) => (
+                    <button
+                      key={amount}
+                      onClick={() => handleLogWater(amount)}
+                      disabled={isLoggingWater}
+                      className="rounded-lg bg-white text-blue-700 border border-blue-100 px-2 py-1.5 text-xs font-bold hover:bg-blue-100 disabled:opacity-60"
+                    >
+                      +{amount}ml
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
 

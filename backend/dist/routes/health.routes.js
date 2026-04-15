@@ -1,0 +1,15 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const auth_middleware_1 = require("../middlewares/auth.middleware");
+const health_controller_1 = require("../controllers/health.controller");
+const router = (0, express_1.Router)();
+router.get('/meal/:id', auth_middleware_1.authMiddleware, health_controller_1.getMealHealth);
+router.get('/daily', auth_middleware_1.authMiddleware, health_controller_1.getDailyHealth);
+router.get('/weekly', auth_middleware_1.authMiddleware, health_controller_1.getWeeklyHealth);
+router.get('/personalization', auth_middleware_1.authMiddleware, health_controller_1.getPersonalization);
+router.put('/personalization/routine', auth_middleware_1.authMiddleware, health_controller_1.updateRoutine);
+router.get('/hydration/today', auth_middleware_1.authMiddleware, health_controller_1.getHydrationToday);
+router.post('/hydration/log', auth_middleware_1.authMiddleware, health_controller_1.logHydration);
+router.get('/weekly-actions', auth_middleware_1.authMiddleware, health_controller_1.getWeeklyActions);
+exports.default = router;

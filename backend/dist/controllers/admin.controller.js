@@ -483,9 +483,17 @@ const resetUserPassword = async (req, res) => {
         const { id } = req.params;
         const defaultPassword = '123456';
         const hashedPassword = await bcryptjs_1.default.hash(defaultPassword, 10);
-        const user = await prisma.user.update({
-            where: { id: parseInt(id) },
-            data: { password: hashedPassword }
+        const now = new Date();
+        const parsedUserId = parseInt(id);
+        const user = await prisma.$transaction(async (tx) => {
+            const updatedUser = await tx.user.update({
+                where: { id: parsedUserId },
+                data: { password: hashedPassword, passwordChangedAt: now }
+            });
+            await tx.passwordResetToken.deleteMany({
+                where: { userId: parsedUserId, usedAt: null }
+            });
+            return updatedUser;
         });
         await prisma.auditLog.create({
             data: {
@@ -576,7 +584,7 @@ exports.deleteRecipe = deleteRecipe;
 // Lấy danh sách reviews
 const getAllReviews = async (req, res) => {
     try {
-        const { page = 1, limit = 20, rating, userId, foodId } = req.query;
+        const { page = 1, limit = 20, rating, userId, foodId, search } = req.query;
         const where = {};
         if (rating)
             where.rating = parseInt(rating);
@@ -584,6 +592,17 @@ const getAllReviews = async (req, res) => {
             where.userId = parseInt(userId);
         if (foodId)
             where.foodId = parseInt(foodId);
+        const keyword = String(search || '').trim();
+        if (keyword) {
+            const numericId = Number(keyword);
+            where.OR = [
+                { comment: { contains: keyword, mode: 'insensitive' } },
+                { user: { name: { contains: keyword, mode: 'insensitive' } } },
+                { user: { email: { contains: keyword, mode: 'insensitive' } } },
+                { food: { name: { contains: keyword, mode: 'insensitive' } } },
+                ...(Number.isInteger(numericId) ? [{ id: numericId }] : []),
+            ];
+        }
         const reviews = await prisma.review.findMany({
             where,
             skip: (Number(page) - 1) * Number(limit),

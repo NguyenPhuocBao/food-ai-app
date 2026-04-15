@@ -508,10 +508,20 @@ export const resetUserPassword = async (req: Request, res: Response) => {
     const { id } = req.params;
     const defaultPassword = '123456';
     const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+    const now = new Date();
     
-    const user = await prisma.user.update({
-      where: { id: parseInt(id) },
-      data: { password: hashedPassword }
+    const parsedUserId = parseInt(id);
+    const user = await prisma.$transaction(async (tx) => {
+      const updatedUser = await tx.user.update({
+        where: { id: parsedUserId },
+        data: { password: hashedPassword, passwordChangedAt: now }
+      });
+
+      await tx.passwordResetToken.deleteMany({
+        where: { userId: parsedUserId, usedAt: null }
+      });
+
+      return updatedUser;
     });
     
     await prisma.auditLog.create({
@@ -601,11 +611,22 @@ export const deleteRecipe = async (req: Request, res: Response) => {
 // Lấy danh sách reviews
 export const getAllReviews = async (req: Request, res: Response) => {
   try {
-    const { page = 1, limit = 20, rating, userId, foodId } = req.query;
+    const { page = 1, limit = 20, rating, userId, foodId, search } = req.query;
     const where: any = {};
     if (rating) where.rating = parseInt(rating as string);
     if (userId) where.userId = parseInt(userId as string);
     if (foodId) where.foodId = parseInt(foodId as string);
+    const keyword = String(search || '').trim();
+    if (keyword) {
+      const numericId = Number(keyword);
+      where.OR = [
+        { comment: { contains: keyword, mode: 'insensitive' } },
+        { user: { name: { contains: keyword, mode: 'insensitive' } } },
+        { user: { email: { contains: keyword, mode: 'insensitive' } } },
+        { food: { name: { contains: keyword, mode: 'insensitive' } } },
+        ...(Number.isInteger(numericId) ? [{ id: numericId }] : []),
+      ];
+    }
     const reviews = await prisma.review.findMany({
       where,
       skip: (Number(page) - 1) * Number(limit),

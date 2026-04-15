@@ -3,10 +3,12 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteWeeklyReport = exports.getLatestWeeklyReport = exports.getWeeklyReports = exports.generateWeeklyReport = void 0;
 const client_1 = require("@prisma/client");
 const timezone_util_1 = require("../utils/timezone.util");
+const health_engine_service_1 = require("../services/health-engine.service");
+const personalization_service_1 = require("../services/personalization.service");
 const prisma = new client_1.PrismaClient();
 const OFFSET_HOURS = (0, timezone_util_1.getAppUtcOffsetHours)();
 const resolveUserId = (req) => (req.user.role === 'ADMIN' && req.query.userId)
-    ? parseInt(req.query.userId)
+    ? parseInt(req.query.userId, 10)
     : req.user.id;
 const getWeekRange = (anchor) => {
     const base = (0, timezone_util_1.toAppDayStart)(anchor || new Date());
@@ -24,6 +26,7 @@ const computeWeeklySnapshot = async (userId, weekStart, weekEndExclusive) => {
             eatenAt: { gte: weekStart, lt: weekEndExclusive },
         },
         select: {
+            id: true,
             eatenAt: true,
             calories: true,
             protein: true,
@@ -31,6 +34,14 @@ const computeWeeklySnapshot = async (userId, weekStart, weekEndExclusive) => {
             carbs: true,
             mealType: true,
             foodId: true,
+            notes: true,
+            food: {
+                select: {
+                    name: true,
+                    category: true,
+                    description: true,
+                },
+            },
         },
     });
     const dayLabels = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
@@ -75,6 +86,20 @@ const computeWeeklySnapshot = async (userId, weekStart, weekEndExclusive) => {
     };
     const bestDay = daily.reduce((best, current) => (current.calories > best.calories ? current : best), daily[0]);
     const worstDay = daily.reduce((worst, current) => (current.calories < worst.calories ? current : worst), daily[0]);
+    const dailyHealth = Array.from({ length: 7 }, (_, index) => {
+        const dayStart = (0, timezone_util_1.shiftAppDays)(weekStart, index);
+        const nextDay = (0, timezone_util_1.shiftAppDays)(dayStart, 1);
+        const dayMeals = meals.filter((meal) => meal.eatenAt >= dayStart && meal.eatenAt < nextDay);
+        return (0, health_engine_service_1.evaluateDailyHealth)(dayStart, dayMeals);
+    });
+    const [targets, hydrationSummary] = await Promise.all([
+        (0, personalization_service_1.resolvePersonalTargets)(userId),
+        (0, personalization_service_1.getHydrationSummaryForRange)(userId, weekStart, weekEndExclusive),
+    ]);
+    const weeklyHealth = (0, health_engine_service_1.buildWeeklyRecommendations)(dailyHealth, targets.targetCalories, {
+        avgMl: hydrationSummary.avgMl,
+        goalMl: targets.routine.waterGoalMl,
+    });
     return {
         avgCalories: average.calories,
         avgProtein: average.protein,
@@ -86,6 +111,20 @@ const computeWeeklySnapshot = async (userId, weekStart, weekEndExclusive) => {
             daily,
             bestDay,
             worstDay,
+            dailyHealth,
+            healthScore: weeklyHealth.avgScore,
+            alerts: weeklyHealth.alerts,
+            recommendations: weeklyHealth.recommendations,
+            hydration: {
+                ...hydrationSummary,
+                goalMl: targets.routine.waterGoalMl,
+            },
+            target: {
+                calories: targets.targetCalories,
+                protein: targets.targetProtein,
+                fat: targets.targetFat,
+                carbs: targets.targetCarbs,
+            },
             generatedAt: new Date().toISOString(),
         },
     };
@@ -153,7 +192,7 @@ exports.getLatestWeeklyReport = getLatestWeeklyReport;
 const deleteWeeklyReport = async (req, res) => {
     try {
         const userId = resolveUserId(req);
-        const reportId = parseInt(req.params.id);
+        const reportId = parseInt(req.params.id, 10);
         if (!Number.isFinite(reportId))
             return res.status(400).json({ error: 'Invalid report id' });
         const report = await prisma.weeklyReport.findFirst({

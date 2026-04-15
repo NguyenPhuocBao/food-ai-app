@@ -1,11 +1,14 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider } from './contexts/AuthContext';
+import RouteTitle from './components/common/RouteTitle';
 import ProtectedRoute from './components/common/ProtectedRoute';
 import AdminRoute from './components/common/AdminRoute';
 import AdminLayout from './components/admin/AdminLayout';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 import HomePage from './pages/HomePage';
 import ScanPage from './pages/ScanRealPageV2';
 import DiaryPage from './pages/DiaryPage';
@@ -36,15 +39,19 @@ import AdminRecipeDetail from './pages/admin/AdminRecipeDetail';
 import AdminRecipeEdit from './pages/admin/AdminRecipeEdit';
 import AdminMealPlans from './pages/admin/AdminMealPlans';
 import AdminMealDetail from './pages/admin/AdminMealDetail';
+import AdminChatbotOps from './pages/admin/AdminChatbotOps';
 
 function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <RouteTitle />
         <Toaster position="top-right" />
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route element={<ProtectedRoute />}>
             <Route element={<UserLayout />}>
               <Route path="/" element={<HomePage />} />
@@ -70,6 +77,7 @@ function App() {
               <Route path="recipes" element={<AdminRecipes />} />
               <Route path="reviews" element={<AdminReviews />} />
               <Route path="chat-ai" element={<AdminChatHistory />} />
+              <Route path="chatbot-ops" element={<AdminChatbotOps />} />
               <Route path="configs" element={<AdminConfigs />} />
               <Route path="logs" element={<AdminAuditLogs />} />
               <Route path="notifications" element={<AdminNotifications />} />

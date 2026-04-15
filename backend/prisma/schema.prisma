@@ -54,6 +54,7 @@ model User {
   id            Int            @id @default(autoincrement())
   email         String         @unique
   password      String
+  passwordChangedAt DateTime?
   name          String
   role          Role           @default(USER)
   isActive      Boolean        @default(true)
@@ -73,7 +74,8 @@ model User {
   mealPlans     MealPlan[]          // 🔥 Thêm
   weeklyReports WeeklyReport[]      // 🔥 Thêm
   recommendations Recommendation[] // 🔥 Thêm
-  auditLogs     AuditLog[]          // 🔥 Thêm
+  auditLogs     AuditLog[]          // admin audit logs
+  passwordResetTokens PasswordResetToken[]
   
   @@map("users")
 }
@@ -128,10 +130,30 @@ model UserGoal {
   startDate   DateTime @default(now())
   endDate     DateTime?
   isActive    Boolean  @default(true)
-  
+
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
   @@map("user_goals")
+}
+
+
+model PasswordResetToken {
+  id                 Int      @id @default(autoincrement())
+  userId             Int
+  tokenHash          String   @unique
+  expiresAt          DateTime
+  usedAt             DateTime?
+  requestedIp        String?
+  requestedUserAgent String?
+  usedIp             String?
+  usedUserAgent      String?
+  createdAt          DateTime @default(now())
+
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([expiresAt])
+  @@map("password_reset_tokens")
 }
 
 // ==================== 2. FOOD & RECIPE ====================

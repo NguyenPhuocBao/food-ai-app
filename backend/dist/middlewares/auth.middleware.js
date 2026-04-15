@@ -18,10 +18,15 @@ const authMiddleware = async (req, res, next) => {
         const decoded = jsonwebtoken_1.default.verify(token, JWT_SECRET);
         const user = await prisma.user.findUnique({
             where: { id: decoded.id },
-            select: { id: true, email: true, role: true, isActive: true },
+            select: { id: true, email: true, role: true, isActive: true, passwordChangedAt: true },
         });
         if (!user || !user.isActive) {
             return res.status(403).json({ error: 'Forbidden: Account is inactive' });
+        }
+        if (user.passwordChangedAt &&
+            decoded.iat &&
+            decoded.iat * 1000 < user.passwordChangedAt.getTime()) {
+            return res.status(401).json({ error: 'Unauthorized: Token has expired' });
         }
         req.user = {
             id: user.id,

@@ -31,6 +31,9 @@ const suggestions = [
   'Lam sao nau uc ga khong bi kho?',
 ];
 
+const getRequestErrorMessage = (error: any, fallback: string) =>
+  error?.response?.data?.error || error?.message || fallback;
+
 const ChatPageV2 = () => {
   const { user } = useAuth();
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -146,8 +149,8 @@ const ChatPageV2 = () => {
       const syncedSession = await getSession(sessionId);
       setActiveSession(syncedSession);
       void loadSessions(false);
-    } catch {
-      toast.error('Gui tin nhan that bai, vui long thu lai');
+    } catch (error: any) {
+      toast.error(getRequestErrorMessage(error, 'Gui tin nhan that bai, vui long thu lai'));
       setActiveSession((prev) =>
         prev
           ? {

@@ -9,6 +9,9 @@ router.get('/', auth_middleware_1.authMiddleware, food_controller_1.getAllFoods)
 router.get('/search', auth_middleware_1.authMiddleware, food_controller_1.searchFoods);
 router.get('/categories', auth_middleware_1.authMiddleware, food_controller_1.getCategories);
 router.get('/popular', auth_middleware_1.authMiddleware, food_controller_1.getPopularFoods);
+router.get('/custom/mine', auth_middleware_1.authMiddleware, food_controller_1.getMyCustomFoods);
+router.post('/custom', auth_middleware_1.authMiddleware, food_controller_1.createCustomFood);
+router.post('/bootstrap-popular', auth_middleware_1.authMiddleware, auth_middleware_1.adminMiddleware, food_controller_1.bootstrapPopularFoods);
 router.post('/:id/upload-image', auth_middleware_1.authMiddleware, upload_middleware_1.uploadMiddleware.single('image'), food_controller_1.uploadFoodImage);
 router.get('/:id', auth_middleware_1.authMiddleware, food_controller_1.getFoodById);
 exports.default = router;

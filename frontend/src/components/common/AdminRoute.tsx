@@ -3,10 +3,11 @@ import { useAuth } from '../../contexts/AuthContext';
 import LoadingSpinner from './LoadingSpinner';
 
 const AdminRoute = () => {
-  const { admin, loading } = useAuth();
+  const { admin, user, loading } = useAuth();
 
   if (loading) return <LoadingSpinner />;
-  if (!admin) return <Navigate to="/" replace />;
+  if (!admin && user) return <Navigate to="/" replace />;
+  if (!admin) return <Navigate to="/login" replace />;
   return <Outlet />;
 };
 

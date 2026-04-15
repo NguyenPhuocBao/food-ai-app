@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Link } from 'react-router-dom';
-import { Flame, Droplets, Target, ChevronRight, MessageSquare, Send, Sparkles, Loader2, Calendar, UtensilsCrossed, BookOpen, CalendarDays } from 'lucide-react';
+import { Flame, Droplets, Target, ChevronRight, MessageSquare, Send, Sparkles, Loader2, Calendar, UtensilsCrossed, BookOpen, CalendarDays, ShieldCheck, GlassWater } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { getDailyStats } from '../services/statistics.service';
 import { getActiveMealPlan, type MealPlan } from '../services/mealplan.service';
 import { getMealHistory } from '../services/meal.service';
+import { getHydrationToday, getPersonalization, getWeeklyActions, logHydration } from '../services/health.service';
 
 interface DailyStatsData {
   nutrition: {
@@ -36,6 +37,10 @@ const HomePage = () => {
   const [activePlan, setActivePlan] = useState<MealPlan | null>(null);
   const [recentMeals, setRecentMeals] = useState<any[]>([]);
   const [loadingPlan, setLoadingPlan] = useState(true);
+  const [weeklyActions, setWeeklyActions] = useState<any>({ recommendations: [], alerts: [], healthScore: 0 });
+  const [personalization, setPersonalization] = useState<any>(null);
+  const [hydration, setHydration] = useState<any>({ totalMl: 0, goalMl: 2200, percent: 0 });
+  const [loggingWater, setLoggingWater] = useState(false);
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -58,7 +63,27 @@ const HomePage = () => {
       setActivePlan(plan);
       setRecentMeals(meals);
     }).finally(() => setLoadingPlan(false));
+
+    Promise.all([
+      getWeeklyActions().catch(() => ({ recommendations: [], alerts: [], healthScore: 0 })),
+      getPersonalization().catch(() => null),
+      getHydrationToday().catch(() => ({ totalMl: 0, goalMl: 2200, percent: 0 })),
+    ]).then(([actions, personal, hydrationData]) => {
+      setWeeklyActions(actions || { recommendations: [], alerts: [], healthScore: 0 });
+      setPersonalization(personal);
+      setHydration(hydrationData || { totalMl: 0, goalMl: 2200, percent: 0 });
+    });
   }, []);
+
+  const handleLogWater = async (amountMl: number) => {
+    setLoggingWater(true);
+    try {
+      const updated = await logHydration(amountMl);
+      setHydration(updated);
+    } finally {
+      setLoggingWater(false);
+    }
+  };
 
   const nutrition = dailyStats?.nutrition;
   const goal = dailyStats?.goal;
@@ -177,6 +202,64 @@ const HomePage = () => {
                   )}
                 </div>
               </div>
+           </div>
+
+           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+             <div className="bg-white rounded-[24px] border border-gray-100 shadow-sm p-5 space-y-3">
+               <div className="flex items-center justify-between">
+                 <h3 className="font-black text-gray-900 flex items-center gap-2">
+                   <ShieldCheck size={18} className="text-emerald-600" />
+                   Health Engine
+                 </h3>
+                 <span className="text-sm font-black text-emerald-600">
+                   {weeklyActions?.healthScore || 0}/100
+                 </span>
+               </div>
+               {(weeklyActions?.alerts || []).slice(0, 2).map((alert: string, index: number) => (
+                 <div key={index} className="rounded-xl bg-amber-50 text-amber-700 px-3 py-2 text-xs font-semibold">
+                   {alert}
+                 </div>
+               ))}
+               {(weeklyActions?.recommendations || []).slice(0, 2).map((tip: string, index: number) => (
+                 <div key={`tip-${index}`} className="rounded-xl bg-emerald-50 text-emerald-700 px-3 py-2 text-xs font-semibold">
+                   {tip}
+                 </div>
+               ))}
+             </div>
+
+             <div className="bg-white rounded-[24px] border border-gray-100 shadow-sm p-5">
+               <div className="flex items-center justify-between mb-3">
+                 <h3 className="font-black text-gray-900 flex items-center gap-2">
+                   <GlassWater size={18} className="text-blue-600" />
+                   Uong nuoc
+                 </h3>
+                 <span className="text-xs text-gray-500 font-semibold">
+                   Muc tieu {personalization?.routine?.waterGoalMl || hydration.goalMl || 2200} ml
+                 </span>
+               </div>
+               <div className="text-2xl font-black text-gray-900">
+                 {hydration.totalMl || 0}
+                 <span className="text-sm text-gray-400 font-semibold"> ml</span>
+               </div>
+               <div className="h-2 rounded-full bg-blue-100 overflow-hidden mt-3 mb-3">
+                 <div
+                   className="h-full bg-blue-500 rounded-full transition-all"
+                   style={{ width: `${Math.min(100, hydration.percent || 0)}%` }}
+                 />
+               </div>
+               <div className="grid grid-cols-2 gap-2">
+                 {[250, 500].map((amount) => (
+                   <button
+                     key={amount}
+                     onClick={() => handleLogWater(amount)}
+                     disabled={loggingWater}
+                     className="rounded-lg border border-blue-100 bg-blue-50 text-blue-700 text-xs font-bold py-2 hover:bg-blue-100 disabled:opacity-60"
+                   >
+                     +{amount}ml
+                   </button>
+                 ))}
+               </div>
+             </div>
            </div>
 
            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

@@ -1,3 +1,4 @@
+import './load-env';
 import app from './app';
 import { startMealReminderScheduler, stopMealReminderScheduler } from './services/meal-reminder.service';
 

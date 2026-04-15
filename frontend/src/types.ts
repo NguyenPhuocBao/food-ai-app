@@ -63,6 +63,7 @@ export interface FoodItem {
   isVegan: boolean;
   isGlutenFree?: boolean;
   popularity: number;
+  isCustom?: boolean;
   recipe?: Recipe;
   savedAt?: string;
 }
@@ -235,6 +236,34 @@ export interface WeeklyReport {
       meals: number;
     };
     generatedAt: string;
+    healthScore?: number;
+    alerts?: string[];
+    recommendations?: string[];
+    hydration?: {
+      totalMl: number;
+      days: number;
+      avgMl: number;
+      goalMl: number;
+    };
+    target?: {
+      calories: number;
+      protein: number;
+      fat: number;
+      carbs: number;
+    };
+    dailyHealth?: Array<{
+      date: string;
+      score: number;
+      grade: 'A' | 'B' | 'C' | 'D';
+      alerts: string[];
+      recommendations: string[];
+      stats: {
+        meals: number;
+        veggieMeals: number;
+        saltyMeals: number;
+        lateMeals: number;
+      };
+    }>;
   };
   createdAt: string;
 }

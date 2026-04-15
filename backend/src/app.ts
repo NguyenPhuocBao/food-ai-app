@@ -17,6 +17,7 @@ import recommendationRoutes from './routes/recommendation.routes';
 import weeklyReportRoutes from './routes/weekly-report.routes';
 import { errorHandler } from './middlewares/error.middleware';
 import settingsRoutes from './routes/settings.routes';
+import healthRoutes from './routes/health.routes';
 import path from 'path';
 
 const app = express();
@@ -50,6 +51,7 @@ app.use('/api/meal-plans', mealPlanRoutes);
 app.use('/api/recommendations', recommendationRoutes);
 app.use('/api/weekly-reports', weeklyReportRoutes);
 app.use('/api/admin/settings', settingsRoutes);
+app.use('/api/health', healthRoutes);
 
 app.use(errorHandler);
 
@@ -74,6 +76,7 @@ app.get('/', (req, res) => {
       recipes: '/api/recipes',
       chat: '/api/chat',
       analyze: '/api/analyze',
+      health: '/api/health',
       recommendations: '/api/recommendations',
       weeklyReports: '/api/weekly-reports',
       admin: '/api/admin'

@@ -221,6 +221,58 @@ const WeeklyReportsPage = () => {
                 </div>
               </div>
 
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="rounded-3xl border border-gray-100 p-4 dark:border-slate-700">
+                  <h3 className="text-sm font-black uppercase tracking-wide text-gray-700 dark:text-slate-200">
+                    Health Score
+                  </h3>
+                  <p className="mt-2 text-3xl font-black text-emerald-600">
+                    {activeReport.reportData?.healthScore || 0}/100
+                  </p>
+                  <div className="mt-3 space-y-2">
+                    {(activeReport.reportData?.alerts || []).slice(0, 3).map((item, index) => (
+                      <p
+                        key={`alert-${index}`}
+                        className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
+                      >
+                        {item}
+                      </p>
+                    ))}
+                    {!activeReport.reportData?.alerts?.length && (
+                      <p className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300">
+                        Khong co canh bao lon trong tuan.
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-3xl border border-gray-100 p-4 dark:border-slate-700">
+                  <h3 className="text-sm font-black uppercase tracking-wide text-gray-700 dark:text-slate-200">
+                    Khuyen nghi tuan toi
+                  </h3>
+                  <div className="mt-3 space-y-2">
+                    {(activeReport.reportData?.recommendations || []).slice(0, 4).map((item, index) => (
+                      <p
+                        key={`recommend-${index}`}
+                        className="rounded-xl bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-300"
+                      >
+                        {item}
+                      </p>
+                    ))}
+                    {!activeReport.reportData?.recommendations?.length && (
+                      <p className="rounded-xl bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-600 dark:bg-slate-800 dark:text-slate-300">
+                        Chua co khuyen nghi.
+                      </p>
+                    )}
+                  </div>
+                  {activeReport.reportData?.hydration && (
+                    <p className="mt-4 text-xs text-gray-500 dark:text-slate-400">
+                      Nuoc uong trung binh: {activeReport.reportData.hydration.avgMl}ml/ngay (muc tieu {activeReport.reportData.hydration.goalMl}ml)
+                    </p>
+                  )}
+                </div>
+              </div>
+
               <div className="overflow-x-auto rounded-2xl border border-gray-100 dark:border-slate-700">
                 <table className="min-w-full text-sm">
                   <thead className="bg-gray-50 dark:bg-slate-800/80">
@@ -256,4 +308,3 @@ const WeeklyReportsPage = () => {
 };
 
 export default WeeklyReportsPage;
-
