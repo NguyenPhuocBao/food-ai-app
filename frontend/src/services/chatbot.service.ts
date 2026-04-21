@@ -19,6 +19,16 @@ export interface ChatMessage {
   sessionId: number;
   role: 'USER' | 'ASSISTANT' | 'SYSTEM';
   content: string;
+  entities?: {
+    attachments?: Array<{
+      fileName: string;
+      originalName: string;
+      mimeType: string;
+      size: number;
+      url: string;
+      kind: 'image' | 'file';
+    }>;
+  } | null;
   createdAt: string;
 }
 
@@ -37,7 +47,21 @@ export const getSession = async (id: number): Promise<ChatSession & { messages: 
   return response.data.data;
 };
 
-export const sendMessage = async (sessionId: number, content: string): Promise<ChatMessage> => {
+export const sendMessage = async (
+  sessionId: number,
+  content: string,
+  files: File[] = [],
+): Promise<ChatMessage> => {
+  if (files.length > 0) {
+    const formData = new FormData();
+    formData.append('content', content);
+    files.forEach((file) => formData.append('files', file));
+    const response = await api.post(`/chat/sessions/${sessionId}/messages`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data.data;
+  }
+
   const response = await api.post(`/chat/sessions/${sessionId}/messages`, { content });
   return response.data.data;
 };

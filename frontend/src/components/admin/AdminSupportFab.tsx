@@ -3,9 +3,12 @@ import { Link, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { MessageSquareMore } from 'lucide-react';
 import { getSupportSessions } from '../../services/support.service';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 const AdminSupportFab = () => {
   const location = useLocation();
+  const { language } = useLanguage();
+  const isEn = language === 'en';
   const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
@@ -44,7 +47,7 @@ const AdminSupportFab = () => {
         <Link
           to="/admin/chat-ai"
           className="w-14 h-14 rounded-full bg-gradient-to-r from-emerald-500 to-cyan-500 text-white shadow-2xl border-2 border-white dark:border-slate-900 inline-flex items-center justify-center"
-          title="Mo CSKH Inbox"
+          title={isEn ? 'Open support inbox' : 'Mở CSKH Inbox'}
         >
           <MessageSquareMore size={24} />
         </Link>

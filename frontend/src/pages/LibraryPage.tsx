@@ -9,7 +9,7 @@ import type { FoodItem } from '../types';
 type LibraryTab = 'favorites' | 'recipes';
 
 const formatSavedDate = (value?: string) => {
-  if (!value) return 'Moi luu gan day';
+  if (!value) return 'Mới lưu gần đây';
 
   return new Intl.DateTimeFormat('vi-VN', {
     day: '2-digit',
@@ -51,23 +51,23 @@ const LibraryPage = () => {
       <section className="rounded-[32px] overflow-hidden border border-rose-100 bg-[radial-gradient(circle_at_top_right,_rgba(251,113,133,0.24),_transparent_32%),linear-gradient(135deg,_#fff7ed,_#ffffff_40%,_#fdf2f8)] shadow-sm">
         <div className="px-8 py-10 md:px-10 md:py-12 flex flex-col lg:flex-row gap-8 justify-between">
           <div className="max-w-2xl">
-            <p className="text-rose-500 font-bold text-sm tracking-[0.2em] uppercase mb-4">Thu vien ca nhan</p>
+            <p className="text-rose-500 font-bold text-sm tracking-[0.2em] uppercase mb-4">Thư viện cá nhân</p>
             <h1 className="text-3xl md:text-5xl font-black text-gray-900 leading-tight">
-              Mon an yeu thich va cong thuc ?? luu cua ban
+              Món ăn yêu thích và công thức đã lưu của bạn
             </h1>
             <p className="text-gray-600 mt-4 max-w-xl leading-relaxed">
-              Tap hop nhung mon an ban danh dau de quay lai nhanh, theo doi cong thuc ?? luu va tiep tuc len ke
-              hoach bua an tu thu vien rieng.
+              Tập hợp những món ăn bạn đánh dấu để quay lại nhanh, theo dõi công thức đã lưu và tiếp tục lên kế
+              hoạch bữa ăn từ thư viện riêng.
             </p>
           </div>
 
           <div className="grid grid-cols-2 gap-4 min-w-[280px]">
             <div className="rounded-[24px] bg-white/80 border border-white p-5 shadow-sm">
-              <p className="text-sm text-gray-500">Mon yeu thich</p>
+              <p className="text-sm text-gray-500">Món yêu thích</p>
               <p className="text-3xl font-black text-gray-900 mt-2">{favoriteFoods.length}</p>
             </div>
             <div className="rounded-[24px] bg-white/80 border border-white p-5 shadow-sm">
-              <p className="text-sm text-gray-500">Cong thuc ?? luu</p>
+              <p className="text-sm text-gray-500">Công thức đã lưu</p>
               <p className="text-3xl font-black text-gray-900 mt-2">{savedRecipes.length}</p>
             </div>
           </div>
@@ -84,7 +84,7 @@ const LibraryPage = () => {
           >
             <span className="inline-flex items-center gap-2">
               <Heart size={16} />
-              Mon yeu thich
+              Món yêu thích
             </span>
           </button>
           <button
@@ -95,7 +95,7 @@ const LibraryPage = () => {
           >
             <span className="inline-flex items-center gap-2">
               <Bookmark size={16} />
-              Cong thuc ?? luu
+              Công thức đã lưu
             </span>
           </button>
         </div>
@@ -105,13 +105,13 @@ const LibraryPage = () => {
             to="/foods"
             className="inline-flex items-center gap-2 rounded-2xl bg-white border border-gray-100 px-4 py-3 text-sm font-bold text-gray-700 shadow-sm"
           >
-            Kham pha mon an <ArrowRight size={16} />
+            Khám phá món ăn <ArrowRight size={16} />
           </Link>
           <Link
             to="/recipes"
             className="inline-flex items-center gap-2 rounded-2xl bg-amber-50 border border-amber-100 px-4 py-3 text-sm font-bold text-amber-700 shadow-sm"
           >
-            Xem thu vien cong thuc <ArrowRight size={16} />
+            Xem thư viện công thức <ArrowRight size={16} />
           </Link>
         </div>
       </section>
@@ -126,18 +126,18 @@ const LibraryPage = () => {
             <Sparkles size={28} />
           </div>
           <h2 className="text-2xl font-black text-gray-900 mt-5">
-            {activeTab === 'favorites' ? 'Ban chua luu mon an nao' : 'Ban chua luu cong thuc nao'}
+            {activeTab === 'favorites' ? 'Bạn chưa lưu món ăn nào' : 'Bạn chưa lưu công thức nào'}
           </h2>
           <p className="text-gray-500 mt-3 max-w-xl mx-auto leading-relaxed">
             {activeTab === 'favorites'
-              ? 'Bat dau danh dau cac mon an ban muon quay lai sau. Thu vien nay se giup ban chon mon nhanh hon cho nhat ky va meal plan.'
-              : 'Luu cac cong thuc ban muon nau de quay lai nhanh khi can len bua an hoac them vao lich trinh trong tuan.'}
+              ? 'Bắt đầu đánh dấu các món ăn bạn muốn quay lại sau. Thư viện này sẽ giúp bạn chọn món nhanh hơn cho nhật ký và meal plan.'
+              : 'Lưu các công thức bạn muốn nấu để quay lại nhanh khi cần lên bữa ăn hoặc thêm vào lịch trình trong tuần.'}
           </p>
           <Link
             to={activeTab === 'favorites' ? '/foods' : '/recipes'}
             className="inline-flex items-center gap-2 rounded-2xl bg-gray-900 text-white px-5 py-3 mt-6 text-sm font-bold"
           >
-            {activeTab === 'favorites' ? 'Mo thu vien mon an' : 'Mo trang cong thuc'}
+            {activeTab === 'favorites' ? 'Mở thư viện món ăn' : 'Mở trang công thức'}
             <ArrowRight size={16} />
           </Link>
         </div>
@@ -169,7 +169,7 @@ const LibraryPage = () => {
                   </div>
                   {food.recipe && (
                     <span className="shrink-0 rounded-full bg-amber-50 text-amber-700 px-3 py-1 text-xs font-bold">
-                      Co cong thuc
+                      Có công thức
                     </span>
                   )}
                 </div>
@@ -194,9 +194,9 @@ const LibraryPage = () => {
                 </div>
 
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-400 font-medium">Da luu {formatSavedDate(food.savedAt)}</span>
+                  <span className="text-gray-400 font-medium">Đã lưu {formatSavedDate(food.savedAt)}</span>
                   <span className="inline-flex items-center gap-1 font-bold text-rose-600">
-                    Xem chi tiet <ArrowRight size={16} />
+                    Xem chi tiết <ArrowRight size={16} />
                   </span>
                 </div>
               </div>
@@ -230,25 +230,25 @@ const LibraryPage = () => {
                       <span className="rounded-full bg-amber-50 text-amber-700 px-3 py-1 text-xs font-bold">
                         {food.recipe?.difficulty || 'RECIPE'}
                       </span>
-                      <span className="text-xs text-gray-400 font-bold">Luu ngay {formatSavedDate(food.savedAt)}</span>
+                      <span className="text-xs text-gray-400 font-bold">Lưu ngày {formatSavedDate(food.savedAt)}</span>
                     </div>
 
                     <h2 className="text-2xl font-black text-gray-900 mt-4">
                       {food.recipe?.title || food.name}
                     </h2>
                     <p className="text-sm text-gray-500 mt-3 leading-relaxed line-clamp-3">
-                      {food.recipe?.summary || food.description || 'Mo chi tiet de xem nguyen lieu, cac buoc nau va dinh duong cua mon an nay.'}
+                      {food.recipe?.summary || food.description || 'Mở chi tiết để xem nguyên liệu, các bước nấu và dinh dưỡng của món ăn này.'}
                     </p>
 
                     <div className="grid grid-cols-3 gap-3 mt-5 text-sm">
                       <div className="rounded-2xl bg-gray-50 p-3">
-                        <p className="text-[11px] text-gray-400 font-bold uppercase">Thoi gian</p>
+                        <p className="text-[11px] text-gray-400 font-bold uppercase">Thời gian</p>
                         <p className="font-black text-gray-900 mt-1 inline-flex items-center gap-1">
                           <Clock3 size={14} /> {food.recipe?.totalTime || 0}p
                         </p>
                       </div>
                       <div className="rounded-2xl bg-emerald-50 p-3">
-                        <p className="text-[11px] text-emerald-600 font-bold uppercase">Khau phan</p>
+                        <p className="text-[11px] text-emerald-600 font-bold uppercase">Khẩu phần</p>
                         <p className="font-black text-emerald-700 mt-1">{food.recipe?.servings || 1}</p>
                       </div>
                       <div className="rounded-2xl bg-rose-50 p-3">
@@ -261,7 +261,7 @@ const LibraryPage = () => {
                   <div className="flex items-center justify-between mt-6 text-sm">
                     <span className="text-gray-400 font-medium">{food.name}</span>
                     <span className="inline-flex items-center gap-1 font-bold text-amber-600">
-                      Mo cong thuc <ArrowRight size={16} />
+                      Mở công thức <ArrowRight size={16} />
                     </span>
                   </div>
                 </div>

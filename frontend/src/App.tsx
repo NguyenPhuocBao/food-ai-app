@@ -23,6 +23,7 @@ import MealPlansPage from './pages/MealPlansPage';
 import LibraryPage from './pages/LibraryPage';
 import RecommendationsPage from './pages/RecommendationsPage';
 import WeeklyReportsPage from './pages/WeeklyReportsPage';
+import NotFoundPage from './pages/NotFoundPage';
 import UserLayout from './components/user/UserShell';
 import AdminDashboard from './pages/admin/AdminDashboardV2';
 import AdminUsers from './pages/admin/AdminUsers';
@@ -42,6 +43,7 @@ import AdminMealPlans from './pages/admin/AdminMealPlans';
 import AdminMealDetail from './pages/admin/AdminMealDetail';
 import AdminChatbotOps from './pages/admin/AdminChatbotOps';
 import SupportChatWidget from './components/common/SupportChatWidget';
+import GlobalLanguageSwitch from './components/common/GlobalLanguageSwitch';
 
 function App() {
   return (
@@ -93,7 +95,9 @@ function App() {
               <Route path="meals/:id" element={<AdminMealDetail />} />
             </Route>
           </Route>
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
+        <GlobalLanguageSwitch />
         <SupportChatWidget />
       </BrowserRouter>
     </AuthProvider>

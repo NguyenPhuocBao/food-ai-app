@@ -243,9 +243,9 @@ const DiaryPage = () => {
           percent: updated.percent,
         },
       }));
-      toast.success(`Da ghi nhan ${amountMl}ml nuoc`);
+      toast.success(`Đã ghi nhận ${amountMl}ml nước`);
     } catch {
-      toast.error('Khong th? ghi nhan nuoc uong luc nay');
+      toast.error('Không thể ghi nhận nước uống lúc này');
     } finally {
       setIsLoggingWater(false);
     }
@@ -408,7 +408,7 @@ const DiaryPage = () => {
               </div>
 
               <div className="text-xs text-gray-500">
-                Xep hang: <span className="font-bold text-gray-800">{healthSummary.grade}</span>
+                Xếp hạng: <span className="font-bold text-gray-800">{healthSummary.grade}</span>
               </div>
 
               <div className="space-y-2">
@@ -419,7 +419,7 @@ const DiaryPage = () => {
                 ))}
                 {!healthSummary.alerts?.length && (
                   <div className="rounded-xl bg-emerald-50 text-emerald-700 px-3 py-2 text-xs font-semibold">
-                    Khong c? canh bao lon trong ngay.
+                    Không có cảnh báo lớn trong ngày.
                   </div>
                 )}
               </div>
@@ -428,7 +428,7 @@ const DiaryPage = () => {
                 <div className="flex items-center justify-between text-xs font-bold text-blue-700 mb-2">
                   <span className="flex items-center gap-1">
                     <GlassWater size={14} />
-                    Nuoc uong
+                    Nước uống
                   </span>
                   <span>{healthSummary.hydration?.totalMl || 0}/{healthSummary.hydration?.goalMl || 2200} ml</span>
                 </div>

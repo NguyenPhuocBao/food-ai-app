@@ -7,6 +7,7 @@ import {
 } from '../controllers/chatbot.controller.v2';
 import { authMiddleware, adminMiddleware } from '../middlewares/auth.middleware';
 import { createRateLimit } from '../middlewares/rate-limit.middleware';
+import { chatUploadMiddleware } from '../middlewares/chat-upload.middleware';
 
 const router = Router();
 const chatMessageLimit = createRateLimit({
@@ -31,7 +32,13 @@ router.post('/sessions', authMiddleware, createSession);
 router.get('/sessions', authMiddleware, getSessions);
 router.get('/sessions/:id', authMiddleware, getSession);
 router.delete('/sessions/:id', authMiddleware, deleteSession);
-router.post('/sessions/:id/messages', authMiddleware, chatMessageLimit, sendMessage);
-router.post('/quick', authMiddleware, quickChatLimit, quickChat);
+router.post(
+  '/sessions/:id/messages',
+  authMiddleware,
+  chatMessageLimit,
+  chatUploadMiddleware.array('files', 5),
+  sendMessage,
+);
+router.post('/quick', authMiddleware, quickChatLimit, chatUploadMiddleware.array('files', 5), quickChat);
 
 export default router;

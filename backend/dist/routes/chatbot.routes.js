@@ -4,6 +4,7 @@ const express_1 = require("express");
 const chatbot_controller_v2_1 = require("../controllers/chatbot.controller.v2");
 const auth_middleware_1 = require("../middlewares/auth.middleware");
 const rate_limit_middleware_1 = require("../middlewares/rate-limit.middleware");
+const chat_upload_middleware_1 = require("../middlewares/chat-upload.middleware");
 const router = (0, express_1.Router)();
 const chatMessageLimit = (0, rate_limit_middleware_1.createRateLimit)({
     keyPrefix: 'chat_message',
@@ -26,6 +27,6 @@ router.post('/sessions', auth_middleware_1.authMiddleware, chatbot_controller_v2
 router.get('/sessions', auth_middleware_1.authMiddleware, chatbot_controller_v2_1.getSessions);
 router.get('/sessions/:id', auth_middleware_1.authMiddleware, chatbot_controller_v2_1.getSession);
 router.delete('/sessions/:id', auth_middleware_1.authMiddleware, chatbot_controller_v2_1.deleteSession);
-router.post('/sessions/:id/messages', auth_middleware_1.authMiddleware, chatMessageLimit, chatbot_controller_v2_1.sendMessage);
-router.post('/quick', auth_middleware_1.authMiddleware, quickChatLimit, chatbot_controller_v2_1.quickChat);
+router.post('/sessions/:id/messages', auth_middleware_1.authMiddleware, chatMessageLimit, chat_upload_middleware_1.chatUploadMiddleware.array('files', 5), chatbot_controller_v2_1.sendMessage);
+router.post('/quick', auth_middleware_1.authMiddleware, quickChatLimit, chat_upload_middleware_1.chatUploadMiddleware.array('files', 5), chatbot_controller_v2_1.quickChat);
 exports.default = router;

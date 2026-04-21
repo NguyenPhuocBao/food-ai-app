@@ -55,6 +55,62 @@ const parsePositiveInt = (value: unknown): number | null => {
   return parsed;
 };
 
+type ChatAttachment = {
+  fileName: string;
+  originalName: string;
+  mimeType: string;
+  size: number;
+  url: string;
+  kind: 'image' | 'file';
+};
+
+const extractChatAttachments = (req: any): ChatAttachment[] => {
+  const files = Array.isArray(req.files) ? req.files : [];
+  return files
+    .map((file: any) => {
+      if (!file?.filename || !file?.originalname || !file?.mimetype) return null;
+      return {
+        fileName: String(file.filename),
+        originalName: String(file.originalname),
+        mimeType: String(file.mimetype),
+        size: Number(file.size || 0),
+        url: `/uploads/chat/${String(file.filename)}`,
+        kind: String(file.mimetype).toLowerCase().startsWith('image/') ? 'image' : 'file',
+      } as ChatAttachment;
+    })
+    .filter(Boolean) as ChatAttachment[];
+};
+
+const getMessageAttachments = (entities: any): ChatAttachment[] => {
+  if (!entities || typeof entities !== 'object') return [];
+  const attachments = Array.isArray((entities as any).attachments) ? (entities as any).attachments : [];
+  return attachments
+    .map((item: any) => {
+      if (!item || typeof item !== 'object') return null;
+      const originalName = String(item.originalName || '').trim();
+      const url = String(item.url || '').trim();
+      if (!originalName || !url) return null;
+      return {
+        fileName: String(item.fileName || ''),
+        originalName,
+        mimeType: String(item.mimeType || ''),
+        size: Number(item.size || 0),
+        url,
+        kind: item.kind === 'image' ? 'image' : 'file',
+      } as ChatAttachment;
+    })
+    .filter(Boolean) as ChatAttachment[];
+};
+
+const buildPromptContent = (content: string, attachments: ChatAttachment[]) => {
+  if (!attachments.length) return content;
+  const attachmentLines = attachments.map((attachment, index) => {
+    const sizeKb = attachment.size > 0 ? `${Math.max(1, Math.round(attachment.size / 1024))}KB` : 'unknown size';
+    return `- Attachment ${index + 1}: ${attachment.originalName} (${attachment.mimeType || attachment.kind}, ${sizeKb}) URL: ${attachment.url}`;
+  });
+  return `${content}\n\nTai lieu dinh kem:\n${attachmentLines.join('\n')}`;
+};
+
 const isQuotaOrRateLimitError = (error: any) => {
   const status = Number(error?.status);
   const message = String(error?.message || '');
@@ -1034,7 +1090,10 @@ export const sendMessage = async (req: any, res: Response) => {
     if (!sessionId) return res.status(400).json({ error: 'Invalid session id' });
 
     const userId = req.user.id;
-    const content = String(req.body?.content || '').trim();
+    const rawContent = String(req.body?.content || '').trim();
+    const attachments = extractChatAttachments(req);
+    const content = rawContent || (attachments.length > 0 ? 'Da gui tep dinh kem.' : '');
+    const promptContent = buildPromptContent(content, attachments);
 
     if (!content) return res.status(400).json({ error: 'Message content is required' });
     if (!hasAnyChatProvider()) {
@@ -1050,7 +1109,12 @@ export const sendMessage = async (req: any, res: Response) => {
     if (!session) return res.status(404).json({ error: 'Session not found' });
 
     const userMessage = await prisma.chatMessage.create({
-      data: { sessionId: session.id, role: 'USER', content },
+      data: {
+        sessionId: session.id,
+        role: 'USER',
+        content,
+        entities: attachments.length > 0 ? { attachments } : undefined,
+      },
     });
 
     const historyMessages = await prisma.chatMessage.findMany({
@@ -1060,10 +1124,10 @@ export const sendMessage = async (req: any, res: Response) => {
     });
     historyMessages.reverse();
 
-    const systemPrompt = isRetrievalOnlyMode ? '' : await getSystemPrompt(userId, content);
+    const systemPrompt = isRetrievalOnlyMode ? '' : await getSystemPrompt(userId, promptContent);
     const turns: ChatTurn[] = historyMessages.map((m) => ({
       role: m.role as ChatTurn['role'],
-      content: m.content,
+      content: buildPromptContent(m.content, getMessageAttachments((m as any).entities)),
     }));
 
     let responseContent = 'Xin loi, toi khong th? xu ly yeu cau nay.';
@@ -1072,7 +1136,7 @@ export const sendMessage = async (req: any, res: Response) => {
     let aiProviderUsed: ProviderName | 'fallback' = 'fallback';
 
     try {
-      const generated = await generateAssistantReply(systemPrompt, turns, userId, content);
+      const generated = await generateAssistantReply(systemPrompt, turns, userId, promptContent);
       responseContent = generated.text || responseContent;
       aiProviderUsed = generated.provider;
     } catch (error: any) {
@@ -1141,7 +1205,10 @@ export const sendMessage = async (req: any, res: Response) => {
 
 export const quickChat = async (req: any, res: Response) => {
   try {
-    const question = String(req.body?.question || '').trim();
+    const rawQuestion = String(req.body?.question || '').trim();
+    const attachments = extractChatAttachments(req);
+    const question = rawQuestion || (attachments.length > 0 ? 'Da gui tep dinh kem.' : '');
+    const promptQuestion = buildPromptContent(question, attachments);
     const userId = req.user.id;
 
     if (!question) return res.status(400).json({ error: 'Question required' });
@@ -1152,11 +1219,11 @@ export const quickChat = async (req: any, res: Response) => {
       });
     }
 
-    const systemPrompt = isRetrievalOnlyMode ? '' : await getSystemPrompt(userId, question);
-    const turns: ChatTurn[] = [{ role: 'USER', content: question }];
+    const systemPrompt = isRetrievalOnlyMode ? '' : await getSystemPrompt(userId, promptQuestion);
+    const turns: ChatTurn[] = [{ role: 'USER', content: promptQuestion }];
 
     try {
-      const generated = await generateAssistantReply(systemPrompt, turns, userId, question);
+      const generated = await generateAssistantReply(systemPrompt, turns, userId, promptQuestion);
       const answer = generated.text || 'Xin loi, toi khong th? tra loi cau hoi nay.';
       return res.json({ success: true, data: { answer, degraded: false, aiProvider: generated.provider } });
     } catch (error: any) {

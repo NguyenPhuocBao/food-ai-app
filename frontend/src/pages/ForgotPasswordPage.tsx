@@ -18,9 +18,9 @@ const ForgotPasswordPage = () => {
 
     try {
       await forgotPassword(email);
-      setSuccessMsg('Neu email ton tai, he thong da gui huong dan dat lai mat khau.');
+      setSuccessMsg('Nếu email đã tồn tại, Hệ thống đã gửi hướng dẫn đặt lại mật khẩu.');
     } catch (error: any) {
-      setErrorMsg(error.response?.data?.error || 'Khong th? gui yeu cau. Vui long thu lai.');
+      setErrorMsg(error.response?.data?.error || 'Không thể gửi yêu cầu vui lòng thử lại.');
     } finally {
       setIsLoading(false);
     }
@@ -42,12 +42,12 @@ const ForgotPasswordPage = () => {
             transition={{ delay: 0.2, duration: 0.8 }}
           >
             <h1 className="text-4xl md:text-5xl font-bold text-white mb-4 leading-tight">
-              Dat lai
+              Đặt lại
               <br />
-              mat khau
+              mật khẩu
             </h1>
             <p className="text-gray-300 text-lg max-w-md">
-              Nhap email ?? dang ky, he thong se gui link dat lai mat khau den ban.
+              Nhập email đã đăng kí, hệ thống sẽ gửi đường dẫn đặt lại mật khẩu cho bạn
             </p>
           </motion.div>
         </div>
@@ -64,8 +64,8 @@ const ForgotPasswordPage = () => {
             <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-blue-100/80 text-blue-600 mb-6 shadow-sm">
               <Bot size={24} strokeWidth={2.5} />
             </div>
-            <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">Quen mat khau</h2>
-            <p className="mt-2 text-sm text-gray-500">Nhap email de nhan link dat lai mat khau.</p>
+            <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">Quên mật khẩu</h2>
+            <p className="mt-2 text-sm text-gray-500">Nhập email để nhận link đặt lại mật khẩu.</p>
           </div>
 
           <form onSubmit={handleSubmit} className="mt-8 space-y-6">
@@ -90,7 +90,7 @@ const ForgotPasswordPage = () => {
             )}
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Dia chi email</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Địa chỉ email</label>
               <div className="relative group">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400 group-focus-within:text-green-500 transition-colors">
                   <Mail size={18} />
@@ -115,9 +115,9 @@ const ForgotPasswordPage = () => {
                 isLoading ? 'opacity-80 cursor-not-allowed' : ''
               }`}
             >
-              {isLoading ? '?ang gui...' : (
+              {isLoading ? 'Đang gửi...' : (
                 <>
-                  Gui link dat lai
+                  Gửi link đặt lại
                   <ArrowRight size={18} className="ml-2" />
                 </>
               )}
@@ -126,9 +126,9 @@ const ForgotPasswordPage = () => {
 
           <div className="mt-8 text-center sm:text-left">
             <p className="text-sm text-gray-600">
-              Nho mat khau roi?{' '}
+              Nhớ mật khẩu rồi?{' '}
               <Link to="/login" className="font-semibold text-green-600 hover:text-green-500 transition-colors">
-                Quay lai Dang nhap
+                Quay lại đăng nhập
               </Link>
             </p>
           </div>

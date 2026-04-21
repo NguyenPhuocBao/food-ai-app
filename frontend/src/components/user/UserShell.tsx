@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLanguage } from '../../contexts/LanguageContext';
 import {
   deleteNotification,
   getNotifications,
@@ -53,72 +54,79 @@ const TYPE_CONFIG = {
   ERROR: { dot: 'bg-red-500' },
 };
 
-const DIRECT_LINKS: NavItem[] = [
-  { label: 'Trang chu', path: '/', icon: Home, description: 'Tong quan trong ngay va cac quick action.' },
-  { label: 'AI Coach', path: '/chat-ai', icon: MessageSquare, description: 'Tro chuyen voi AI de xin gui ? bua an.' },
-];
+const buildNavData = (isEn: boolean) => {
+  const directLinks: NavItem[] = [
+    { label: isEn ? 'Home' : 'Trang chủ', path: '/', icon: Home, description: isEn ? 'Daily overview and quick actions.' : 'Tổng quan trong ngày và thao tác nhanh.' },
+    { label: 'AI Coach', path: '/chat-ai', icon: MessageSquare, description: isEn ? 'Chat with AI for meal suggestions.' : 'Trò chuyện với AI để xin gợi ý bữa ăn.' },
+  ];
 
-const NAV_GROUPS: NavGroup[] = [
-  {
-    id: 'discover',
-    label: 'Kham pha',
-    icon: UtensilsCrossed,
-    items: [
-      { label: 'Mon an', path: '/foods', icon: UtensilsCrossed, description: 'Thu vien mon an va thong tin dinh duong.' },
-      { label: 'Cong thuc', path: '/recipes', icon: BookOpen, description: 'Cong thuc, cach nau va chi tiet mon.' },
-      { label: 'Gui ? AI', path: '/recommendations', icon: Sparkles, description: 'Gui ? mon an dua tren lich su va muc tieu cua ban.' },
-      { label: 'Thu vien', path: '/library', icon: Heart, description: 'Mon yeu thich va cong thuc da luu.' },
-    ],
-  },
-  {
-    id: 'tracking',
-    label: 'Theo doi',
-    icon: BarChart2,
-    items: [
-      { label: 'Quet mon an', path: '/scan', icon: Scan, description: 'Tai anh va nhan dien mon bang AI.' },
-      { label: 'Nhat ky', path: '/diary', icon: BookText, description: 'Theo doi cac bua an da an.' },
-      { label: 'Thong ke', path: '/statistics', icon: BarChart2, description: 'Tien do calo, protein, carbs, fat.' },
-      { label: 'Bao cao tuan', path: '/weekly-reports', icon: CalendarDays, description: 'Tong hop du lieu theo tuan va luu bao cao.' },
-    ],
-  },
-  {
-    id: 'planning',
-    label: 'Ke hoach',
-    icon: CalendarDays,
-    items: [
-      { label: 'Meal plan', path: '/meal-plans', icon: CalendarDays, description: 'Lap ke hoach An uong theo ngay va bua.' },
-    ],
-  },
-];
+  const navGroups: NavGroup[] = [
+    {
+      id: 'discover',
+      label: isEn ? 'Discover' : 'Khám phá',
+      icon: UtensilsCrossed,
+      items: [
+        { label: isEn ? 'Foods' : 'Món ăn', path: '/foods', icon: UtensilsCrossed, description: isEn ? 'Food library and nutrition details.' : 'Thư viện món ăn và thông tin dinh dưỡng.' },
+        { label: isEn ? 'Recipes' : 'Công thức', path: '/recipes', icon: BookOpen, description: isEn ? 'Recipes and cooking instructions.' : 'Công thức, cách nấu và chi tiết món.' },
+        { label: isEn ? 'AI Suggestions' : 'Gợi ý AI', path: '/recommendations', icon: Sparkles, description: isEn ? 'Recommendations based on your goal.' : 'Gợi ý món ăn dựa trên lịch sử và mục tiêu của bạn.' },
+        { label: isEn ? 'Library' : 'Thư viện', path: '/library', icon: Heart, description: isEn ? 'Saved favorites and recipes.' : 'Món yêu thích và công thức đã lưu.' },
+      ],
+    },
+    {
+      id: 'tracking',
+      label: isEn ? 'Tracking' : 'Theo dõi',
+      icon: BarChart2,
+      items: [
+        { label: isEn ? 'Scan Food' : 'Quét món ăn', path: '/scan', icon: Scan, description: isEn ? 'Upload image and scan by AI.' : 'Tải ảnh và nhận diện món bằng AI.' },
+        { label: isEn ? 'Diary' : 'Nhật ký', path: '/diary', icon: BookText, description: isEn ? 'Track your meals.' : 'Theo dõi các bữa ăn đã ăn.' },
+        { label: isEn ? 'Statistics' : 'Thống kê', path: '/statistics', icon: BarChart2, description: isEn ? 'Calories and macro progress.' : 'Tiến độ calo, protein, carbs, fat.' },
+        { label: isEn ? 'Weekly Reports' : 'Báo cáo tuần', path: '/weekly-reports', icon: CalendarDays, description: isEn ? 'Weekly summaries and reports.' : 'Tổng hợp dữ liệu theo tuần và lưu báo cáo.' },
+      ],
+    },
+    {
+      id: 'planning',
+      label: isEn ? 'Planning' : 'Kế hoạch',
+      icon: CalendarDays,
+      items: [
+        { label: 'Meal Plan', path: '/meal-plans', icon: CalendarDays, description: isEn ? 'Plan meals by day and meal type.' : 'Lập kế hoạch ăn uống theo ngày và bữa.' },
+      ],
+    },
+  ];
 
-const MOBILE_SECTIONS = [
-  { title: 'Tong quan', items: DIRECT_LINKS },
-  { title: 'Kham pha', items: NAV_GROUPS[0].items },
-  { title: 'Theo doi', items: NAV_GROUPS[1].items },
-  { title: 'Ke hoach', items: NAV_GROUPS[2].items },
-];
+  const mobileSections = [
+    { title: isEn ? 'Overview' : 'Tổng quan', items: directLinks },
+    { title: navGroups[0].label, items: navGroups[0].items },
+    { title: navGroups[1].label, items: navGroups[1].items },
+    { title: navGroups[2].label, items: navGroups[2].items },
+  ];
+
+  return { directLinks, navGroups, mobileSections };
+};
 
 const isPathActive = (pathname: string, path: string) => {
   if (path === '/') return pathname === '/';
   return pathname === path || pathname.startsWith(`${path}/`);
 };
 
-const timeAgo = (dateStr: string) => {
+const timeAgo = (dateStr: string, isEn: boolean) => {
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
 
-  if (mins < 1) return 'Vua xong';
-  if (mins < 60) return `${mins} phut truoc`;
+  if (mins < 1) return isEn ? 'Just now' : 'Vừa xong';
+  if (mins < 60) return isEn ? `${mins} min ago` : `${mins} phút trước`;
 
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours} gio truoc`;
+  if (hours < 24) return isEn ? `${hours} h ago` : `${hours} giờ trước`;
 
-  return `${Math.floor(hours / 24)} ngay truoc`;
+  return isEn ? `${Math.floor(hours / 24)} d ago` : `${Math.floor(hours / 24)} ngày trước`;
 };
 
 const UserShell = () => {
   const location = useLocation();
   const { user, logoutUser } = useAuth();
+  const { language } = useLanguage();
+  const isEn = language === 'en';
+  const { directLinks, navGroups, mobileSections } = buildNavData(isEn);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
@@ -212,13 +220,15 @@ const UserShell = () => {
                   <span className="text-xl font-black text-gray-900 tracking-tight">
                     Food<span className="text-emerald-500">AI</span>
                   </span>
-                  <p className="text-[11px] uppercase tracking-[0.24em] text-gray-400 font-bold">Nutrition Companion</p>
+                  <p className="text-[11px] uppercase tracking-[0.24em] text-gray-400 font-bold">
+                    {isEn ? 'Nutrition Companion' : 'Trợ lý dinh dưỡng'}
+                  </p>
                 </div>
               </Link>
             </div>
 
             <div ref={navRef} className="hidden md:flex items-center gap-2 flex-1 justify-center">
-              {DIRECT_LINKS.map((item) => {
+              {directLinks.map((item) => {
                 const active = isPathActive(location.pathname, item.path);
 
                 return (
@@ -237,7 +247,7 @@ const UserShell = () => {
                 );
               })}
 
-              {NAV_GROUPS.map((group) => {
+              {navGroups.map((group) => {
                 const active = isGroupActive(group);
                 const open = openGroupId === group.id;
 
@@ -290,7 +300,7 @@ const UserShell = () => {
                                   </div>
                                   <div className="min-w-0">
                                     <p className={`font-bold ${itemActive ? 'text-emerald-700' : 'text-gray-900'}`}>{item.label}</p>
-                                    <p className="text-xs text-gray-500 mt-1 leading-relaxed">{item.description}</p>
+                                  <p className="text-xs text-gray-500 mt-1 leading-relaxed">{item.description}</p>
                                   </div>
                                 </Link>
                               );
@@ -328,13 +338,13 @@ const UserShell = () => {
                       className="absolute right-0 mt-3 w-96 max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden"
                     >
                       <div className="px-5 py-4 border-b border-gray-50 flex items-center justify-between">
-                        <h3 className="font-black text-gray-900">Thong bao</h3>
+                        <h3 className="font-black text-gray-900">{isEn ? 'Notifications' : 'Thông báo'}</h3>
                         {unreadCount > 0 && (
                           <button
                             onClick={handleMarkAllRead}
                             className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 hover:text-emerald-700"
                           >
-                            <CheckCheck size={14} /> Danh dau tat ca
+                            <CheckCheck size={14} /> {isEn ? 'Mark all as read' : 'Đánh dấu tất cả'}
                           </button>
                         )}
                       </div>
@@ -343,7 +353,7 @@ const UserShell = () => {
                         {notifications.length === 0 ? (
                           <div className="py-10 text-center text-gray-400">
                             <Bell size={32} className="mx-auto mb-2 text-gray-200" />
-                            <p className="text-sm">Khong c? thong bao nao</p>
+                            <p className="text-sm">{isEn ? 'No notifications' : 'Không có thông báo nào'}</p>
                           </div>
                         ) : (
                           notifications.map((notification) => {
@@ -361,7 +371,7 @@ const UserShell = () => {
                                 <div className="flex-1 min-w-0">
                                   <p className={`text-sm font-bold ${notification.isRead ? 'text-gray-600' : 'text-gray-900'}`}>{notification.title}</p>
                                   <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">{notification.message}</p>
-                                  <p className="text-xs text-gray-400 mt-1">{timeAgo(notification.createdAt)}</p>
+                                  <p className="text-xs text-gray-400 mt-1">{timeAgo(notification.createdAt, isEn)}</p>
                                 </div>
                                 <button
                                   onClick={(event) => handleDelete(event, notification.id)}
@@ -388,7 +398,7 @@ const UserShell = () => {
                     {user?.name?.charAt(0) || 'U'}
                   </div>
                   <div className="hidden lg:block text-left mr-1">
-                    <p className="text-sm font-bold text-gray-900 leading-tight">{user?.name || 'Nguoi dung'}</p>
+                    <p className="text-sm font-bold text-gray-900 leading-tight">{user?.name || (isEn ? 'User' : 'Người dùng')}</p>
                   </div>
                   <ChevronDown size={16} className="text-gray-400 hidden lg:block" />
                 </button>
@@ -403,14 +413,14 @@ const UserShell = () => {
                       className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-gray-100 py-2 z-50"
                     >
                       <div className="px-4 py-3 border-b border-gray-50 mb-2">
-                        <p className="text-sm text-gray-500">Dang nhap voi</p>
+                        <p className="text-sm text-gray-500">{isEn ? 'Logged in as' : 'Đăng nhập với'}</p>
                         <p className="text-sm font-bold text-gray-900 truncate">{user?.email}</p>
                       </div>
                       <Link to="/profile" onClick={() => setProfileDropdownOpen(false)} className="flex items-center px-4 py-2 hover:bg-gray-50 text-sm font-medium text-gray-700">
-                        <UserIcon size={16} className="mr-3 text-gray-400" /> Ho so ca nhan
+                        <UserIcon size={16} className="mr-3 text-gray-400" /> {isEn ? 'Profile' : 'Hồ sơ cá nhân'}
                       </Link>
                       <Link to="/statistics" onClick={() => setProfileDropdownOpen(false)} className="flex items-center px-4 py-2 hover:bg-gray-50 text-sm font-medium text-gray-700">
-                        <BarChart2 size={16} className="mr-3 text-gray-400" /> Thong ke
+                        <BarChart2 size={16} className="mr-3 text-gray-400" /> {isEn ? 'Statistics' : 'Thống kê'}
                       </Link>
                       <button
                         onClick={() => {
@@ -419,7 +429,7 @@ const UserShell = () => {
                         }}
                         className="w-full flex items-center px-4 py-2 hover:bg-red-50 text-sm font-medium text-red-600"
                       >
-                        <LogOut size={16} className="mr-3" /> Dang xuat
+                        <LogOut size={16} className="mr-3" /> {isEn ? 'Log out' : 'Đăng xuất'}
                       </button>
                     </motion.div>
                   )}
@@ -463,7 +473,7 @@ const UserShell = () => {
               </div>
 
               <div className="px-4 py-5 space-y-6 overflow-y-auto flex-1">
-                {MOBILE_SECTIONS.map((section) => (
+                {mobileSections.map((section) => (
                   <div key={section.title}>
                     <p className="text-[11px] uppercase tracking-[0.24em] text-gray-400 font-black px-2 mb-3">{section.title}</p>
                     <div className="space-y-2">
@@ -502,7 +512,7 @@ const UserShell = () => {
                   onClick={() => setMobileMenuOpen(false)}
                   className="flex items-center px-4 py-3 rounded-2xl font-bold text-gray-700 hover:bg-gray-50 mb-2"
                 >
-                  <UserIcon size={20} className="mr-3 text-gray-400" /> Ho so ca nhan
+                  <UserIcon size={20} className="mr-3 text-gray-400" /> {isEn ? 'Profile' : 'Hồ sơ cá nhân'}
                 </Link>
                 <button
                   onClick={() => {
@@ -511,7 +521,7 @@ const UserShell = () => {
                   }}
                   className="w-full flex items-center px-4 py-3 rounded-2xl font-bold text-red-600 hover:bg-red-50"
                 >
-                  <LogOut size={20} className="mr-3" /> Dang xuat
+                  <LogOut size={20} className="mr-3" /> {isEn ? 'Log out' : 'Đăng xuất'}
                 </button>
               </div>
             </motion.div>

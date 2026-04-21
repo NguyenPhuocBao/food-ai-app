@@ -1,7 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+﻿import React, { useEffect, useRef, useState } from 'react';
 import {
   Bot,
   Clock,
+  Paperclip,
   Loader2,
   MessageSquare,
   Plus,
@@ -10,6 +11,7 @@ import {
   Sparkles,
   Trash2,
   User,
+  X,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import toast from 'react-hot-toast';
@@ -23,16 +25,41 @@ import {
   type ChatMessage,
   type ChatSession,
 } from '../services/chatbot.service';
+import { getAssetUrl } from '../services/api';
 
 const suggestions = [
-  'Gui ? bua toi duoi 500 calo',
-  'Toi di ung hai san, hom nay an gi?',
-  'Tao thuc don chay cho tuan nay',
-  'Lam sao nau uc ga khong bi kho?',
+  'Gợi ý bữa tối dưới 500 calo',
+  'Tôi dị ứng hải sản, hôm nay ăn gì?',
+  'Tạo thực đơn chay cho tuần này',
+  'Làm sao nấu ức gà không bị khô?',
 ];
 
 const getRequestErrorMessage = (error: any, fallback: string) =>
   error?.response?.data?.error || error?.message || fallback;
+
+const CHAT_ACCEPTED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'pdf', 'txt', 'csv', 'doc', 'docx', 'xls', 'xlsx'];
+const CHAT_ACCEPTED_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp',
+  'application/pdf',
+  'text/plain',
+  'text/csv',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+]);
+const CHAT_MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
+const CHAT_MAX_FILES = 5;
+
+const getFileExt = (name: string) => (name.split('.').pop() || '').toLowerCase();
+const formatFileSize = (size: number) => {
+  if (size < 1024) return `${size}B`;
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)}KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)}MB`;
+};
 
 const ChatPageV2 = () => {
   const { user } = useAuth();
@@ -43,7 +70,9 @@ const ChatPageV2 = () => {
   const [isLoadingSessions, setIsLoadingSessions] = useState(true);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     void loadSessions(true);
@@ -77,7 +106,7 @@ const ChatPageV2 = () => {
       const fullSession = await getSession(session.id);
       setActiveSession(fullSession);
     } catch {
-      toast.error('Khong th? tao cuoc tro chuyen moi');
+      toast.error('Không thể tạo cuộc trò chuyện mới');
     }
   };
 
@@ -87,7 +116,7 @@ const ChatPageV2 = () => {
       const fullSession = await getSession(sessionId);
       setActiveSession(fullSession);
     } catch {
-      toast.error('Khong th? tai cuoc tro chuyen');
+      toast.error('Không thể tải cuộc trò chuyện');
     } finally {
       setIsLoadingMessages(false);
     }
@@ -108,26 +137,72 @@ const ChatPageV2 = () => {
         }
       }
 
-      toast.success('Da xoa cuoc tro chuyen');
+      toast.success('Đã xóa cuộc trò chuyện');
     } catch {
-      toast.error('Khong th? xoa cuoc tro chuyen');
+      toast.error('Không thể xóa cuộc trò chuyện');
     }
+  };
+
+  const handlePickFiles = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
+
+    const validFiles: File[] = [];
+    for (const file of files) {
+      const mime = (file.type || '').toLowerCase();
+      const ext = getFileExt(file.name);
+      const isAllowed = CHAT_ACCEPTED_MIME_TYPES.has(mime) || CHAT_ACCEPTED_EXTENSIONS.includes(ext);
+
+      if (!isAllowed) {
+        toast.error(`Tệp "${file.name}" không được hỗ trợ`);
+        continue;
+      }
+      if (file.size > CHAT_MAX_FILE_SIZE_BYTES) {
+        toast.error(`Tệp "${file.name}" vượt quá 10MB`);
+        continue;
+      }
+      validFiles.push(file);
+    }
+
+    if (!validFiles.length) return;
+
+    setSelectedFiles((prev) => {
+      const merged = [...prev];
+      validFiles.forEach((file) => {
+        if (merged.some((item) => item.name === file.name && item.size === file.size && item.lastModified === file.lastModified)) {
+          return;
+        }
+        if (merged.length < CHAT_MAX_FILES) merged.push(file);
+      });
+      if (merged.length >= CHAT_MAX_FILES && prev.length < CHAT_MAX_FILES && validFiles.length > 0) {
+        toast('Tối đa 5 tệp mỗi lần gửi');
+      }
+      return merged.slice(0, CHAT_MAX_FILES);
+    });
+
+    event.target.value = '';
+  };
+
+  const handleRemoveFile = (index: number) => {
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleSend = async (content?: string) => {
     const text = (content || message).trim();
-    if (!text) return;
+    const filesToSend = content ? [] : selectedFiles;
+    if (!text && filesToSend.length === 0) return;
 
     let sessionId = activeSession?.id;
     if (!sessionId) {
       try {
-        const newSession = await createSession(text.slice(0, 50));
+        const draftTitle = (text || 'Tệp đính kèm').slice(0, 50);
+        const newSession = await createSession(draftTitle);
         setSessions((prev) => [newSession, ...prev]);
         const fullSession = await getSession(newSession.id);
         setActiveSession(fullSession);
         sessionId = newSession.id;
       } catch {
-        toast.error('Khong th? tao cuoc tro chuyen');
+        toast.error('Không thể tạo cuộc trò chuyện');
         return;
       }
     }
@@ -136,21 +211,41 @@ const ChatPageV2 = () => {
       id: Date.now(),
       sessionId,
       role: 'USER',
-      content: text,
+      content: text || 'Đã gửi tệp đính kèm.',
+      entities: filesToSend.length > 0
+        ? {
+            attachments: filesToSend.map((file) => ({
+              fileName: '',
+              originalName: file.name,
+              mimeType: file.type,
+              size: file.size,
+              url: '',
+              kind: file.type.toLowerCase().startsWith('image/') ? 'image' : 'file',
+            })),
+          }
+        : null,
       createdAt: new Date().toISOString(),
     };
 
+    const draftMessage = message;
+    const draftFiles = selectedFiles;
     setActiveSession((prev) => (prev ? { ...prev, messages: [...prev.messages, optimisticMessage] } : prev));
     setMessage('');
+    setSelectedFiles([]);
+    if (fileInputRef.current) fileInputRef.current.value = '';
     setIsSending(true);
 
     try {
-      await sendMessage(sessionId, text);
+      await sendMessage(sessionId, text, filesToSend);
       const syncedSession = await getSession(sessionId);
       setActiveSession(syncedSession);
       void loadSessions(false);
     } catch (error: any) {
-      toast.error(getRequestErrorMessage(error, 'Gui tin nhan that bai, vui long thu lai'));
+      toast.error(getRequestErrorMessage(error, 'Gửi tin nhắn thất bại, vui lòng thử lại!'));
+      if (!content) {
+        setMessage(draftMessage);
+        setSelectedFiles(draftFiles);
+      }
       setActiveSession((prev) =>
         prev
           ? {
@@ -175,8 +270,8 @@ const ChatPageV2 = () => {
     const date = new Date(dateStr);
     const now = new Date();
     const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-    if (diffDays === 0) return 'Hom nay';
-    if (diffDays === 1) return 'Hom qua';
+    if (diffDays === 0) return 'Hôm nay';
+    if (diffDays === 1) return 'Hôm qua';
     return date.toLocaleDateString('vi-VN');
   };
 
@@ -190,7 +285,7 @@ const ChatPageV2 = () => {
             className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 rounded-2xl flex items-center justify-center gap-2 transition-colors"
           >
             <Plus size={20} />
-            Cuoc Tro Chuyen Moi
+            Cuộc trò chuyện mới
           </button>
 
           <div className="relative">
@@ -199,7 +294,7 @@ const ChatPageV2 = () => {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Tim doan chat..."
+              placeholder="Tìm đoạn chat..."
               className="w-full bg-gray-50 border-0 rounded-xl py-2.5 pl-10 pr-4 text-sm focus:ring-2 focus:ring-emerald-500/20 text-gray-700 placeholder:text-gray-400"
             />
           </div>
@@ -211,7 +306,7 @@ const ChatPageV2 = () => {
               <Loader2 size={20} className="animate-spin" />
             </div>
           ) : filteredSessions.length === 0 ? (
-            <p className="text-center text-sm text-gray-400 py-8">Chua co cuoc tro chuyen nao</p>
+            <p className="text-center text-sm text-gray-400 py-8">Chưa có cuộc trò chuyện nào</p>
           ) : (
             filteredSessions.map((session) => (
               <div
@@ -241,7 +336,7 @@ const ChatPageV2 = () => {
                   type="button"
                   onClick={(e) => void handleDeleteSession(e, session.id)}
                   className="opacity-0 group-hover:opacity-100 p-1 hover:text-red-500 text-gray-400 transition-all shrink-0"
-                  title="Xoa cuoc tro chuyen"
+                  title="Xóa cuộc trò chuyện"
                 >
                   <Trash2 size={14} />
                 </button>
@@ -263,7 +358,7 @@ const ChatPageV2 = () => {
                 <Sparkles size={16} className="text-amber-500" />
               </h1>
               <p className="text-xs text-gray-500 font-medium">
-                {activeSession ? activeSession.title : 'Tro ly dinh duong AI cho ban'}
+                {activeSession ? activeSession.title : 'Trợ lý dinh dưỡng AI cho bạn'}
               </p>
             </div>
           </div>
@@ -275,12 +370,12 @@ const ChatPageV2 = () => {
               className="lg:hidden inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold transition-colors"
             >
               <Plus size={16} />
-              Chat moi
+              Chat mới
             </button>
             {isSending && (
               <div className="flex items-center gap-2 text-emerald-600 text-sm font-medium">
                 <Loader2 size={16} className="animate-spin" />
-                Dang tra loi...
+                Đang trả lời.....
               </div>
             )}
           </div>
@@ -299,8 +394,8 @@ const ChatPageV2 = () => {
                     <Bot size={20} strokeWidth={2.5} />
                   </div>
                   <div className="p-4 text-[15px] leading-relaxed shadow-sm bg-white border border-gray-100 text-gray-800 rounded-2xl rounded-tl-sm">
-                    Chao {user?.name?.split(' ').pop() || 'ban'}! Toi la tro ly dinh duong Food AI. Hom nay toi co the giup gi cho
-                    muc tieu suc khoe cua ban?
+                    Chào {user?.name?.split(' ').pop() || 'bạn'}! Tôi là trợ lý dinh dưỡng Food AI. Hôm nay tôi có thể giúp gì cho
+                    mục tiêu sức khỏe của bạn?
                   </div>
                 </div>
 
@@ -328,6 +423,9 @@ const ChatPageV2 = () => {
               <>
                 {activeSession.messages.map((msg) => (
                   <AnimatePresence key={msg.id}>
+                    {(() => {
+                      const attachments = Array.isArray(msg.entities?.attachments) ? msg.entities.attachments : [];
+                      return (
                     <motion.div
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -350,8 +448,56 @@ const ChatPageV2 = () => {
                         }`}
                       >
                         {msg.content}
+                        {attachments.length > 0 && (
+                          <div className={`mt-3 space-y-2 ${msg.role === 'USER' ? 'text-emerald-50' : 'text-gray-700'}`}>
+                            {attachments.map((attachment, index) => {
+                              const attachmentUrl = attachment.url ? getAssetUrl(attachment.url) : '';
+                              const canPreviewImage = attachment.kind === 'image' && !!attachmentUrl;
+                              return (
+                                <div
+                                  key={`${attachment.fileName || attachment.originalName}-${index}`}
+                                  className={`rounded-xl px-3 py-2 border ${
+                                    msg.role === 'USER'
+                                      ? 'border-emerald-400/50 bg-emerald-500/40'
+                                      : 'border-gray-200 bg-gray-50'
+                                  }`}
+                                >
+                                  {canPreviewImage && (
+                                    <a href={attachmentUrl} target="_blank" rel="noreferrer" className="block mb-2">
+                                      <img
+                                        src={attachmentUrl}
+                                        alt={attachment.originalName}
+                                        className="max-h-48 rounded-lg object-cover"
+                                      />
+                                    </a>
+                                  )}
+                                  {attachmentUrl ? (
+                                    <a
+                                      href={attachmentUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className={`block text-sm font-semibold underline-offset-2 hover:underline ${
+                                        msg.role === 'USER' ? 'text-white' : 'text-emerald-700'
+                                      }`}
+                                    >
+                                      {attachment.originalName}
+                                    </a>
+                                  ) : (
+                                    <p className="text-sm font-semibold">{attachment.originalName}</p>
+                                  )}
+                                  <p className={`text-xs mt-1 ${msg.role === 'USER' ? 'text-emerald-100' : 'text-gray-500'}`}>
+                                    {attachment.mimeType || (attachment.kind === 'image' ? 'image' : 'file')}
+                                    {typeof attachment.size === 'number' && attachment.size > 0 ? ` • ${formatFileSize(attachment.size)}` : ''}
+                                  </p>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     </motion.div>
+                      );
+                    })()}
                   </AnimatePresence>
                 ))}
               </>
@@ -375,10 +521,49 @@ const ChatPageV2 = () => {
 
         <div className="p-6 bg-white border-t border-gray-50 flex-shrink-0">
           <div className="max-w-3xl mx-auto">
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              multiple
+              accept=".jpg,.jpeg,.png,.webp,.pdf,.txt,.csv,.doc,.docx,.xls,.xlsx"
+              onChange={handlePickFiles}
+            />
+
+            {selectedFiles.length > 0 && (
+              <div className="mb-3 flex flex-wrap gap-2">
+                {selectedFiles.map((file, index) => (
+                  <div
+                    key={`${file.name}-${file.lastModified}`}
+                    className="inline-flex items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700"
+                  >
+                    <span className="truncate max-w-[180px]">{file.name}</span>
+                    <span className="text-emerald-500">({formatFileSize(file.size)})</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveFile(index)}
+                      className="inline-flex items-center justify-center text-emerald-600 hover:text-emerald-800"
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <form
               onSubmit={handleSubmit}
               className="flex relative items-end bg-gray-50 rounded-[24px] p-2 focus-within:ring-2 focus-within:ring-emerald-500/20 transition-all border border-gray-100 shadow-inner"
             >
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isSending}
+                className="p-3 rounded-[14px] mb-1 ml-1 text-gray-500 hover:text-emerald-600 hover:bg-white transition-colors disabled:opacity-50"
+                title="Đính kèm ảnh hoặc tệp"
+              >
+                <Paperclip size={18} />
+              </button>
               <textarea
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
@@ -388,16 +573,16 @@ const ChatPageV2 = () => {
                     void handleSend();
                   }
                 }}
-                placeholder="Nhan tin cho Food AI..."
+                placeholder="Nhắn tin cho Food AI..."
                 className="flex-1 bg-transparent border-0 focus:ring-0 resize-none max-h-48 min-h-[52px] py-3.5 px-4 text-base text-gray-900 placeholder-gray-400 font-medium"
                 rows={1}
                 disabled={isSending}
               />
               <button
                 type="submit"
-                disabled={!message.trim() || isSending}
+                disabled={(!message.trim() && selectedFiles.length === 0) || isSending}
                 className={`p-3.5 rounded-[16px] shrink-0 mb-1 mr-1 shadow-sm transition-all flex items-center justify-center ${
-                  message.trim() && !isSending
+                  (message.trim() || selectedFiles.length > 0) && !isSending
                     ? 'bg-emerald-500 text-white shadow-emerald-500/30 hover:bg-emerald-600'
                     : 'bg-gray-200 text-gray-400'
                 }`}
@@ -406,7 +591,7 @@ const ChatPageV2 = () => {
               </button>
             </form>
             <p className="text-center text-[11px] text-gray-400 mt-3 font-medium">
-              Food AI co the mac loi. Vui long kiem tra lai thong tin dinh duong quan trong.
+              Food AI có thể mắc lỗi. Vui lòng kiểm tra lại thông tin dinh dưỡng quan trọng.
             </p>
           </div>
         </div>

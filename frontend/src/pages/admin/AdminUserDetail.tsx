@@ -11,7 +11,7 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, 
   ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, Legend
 } from 'recharts';
-import api from '../../services/api';
+import api, { getAssetUrl } from '../../services/api';
 import toast from 'react-hot-toast';
 import ConfirmModal from '../../components/admin/ConfirmModal';
 import EmptyState from '../../components/admin/EmptyState';
@@ -102,6 +102,13 @@ const AdminUserDetail = () => {
     if (!height || !weight) return null;
     const bmi = weight / ((height / 100) ** 2);
     return bmi.toFixed(1);
+  };
+
+  const formatAttachmentSize = (size: number) => {
+    if (!Number.isFinite(size) || size <= 0) return '';
+    if (size < 1024) return `${size}B`;
+    if (size < 1024 * 1024) return `${Math.round(size / 1024)}KB`;
+    return `${(size / (1024 * 1024)).toFixed(1)}MB`;
   };
 
   // Hàm tính tổng calo trung bình tuần
@@ -399,27 +406,79 @@ const AdminUserDetail = () => {
               ) : !selectedChatSession?.messages?.length ? (
                 <div className="py-12 text-center text-gray-500">Phien nay chua co tin nhan.</div>
               ) : (
-                selectedChatSession.messages.map((msg: any) => (
-                  <div key={msg.id} className={`flex ${msg.role === 'USER' ? 'justify-end' : 'justify-start'}`}>
-                    <div
-                      className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm whitespace-pre-wrap ${
-                        msg.role === 'USER'
-                          ? 'bg-emerald-600 text-white'
-                          : msg.role === 'ASSISTANT'
-                          ? 'bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 text-gray-800 dark:text-gray-200'
-                          : 'bg-amber-50 text-amber-800 border border-amber-200'
-                      }`}
-                    >
-                      <div className="text-[11px] font-semibold mb-1 opacity-80">
-                        {msg.role === 'USER' ? 'User' : msg.role === 'ASSISTANT' ? 'Food AI' : msg.role}
-                      </div>
-                      <div>{msg.content}</div>
-                      <div className={`text-[10px] mt-1 ${msg.role === 'USER' ? 'text-emerald-100' : 'text-gray-400'}`}>
-                        {formatAdminDateTime(msg.createdAt)}
+                selectedChatSession.messages.map((msg: any) => {
+                  const attachments = Array.isArray(msg?.entities?.attachments) ? msg.entities.attachments : [];
+                  return (
+                    <div key={msg.id} className={`flex ${msg.role === 'USER' ? 'justify-end' : 'justify-start'}`}>
+                      <div
+                        className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm whitespace-pre-wrap ${
+                          msg.role === 'USER'
+                            ? 'bg-emerald-600 text-white'
+                            : msg.role === 'ASSISTANT'
+                            ? 'bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 text-gray-800 dark:text-gray-200'
+                            : 'bg-amber-50 text-amber-800 border border-amber-200'
+                        }`}
+                      >
+                        <div className="text-[11px] font-semibold mb-1 opacity-80">
+                          {msg.role === 'USER' ? 'User' : msg.role === 'ASSISTANT' ? 'Food AI' : msg.role}
+                        </div>
+                        <div>{msg.content}</div>
+
+                        {attachments.length > 0 && (
+                          <div className={`mt-2 space-y-2 ${msg.role === 'USER' ? 'text-emerald-50' : 'text-gray-700 dark:text-gray-200'}`}>
+                            {attachments.map((attachment: any, index: number) => {
+                              const originalName = String(attachment?.originalName || attachment?.fileName || `file-${index + 1}`);
+                              const kind = attachment?.kind === 'image' ? 'image' : 'file';
+                              const mimeType = String(attachment?.mimeType || kind);
+                              const sizeText = formatAttachmentSize(Number(attachment?.size || 0));
+                              const attachmentUrl = attachment?.url ? getAssetUrl(String(attachment.url)) : '';
+                              const canPreviewImage = kind === 'image' && Boolean(attachmentUrl);
+
+                              return (
+                                <div
+                                  key={`${originalName}-${index}`}
+                                  className={`rounded-xl px-3 py-2 border ${
+                                    msg.role === 'USER'
+                                      ? 'border-emerald-400/50 bg-emerald-500/40'
+                                      : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/80'
+                                  }`}
+                                >
+                                  {canPreviewImage && (
+                                    <a href={attachmentUrl} target="_blank" rel="noreferrer" className="block mb-2">
+                                      <img src={attachmentUrl} alt={originalName} className="max-h-44 rounded-lg object-cover" />
+                                    </a>
+                                  )}
+                                  {attachmentUrl ? (
+                                    <a
+                                      href={attachmentUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className={`block text-sm font-semibold underline-offset-2 hover:underline ${
+                                        msg.role === 'USER' ? 'text-white' : 'text-emerald-700 dark:text-emerald-400'
+                                      }`}
+                                    >
+                                      {originalName}
+                                    </a>
+                                  ) : (
+                                    <p className="text-sm font-semibold">{originalName}</p>
+                                  )}
+                                  <p className={`text-xs mt-1 ${msg.role === 'USER' ? 'text-emerald-100' : 'text-gray-500 dark:text-gray-400'}`}>
+                                    {mimeType}
+                                    {sizeText ? ` • ${sizeText}` : ''}
+                                  </p>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        <div className={`text-[10px] mt-1 ${msg.role === 'USER' ? 'text-emerald-100' : 'text-gray-400'}`}>
+                          {formatAdminDateTime(msg.createdAt)}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>

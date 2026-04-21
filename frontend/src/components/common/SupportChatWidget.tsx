@@ -4,6 +4,7 @@ import { Headset, Loader2, MessageCircle, Send, X } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLanguage } from '../../contexts/LanguageContext';
 import {
   createSupportSession,
   getSupportSession,
@@ -22,6 +23,8 @@ const getErrorMessage = (error: unknown, fallback: string) => {
 
 const SupportChatWidget = () => {
   const { user, loading } = useAuth();
+  const { language } = useLanguage();
+  const isEn = language === 'en';
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -31,7 +34,7 @@ const SupportChatWidget = () => {
   const [message, setMessage] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const displayName = (user?.name || 'ban').split(' ').pop() || 'ban';
+  const displayName = (user?.name || (isEn ? 'you' : 'bạn')).split(' ').pop() || (isEn ? 'you' : 'bạn');
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -81,7 +84,7 @@ const SupportChatWidget = () => {
       }
 
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Khong th? tai du lieu chat CSKH'));
+      toast.error(getErrorMessage(error, isEn ? 'Cannot load support chat data' : 'Không thể tải dữ liệu chat CSKH'));
     } finally {
       setIsLoading(false);
     }
@@ -101,7 +104,7 @@ const SupportChatWidget = () => {
   };
 
   const createNewSession = async () => {
-    const created = await createSupportSession({ title: 'Ho tro khach hang' });
+    const created = await createSupportSession({ title: isEn ? 'Customer support' : 'Hỗ trợ khách hàng' });
     setSessions((prev) => [created, ...prev]);
     const full = await getSupportSession(created.id);
     setActiveSession(full);
@@ -152,7 +155,7 @@ const SupportChatWidget = () => {
           messages: prev.messages.filter((item) => item.id !== optimisticId),
         };
       });
-      toast.error(getErrorMessage(error, 'Gui tin nhan that bai'));
+      toast.error(getErrorMessage(error, isEn ? 'Failed to send message' : 'Gửi tin nhắn thất bại'));
     } finally {
       setIsSending(false);
     }
@@ -179,8 +182,10 @@ const SupportChatWidget = () => {
                 <div className="flex items-center gap-2">
                   <Headset size={18} />
                   <div>
-                    <p className="text-sm font-bold">Cham soc khach hang</p>
-                    <p className="text-[11px] text-emerald-100">Nhan vien admin se phan hoi som nhat</p>
+                    <p className="text-sm font-bold">{isEn ? 'Customer Support' : 'Chăm sóc khách hàng'}</p>
+                    <p className="text-[11px] text-emerald-100">
+                      {isEn ? 'Admin staff will reply as soon as possible' : 'Nhân viên admin sẽ phản hồi sớm nhất'}
+                    </p>
                   </div>
                 </div>
                 <button
@@ -194,7 +199,7 @@ const SupportChatWidget = () => {
             </div>
 
             <div className="px-4 py-2 border-b border-gray-100 dark:border-slate-700 bg-gray-50/80 dark:bg-slate-800/60 text-xs text-gray-600 dark:text-slate-300">
-              Kenh nay chi dung de nhan voi admin CSKH.
+              {isEn ? 'This channel is for messaging support admins only.' : 'Kênh này chỉ dùng để nhắn với admin CSKH.'}
             </div>
 
             <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-gray-50/40 dark:bg-slate-950/40">
@@ -206,7 +211,9 @@ const SupportChatWidget = () => {
                 <>
                   {!activeSession || activeSession.messages.length === 0 ? (
                     <div className="rounded-2xl bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 p-3 text-sm text-gray-700 dark:text-slate-200">
-                      Xin chao {displayName}, ban can ho tro van de gi? Hay mo ta ngan gon de admin phan hoi nhanh hon.
+                      {isEn
+                        ? `Hi ${displayName}, what do you need help with? Please describe briefly so admin can respond faster.`
+                        : `Xin chào ${displayName}, bạn cần hỗ trợ vấn đề gì? Hãy mô tả ngắn gọn để admin phản hồi nhanh hơn.`}
                     </div>
                   ) : (
                     activeSession.messages.map((item) => {
@@ -224,7 +231,9 @@ const SupportChatWidget = () => {
                             }`}
                           >
                             {!isUser && isAdmin && (
-                              <div className="text-[11px] font-semibold mb-1 text-cyan-600 dark:text-cyan-300">Admin CSKH</div>
+                              <div className="text-[11px] font-semibold mb-1 text-cyan-600 dark:text-cyan-300">
+                                {isEn ? 'Support Admin' : 'Admin CSKH'}
+                              </div>
                             )}
                             {item.content}
                           </div>
@@ -249,7 +258,7 @@ const SupportChatWidget = () => {
                   value={message}
                   onChange={(event) => setMessage(event.target.value)}
                   rows={2}
-                  placeholder="Nhap noi dung can ho tro..."
+                  placeholder={isEn ? 'Type your support message...' : 'Nhập nội dung cần hỗ trợ...'}
                   className="flex-1 resize-none rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm"
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' && !event.shiftKey) {
@@ -279,7 +288,7 @@ const SupportChatWidget = () => {
             whileTap={{ scale: 0.96 }}
             onClick={() => setOpen(true)}
             className="w-14 h-14 rounded-full shadow-2xl bg-gradient-to-r from-emerald-500 to-cyan-500 text-white flex items-center justify-center border-2 border-white dark:border-slate-900"
-            title="Chat cham soc khach hang"
+            title={isEn ? 'Customer support chat' : 'Chat chăm sóc khách hàng'}
           >
             <MessageCircle size={24} />
           </motion.button>

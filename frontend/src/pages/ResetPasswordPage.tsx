@@ -21,25 +21,25 @@ const ResetPasswordPage = () => {
     setSuccessMsg('');
 
     if (!token) {
-      setErrorMsg('Link dat lai mat khau khong hop le hoac da het han.');
+      setErrorMsg('Link đặt lại mật khẩu không hợp lệ hoặc đã hết hạn.');
       return;
     }
     if (newPassword.length < 8) {
-      setErrorMsg('Mat khau moi phai toi thieu 8 ky tu.');
+      setErrorMsg('Mật khẩu mới phải tối thiểu 8 ký tự.');
       return;
     }
     if (newPassword !== confirmPassword) {
-      setErrorMsg('Xac nhan mat khau khong khop.');
+      setErrorMsg('Xác nhận mật khẩu không khớp.');
       return;
     }
 
     setIsLoading(true);
     try {
       await resetPassword(token, newPassword);
-      setSuccessMsg('Dat lai mat khau thanh cong. Dang chuyen den trang Dang nhap...');
+      setSuccessMsg('Đặt lại mật khẩu thành công. Đang chuyển đến trang đăng nhập...');
       setTimeout(() => navigate('/login'), 1200);
     } catch (error: any) {
-      setErrorMsg(error.response?.data?.error || 'Khong th? dat lai mat khau. Vui long thu lai.');
+      setErrorMsg(error.response?.data?.error || 'Không thể đặt lại mật khẩu. Vui lòng thử lại.');
     } finally {
       setIsLoading(false);
     }
@@ -61,12 +61,12 @@ const ResetPasswordPage = () => {
             transition={{ delay: 0.2, duration: 0.8 }}
           >
             <h1 className="text-4xl md:text-5xl font-bold text-white mb-4 leading-tight">
-              Tao mat khau
+              Tạo mật khẩu
               <br />
-              moi
+              mới
             </h1>
             <p className="text-gray-300 text-lg max-w-md">
-              Chon mat khau moi de tiep tuc su dung tai kho?n FoodAI an toan hon.
+              Chọn mật khẩu mới để tiếp tục sử dụng tài khoản FoodAI an toàn hơn.
             </p>
           </motion.div>
         </div>
@@ -83,8 +83,8 @@ const ResetPasswordPage = () => {
             <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-blue-100/80 text-blue-600 mb-6 shadow-sm">
               <Bot size={24} strokeWidth={2.5} />
             </div>
-            <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">Dat lai mat khau</h2>
-            <p className="mt-2 text-sm text-gray-500">Nhap mat khau moi toi thieu 8 ky tu.</p>
+            <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">Đặt lại mật khẩu</h2>
+            <p className="mt-2 text-sm text-gray-500">Nhập mật khẩu mới tối thiểu 8 ký tự.</p>
           </div>
 
           <form onSubmit={handleSubmit} className="mt-8 space-y-6">
@@ -110,7 +110,7 @@ const ResetPasswordPage = () => {
 
             <div className="space-y-5">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Mat khau moi</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Mật khẩu mới</label>
                 <div className="relative group">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400 group-focus-within:text-green-500 transition-colors">
                     <Lock size={18} />
@@ -120,14 +120,14 @@ const ResetPasswordPage = () => {
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     className="block w-full pl-10 pr-3 py-2.5 sm:py-3 border border-gray-200 rounded-xl bg-white/50 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all shadow-sm"
-                    placeholder="Toi thieu 8 ky tu"
+                    placeholder="Tối thiểu 8 ký tự"
                     required
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Xac nhan mat khau moi</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Xác nhận mật khẩu mới</label>
                 <div className="relative group">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400 group-focus-within:text-green-500 transition-colors">
                     <Lock size={18} />
@@ -137,7 +137,7 @@ const ResetPasswordPage = () => {
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     className="block w-full pl-10 pr-3 py-2.5 sm:py-3 border border-gray-200 rounded-xl bg-white/50 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all shadow-sm"
-                    placeholder="Nhap lai mat khau moi"
+                    placeholder="Nhập lại mật khẩu mới"
                     required
                   />
                 </div>
@@ -153,9 +153,9 @@ const ResetPasswordPage = () => {
                 isLoading ? 'opacity-80 cursor-not-allowed' : ''
               }`}
             >
-              {isLoading ? 'dang cap nhat...' : (
+              {isLoading ? 'Đang cập nhật...' : (
                 <>
-                  Cap nhat mat khau
+                  Cập nhật mật khẩu
                   <ArrowRight size={18} className="ml-2" />
                 </>
               )}
@@ -164,9 +164,9 @@ const ResetPasswordPage = () => {
 
           <div className="mt-8 text-center sm:text-left">
             <p className="text-sm text-gray-600">
-              ?? co mat khau?{' '}
+              Đã có mật khẩu?{' '}
               <Link to="/login" className="font-semibold text-green-600 hover:text-green-500 transition-colors">
-                Quay lai Dang nhap
+                Quay lại đăng nhập
               </Link>
             </p>
           </div>

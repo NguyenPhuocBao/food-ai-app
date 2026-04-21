@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import toast from 'react-hot-toast';
 import {
   Activity,
@@ -6,10 +6,12 @@ import {
   Database,
   Download,
   FileUp,
+  Paperclip,
   RefreshCw,
   Save,
   Send,
   ShieldCheck,
+  X,
   Zap,
 } from 'lucide-react';
 import {
@@ -73,8 +75,33 @@ const parseTrainingJson = (raw: string) => {
   return [] as ChatbotTrainingExample[];
 };
 
+const CHAT_ACCEPTED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'pdf', 'txt', 'csv', 'doc', 'docx', 'xls', 'xlsx'];
+const CHAT_ACCEPTED_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp',
+  'application/pdf',
+  'text/plain',
+  'text/csv',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+]);
+const CHAT_MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
+const CHAT_MAX_FILES = 5;
+
+const getFileExt = (name: string) => (name.split('.').pop() || '').toLowerCase();
+const formatFileSize = (size: number) => {
+  if (size < 1024) return `${size}B`;
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)}KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)}MB`;
+};
+
 const AdminChatbotOps = () => {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const quickFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [health, setHealth] = useState<ChatbotProviderHealth | null>(null);
   const [trainingExamples, setTrainingExamples] = useState<ChatbotTrainingExample[]>([]);
@@ -82,6 +109,7 @@ const AdminChatbotOps = () => {
   const [benchmark, setBenchmark] = useState<ChatbotTrainingBenchmark | null>(null);
   const [quickQuestion, setQuickQuestion] = useState(DEFAULT_TEST_QUESTION);
   const [quickResult, setQuickResult] = useState<ChatbotQuickTestResult | null>(null);
+  const [quickFiles, setQuickFiles] = useState<File[]>([]);
   const [jsonEditor, setJsonEditor] = useState('[]');
 
   const [loadingHealth, setLoadingHealth] = useState(false);
@@ -249,17 +277,63 @@ const AdminChatbotOps = () => {
     }
   };
 
+  const handlePickQuickFiles = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
+
+    const validFiles: File[] = [];
+    for (const file of files) {
+      const mime = (file.type || '').toLowerCase();
+      const ext = getFileExt(file.name);
+      const isAllowed = CHAT_ACCEPTED_MIME_TYPES.has(mime) || CHAT_ACCEPTED_EXTENSIONS.includes(ext);
+
+      if (!isAllowed) {
+        toast.error(`Tep "${file.name}" khong duoc ho tro`);
+        continue;
+      }
+      if (file.size > CHAT_MAX_FILE_SIZE_BYTES) {
+        toast.error(`Tep "${file.name}" vuot qua 10MB`);
+        continue;
+      }
+      validFiles.push(file);
+    }
+
+    if (!validFiles.length) return;
+
+    setQuickFiles((prev) => {
+      const merged = [...prev];
+      validFiles.forEach((file) => {
+        if (merged.some((item) => item.name === file.name && item.size === file.size && item.lastModified === file.lastModified)) {
+          return;
+        }
+        if (merged.length < CHAT_MAX_FILES) merged.push(file);
+      });
+      if (merged.length >= CHAT_MAX_FILES && prev.length < CHAT_MAX_FILES && validFiles.length > 0) {
+        toast('Toi da 5 tep moi lan test');
+      }
+      return merged.slice(0, CHAT_MAX_FILES);
+    });
+
+    event.target.value = '';
+  };
+
+  const handleRemoveQuickFile = (index: number) => {
+    setQuickFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const handleQuickTest = async () => {
     const question = quickQuestion.trim();
-    if (!question) {
-      toast.error('Nhap cau hoi de test');
+    if (!question && quickFiles.length === 0) {
+      toast.error('Nhap cau hoi hoac dinh kem tep de test');
       return;
     }
 
     setRunningQuickTest(true);
     try {
-      const data = await runQuickChatAdmin(question);
+      const data = await runQuickChatAdmin(question, quickFiles);
       setQuickResult(data);
+      setQuickFiles([]);
+      if (quickFileInputRef.current) quickFileInputRef.current.value = '';
       toast.success('Da test quick chat');
     } catch (error: any) {
       toast.error(error?.response?.data?.error || 'Quick test that bai');
@@ -388,16 +462,56 @@ const AdminChatbotOps = () => {
             className="w-full rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             placeholder="Nhap cau hoi de test nhanh chatbot"
           />
+          <input
+            ref={quickFileInputRef}
+            type="file"
+            className="hidden"
+            multiple
+            accept=".jpg,.jpeg,.png,.webp,.pdf,.txt,.csv,.doc,.docx,.xls,.xlsx"
+            onChange={handlePickQuickFiles}
+          />
 
-          <button
-            type="button"
-            onClick={() => void handleQuickTest()}
-            className="inline-flex items-center gap-2 rounded-xl px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold"
-            disabled={runningQuickTest}
-          >
-            <Send size={16} className={runningQuickTest ? 'animate-spin' : ''} />
-            Test ngay
-          </button>
+          {quickFiles.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {quickFiles.map((file, index) => (
+                <div
+                  key={`${file.name}-${file.lastModified}`}
+                  className="inline-flex items-center gap-2 rounded-full border border-indigo-100 bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700"
+                >
+                  <span className="truncate max-w-[220px]">{file.name}</span>
+                  <span className="text-indigo-500">({formatFileSize(file.size)})</span>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveQuickFile(index)}
+                    className="inline-flex items-center justify-center text-indigo-600 hover:text-indigo-800"
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => quickFileInputRef.current?.click()}
+              className="inline-flex items-center gap-2 rounded-xl px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-sm font-semibold"
+              disabled={runningQuickTest}
+            >
+              <Paperclip size={16} />
+              Dinh kem file/anh
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleQuickTest()}
+              className="inline-flex items-center gap-2 rounded-xl px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold"
+              disabled={runningQuickTest}
+            >
+              <Send size={16} className={runningQuickTest ? 'animate-spin' : ''} />
+              Test ngay
+            </button>
+          </div>
 
           <div className="rounded-2xl border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 p-4 min-h-[190px]">
             {!quickResult ? (

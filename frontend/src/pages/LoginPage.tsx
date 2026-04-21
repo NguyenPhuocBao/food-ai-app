@@ -21,7 +21,7 @@ const LoginPage = () => {
       const loggedInUser = await login(email, password);
       navigate(loggedInUser.role === 'ADMIN' ? '/admin' : '/');
     } catch (error: any) {
-      setErrorMsg(error.response?.data?.error || 'Dang nhap that bai. Vui long thu lai!');
+      setErrorMsg(error.response?.data?.error || 'Đăng nhập thất bại. Vui lòng thử lại!');
     } finally {
       setIsLoading(false);
     }
@@ -43,12 +43,12 @@ const LoginPage = () => {
             transition={{ delay: 0.2, duration: 0.8 }}
           >
             <h1 className="text-4xl md:text-5xl font-bold text-white mb-4 leading-tight">
-              Tro ly AI
+              Trợ lý AI
               <br />
-              Tu van bua an
+              Tư vấn bữa ăn
             </h1>
             <p className="text-gray-300 text-lg max-w-md">
-              He thong AI phan tich nhu cau va dua ra gui ? dinh duong phu hop cho ban.
+              Hệ thống AI phân tích nhu cầu và đưa ra gợi ý dinh dưỡng phù hợp cho bạn.
             </p>
           </motion.div>
         </div>
@@ -65,8 +65,8 @@ const LoginPage = () => {
             <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-blue-100/80 text-blue-600 mb-6 shadow-sm">
               <Bot size={24} strokeWidth={2.5} />
             </div>
-            <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">Chao mung ban tro lai</h2>
-            <p className="mt-2 text-sm text-gray-500">Dien thong tin Dang nhap de tiep tuc.</p>
+            <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">Chào mừng bạn trở lại</h2>
+            <p className="mt-2 text-sm text-gray-500">Điền thông tin đăng nhập để tiếp tục.</p>
           </div>
 
           <form onSubmit={handleSubmit} className="mt-8 space-y-6">
@@ -82,7 +82,7 @@ const LoginPage = () => {
 
             <div className="space-y-5">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Dia chi email</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Địa chỉ email</label>
                 <div className="relative group">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400 group-focus-within:text-green-500 transition-colors">
                     <Mail size={18} />
@@ -100,9 +100,9 @@ const LoginPage = () => {
 
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-sm font-medium text-gray-700">Mat khau</label>
+                  <label className="block text-sm font-medium text-gray-700">Mật khẩu</label>
                   <Link to="/forgot-password" className="text-xs font-medium text-green-600 hover:text-green-500 transition-colors">
-                    Quen mat khau?
+                    Quên mật khẩu?
                   </Link>
                 </div>
                 <div className="relative group">
@@ -140,11 +140,11 @@ const LoginPage = () => {
                       d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                     ></path>
                   </svg>
-                  Dang xu ly...
+                  Đang xử lý...
                 </span>
               ) : (
                 <>
-                  Dang nhap
+                  Đăng nhập
                   <ArrowRight size={18} className="ml-2" />
                 </>
               )}
@@ -153,9 +153,9 @@ const LoginPage = () => {
 
           <div className="mt-8 text-center sm:text-left">
             <p className="text-sm text-gray-600">
-              Chua co tai kho?n?{' '}
+              Chưa có tài khoản?{' '}
               <Link to="/register" className="font-semibold text-green-600 hover:text-green-500 transition-colors">
-                Tao tai kho?n moi
+                Tạo tài khoản mới
               </Link>
             </p>
           </div>

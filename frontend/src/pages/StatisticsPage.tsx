@@ -1,4 +1,4 @@
-import { type ElementType, useEffect, useMemo, useState } from 'react';
+﻿import { type ElementType, useEffect, useMemo, useState } from 'react';
 import {
   Award,
   BarChart2,
@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useLanguage } from '../contexts/LanguageContext';
 import {
   getNutritionOverview,
   type StatisticsGroupBy,
@@ -72,38 +73,41 @@ type OverviewResponse = {
   buckets: OverviewBucket[];
 };
 
-const PERIOD_OPTIONS: Array<{ value: 7 | 14 | 30; label: string }> = [
-  { value: 7, label: '7 ngay' },
-  { value: 14, label: '14 ngay' },
-  { value: 30, label: '30 ngay' },
+const buildPeriodOptions = (isEn: boolean): Array<{ value: 7 | 14 | 30; label: string }> => [
+  { value: 7, label: isEn ? '7 days' : '7 ngày' },
+  { value: 14, label: isEn ? '14 days' : '14 ngày' },
+  { value: 30, label: isEn ? '30 days' : '30 ngày' },
 ];
 
-const GROUP_OPTIONS: Array<{ value: StatisticsGroupBy; label: string }> = [
-  { value: 'day', label: 'Theo ngay' },
-  { value: 'week', label: 'Theo tuan' },
-  { value: 'month', label: 'Theo thang' },
+const buildGroupOptions = (isEn: boolean): Array<{ value: StatisticsGroupBy; label: string }> => [
+  { value: 'day', label: isEn ? 'By day' : 'Theo ngày' },
+  { value: 'week', label: isEn ? 'By week' : 'Theo tuần' },
+  { value: 'month', label: isEn ? 'By month' : 'Theo tháng' },
 ];
 
-const formatNumber = (value: number) => Math.round(value || 0).toLocaleString('vi-VN');
+const formatNumber = (value: number, isEn: boolean) =>
+  Math.round(value || 0).toLocaleString(isEn ? 'en-US' : 'vi-VN');
 
-const shortBucketLabel = (bucket: OverviewBucket, groupBy: StatisticsGroupBy) => {
+const shortBucketLabel = (bucket: OverviewBucket, groupBy: StatisticsGroupBy, isEn: boolean) => {
   if (groupBy === 'day') return bucket.label.slice(0, 5);
   if (groupBy === 'week') {
     const parts = bucket.startDate.split('-');
     return `W${parts[2]}/${parts[1]}`;
   }
   const month = bucket.key.split('-')[1];
-  return `T${month}`;
+  return `${isEn ? 'M' : 'T'}${month}`;
 };
 
 const MiniBarChart = ({
   data,
   goal,
   groupBy,
+  isEn,
 }: {
   data: OverviewBucket[];
   goal: number;
   groupBy: StatisticsGroupBy;
+  isEn: boolean;
 }) => {
   const maxValue = Math.max(goal, ...data.map((item) => item.calories), 1);
 
@@ -116,7 +120,7 @@ const MiniBarChart = ({
         return (
           <div key={bucket.key} className="flex-1 flex flex-col items-center gap-1 group relative">
             <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[10px] font-bold px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
-              {formatNumber(bucket.calories)} kcal
+              {formatNumber(bucket.calories, isEn)} kcal
             </div>
             <div className="w-full rounded-t-lg overflow-hidden flex flex-col-reverse" style={{ height: '90%' }}>
               <div
@@ -124,7 +128,7 @@ const MiniBarChart = ({
                 style={{ height: `${barHeight}%` }}
               />
             </div>
-            <span className="text-[10px] text-gray-400 font-medium">{shortBucketLabel(bucket, groupBy)}</span>
+            <span className="text-[10px] text-gray-400 font-medium">{shortBucketLabel(bucket, groupBy, isEn)}</span>
           </div>
         );
       })}
@@ -132,7 +136,17 @@ const MiniBarChart = ({
   );
 };
 
-const MacroRing = ({ protein, carbs, fat }: { protein: number; carbs: number; fat: number }) => {
+const MacroRing = ({
+  protein,
+  carbs,
+  fat,
+  isEn,
+}: {
+  protein: number;
+  carbs: number;
+  fat: number;
+  isEn: boolean;
+}) => {
   const total = protein + carbs + fat || 1;
   const p = (protein / total) * 100;
   const c = (carbs / total) * 100;
@@ -146,7 +160,7 @@ const MacroRing = ({ protein, carbs, fat }: { protein: number; carbs: number; fa
   const segments = [
     { value: p, color: '#10b981', label: 'Protein' },
     { value: c, color: '#f59e0b', label: 'Carbs' },
-    { value: f, color: '#60a5fa', label: 'Fat' },
+    { value: f, color: '#60a5fa', label: isEn ? 'Fat' : 'Chất béo' },
   ];
 
   return (
@@ -179,7 +193,7 @@ const MacroRing = ({ protein, carbs, fat }: { protein: number; carbs: number; fa
         {[
           { label: 'Protein', value: Math.round(protein), color: 'bg-emerald-500' },
           { label: 'Carbs', value: Math.round(carbs), color: 'bg-amber-400' },
-          { label: 'Fat', value: Math.round(fat), color: 'bg-blue-400' },
+          { label: isEn ? 'Fat' : 'Chất béo', value: Math.round(fat), color: 'bg-blue-400' },
         ].map((item) => (
           <div key={item.label} className="flex items-center gap-2">
             <span className={`w-2.5 h-2.5 rounded-full ${item.color}`} />
@@ -219,11 +233,15 @@ const StatCard = ({
 
 const StatisticsPage = () => {
   const { user } = useAuth();
+  const { language } = useLanguage();
+  const isEn = language === 'en';
   const navigate = useNavigate();
   const [period, setPeriod] = useState<7 | 14 | 30>(7);
   const [groupBy, setGroupBy] = useState<StatisticsGroupBy>('day');
   const [isLoading, setIsLoading] = useState(true);
   const [overview, setOverview] = useState<OverviewResponse | null>(null);
+  const periodOptions = useMemo(() => buildPeriodOptions(isEn), [isEn]);
+  const groupOptions = useMemo(() => buildGroupOptions(isEn), [isEn]);
 
   useEffect(() => {
     const fetchOverview = async () => {
@@ -256,10 +274,10 @@ const StatisticsPage = () => {
   };
 
   const chartTitle = useMemo(() => {
-    if (groupBy === 'week') return 'Luong calo theo tuan';
-    if (groupBy === 'month') return 'Luong calo theo thang';
-    return 'Luong calo theo ngay';
-  }, [groupBy]);
+    if (groupBy === 'week') return isEn ? 'Calories by week' : 'Lượng calo theo tuần';
+    if (groupBy === 'month') return isEn ? 'Calories by month' : 'Lượng calo theo tháng';
+    return isEn ? 'Calories by day' : 'Lượng calo theo ngày';
+  }, [groupBy, isEn]);
 
   const openBucketDetail = (bucket: OverviewBucket) => {
     navigate(`/diary?date=${bucket.startDate}`);
@@ -270,14 +288,18 @@ const StatisticsPage = () => {
       <div className="flex flex-col md:flex-row justify-between items-end md:items-center mb-8 gap-4">
         <div>
           <h1 className="text-3xl font-black text-gray-900 tracking-tight flex items-center gap-2">
-            <BarChart2 className="text-emerald-500" /> Thong ke dinh duong
+            <BarChart2 className="text-emerald-500" /> {isEn ? 'Nutrition Statistics' : 'Thống kê dinh dưỡng'}
           </h1>
-          <p className="text-gray-500 mt-1">Chon khung thoi gian va cach gom nhom theo ngay, tuan, thang.</p>
+          <p className="text-gray-500 mt-1">
+            {isEn
+              ? 'Choose a time range and group data by day, week, or month.'
+              : 'Chọn khung thời gian và cách gom nhóm theo ngày, tuần, tháng.'}
+          </p>
         </div>
 
         <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
           <div className="flex gap-2 bg-white border border-gray-100 rounded-xl p-1 shadow-sm">
-            {PERIOD_OPTIONS.map((option) => (
+            {periodOptions.map((option) => (
               <button
                 key={option.value}
                 onClick={() => setPeriod(option.value)}
@@ -289,7 +311,7 @@ const StatisticsPage = () => {
           </div>
 
           <div className="flex gap-2 bg-white border border-gray-100 rounded-xl p-1 shadow-sm">
-            {GROUP_OPTIONS.map((option) => (
+            {groupOptions.map((option) => (
               <button
                 key={option.value}
                 onClick={() => setGroupBy(option.value)}
@@ -311,30 +333,30 @@ const StatisticsPage = () => {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard
               icon={Flame}
-              label="TB calo / ngay"
-              value={formatNumber(summary.average.calories)}
-              sub={`Muc tieu: ${formatNumber(target.calories)} kcal`}
+              label={isEn ? 'Avg calories/day' : 'TB calo/ngày'}
+              value={formatNumber(summary.average.calories, isEn)}
+              sub={`${isEn ? 'Goal' : 'Mục tiêu'}: ${formatNumber(target.calories, isEn)} kcal`}
               color="bg-amber-50 text-amber-500"
             />
             <StatCard
               icon={Target}
-              label="TB protein / ngay"
+              label={isEn ? 'Avg protein/day' : 'TB protein/ngày'}
               value={`${Math.round(summary.average.protein || 0)}g`}
-              sub={`Muc tieu: ${Math.round(target.protein || 150)}g`}
+              sub={`${isEn ? 'Goal' : 'Mục tiêu'}: ${Math.round(target.protein || 150)}g`}
               color="bg-emerald-50 text-emerald-500"
             />
             <StatCard
               icon={Award}
               label="Streak"
               value={summary.streak}
-              sub="So ngay ghi nhan lien tiep"
+              sub={isEn ? 'Consecutive logged days' : 'Số ngày ghi nhận liên tiếp'}
               color="bg-red-50 text-red-500"
             />
             <StatCard
               icon={Calendar}
-              label="Ngay hoat dong"
+              label={isEn ? 'Active days' : 'Ngày hoạt động'}
               value={summary.activeDays}
-              sub={`Trong ${period} ngay qua`}
+              sub={isEn ? `In the last ${period} days` : `Trong ${period} ngày qua`}
               color="bg-blue-50 text-blue-500"
             />
           </div>
@@ -345,38 +367,41 @@ const StatisticsPage = () => {
                 <div>
                   <h2 className="text-xl font-black text-gray-900">{chartTitle}</h2>
                   <p className="text-sm text-gray-500 mt-1">
-                    Khung {period} ngay, gom nhom {GROUP_OPTIONS.find((item) => item.value === groupBy)?.label.toLowerCase()}
+                    {isEn ? 'Range' : 'Khung'} {period} {isEn ? 'days' : 'ngày'}, {isEn ? 'grouped' : 'gộp nhóm'}{' '}
+                    {groupOptions.find((item) => item.value === groupBy)?.label.toLowerCase()}
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-3xl font-black text-gray-900">{formatNumber(summary.total.calories)}</p>
-                  <p className="text-xs text-gray-400">kcal tong cong</p>
+                  <p className="text-3xl font-black text-gray-900">{formatNumber(summary.total.calories, isEn)}</p>
+                  <p className="text-xs text-gray-400">{isEn ? 'kcal total' : 'kcal tổng cộng'}</p>
                 </div>
               </div>
 
-              <MiniBarChart data={buckets} goal={target.calories} groupBy={groupBy} />
+              <MiniBarChart data={buckets} goal={target.calories} groupBy={groupBy} isEn={isEn} />
 
-              <p className="text-[10px] text-gray-400 mt-1 text-right">Muc tieu {formatNumber(target.calories)} kcal</p>
+              <p className="text-[10px] text-gray-400 mt-1 text-right">
+                {isEn ? 'Goal' : 'Mục tiêu'} {formatNumber(target.calories, isEn)} kcal
+              </p>
 
               {!!summary.bestBucket && (
                 <div className="mt-5 pt-5 border-t border-gray-50 flex flex-col sm:flex-row gap-3">
                   <div className="flex items-center gap-2 bg-emerald-50 px-3 py-2 rounded-xl">
                     <TrendingUp size={16} className="text-emerald-500" />
                     <div>
-                      <p className="text-xs text-gray-500">Moc cao nhat</p>
-                      <p className="text-sm font-black text-gray-900">
-                        {summary.bestBucket.label} - {formatNumber(summary.bestBucket.calories)} kcal
-                      </p>
+                        <p className="text-xs text-gray-500">{isEn ? 'Highest point' : 'Mốc cao nhất'}</p>
+                        <p className="text-sm font-black text-gray-900">
+                          {summary.bestBucket.label} - {formatNumber(summary.bestBucket.calories, isEn)} kcal
+                        </p>
+                      </div>
                     </div>
-                  </div>
 
                   {!!summary.worstBucket && (
                     <div className="flex items-center gap-2 bg-red-50 px-3 py-2 rounded-xl">
                       <TrendingDown size={16} className="text-red-400" />
                       <div>
-                        <p className="text-xs text-gray-500">Moc thap nhat</p>
+                        <p className="text-xs text-gray-500">{isEn ? 'Lowest point' : 'Mốc thấp nhất'}</p>
                         <p className="text-sm font-black text-gray-900">
-                          {summary.worstBucket.label} - {formatNumber(summary.worstBucket.calories)} kcal
+                          {summary.worstBucket.label} - {formatNumber(summary.worstBucket.calories, isEn)} kcal
                         </p>
                       </div>
                     </div>
@@ -387,20 +412,23 @@ const StatisticsPage = () => {
 
             <div className="bg-white rounded-[28px] shadow-sm border border-gray-100 p-7 flex flex-col justify-between">
               <div>
-                <h2 className="text-xl font-black text-gray-900 mb-1">Ti le macro</h2>
-                <p className="text-sm text-gray-500 mb-6">Trung binh theo ngay co log</p>
+                <h2 className="text-xl font-black text-gray-900 mb-1">{isEn ? 'Macro ratio' : 'Tỉ lệ macro'}</h2>
+                <p className="text-sm text-gray-500 mb-6">
+                  {isEn ? 'Average on days with logs' : 'Trung bình theo ngày có log'}
+                </p>
                 <MacroRing
                   protein={summary.average.protein || 0}
                   carbs={summary.average.carbs || 0}
                   fat={summary.average.fat || 0}
+                  isEn={isEn}
                 />
               </div>
 
               <div className="mt-6 space-y-3 pt-5 border-t border-gray-50">
                 {[
-                  { label: 'Tong protein', value: summary.total.protein, unit: 'g', color: 'text-emerald-600' },
-                  { label: 'Tong carbs', value: summary.total.carbs, unit: 'g', color: 'text-amber-600' },
-                  { label: 'Tong fat', value: summary.total.fat, unit: 'g', color: 'text-blue-600' },
+                  { label: isEn ? 'Total protein' : 'Tổng protein', value: summary.total.protein, unit: 'g', color: 'text-emerald-600' },
+                  { label: isEn ? 'Total carbs' : 'Tổng carbs', value: summary.total.carbs, unit: 'g', color: 'text-amber-600' },
+                  { label: isEn ? 'Total fat' : 'Tổng chất béo', value: summary.total.fat, unit: 'g', color: 'text-blue-600' },
                 ].map((item) => (
                   <div key={item.label} className="flex justify-between items-center">
                     <span className="text-sm text-gray-500">{item.label}</span>
@@ -413,14 +441,19 @@ const StatisticsPage = () => {
 
           <div className="bg-white rounded-[28px] shadow-sm border border-gray-100 overflow-hidden">
             <div className="px-7 py-5 border-b border-gray-50 flex items-center justify-between">
-              <h2 className="text-xl font-black text-gray-900">Bang chi tiet</h2>
-              <p className="text-xs text-gray-500">{buckets.length} moc du lieu</p>
+              <h2 className="text-xl font-black text-gray-900">{isEn ? 'Detail table' : 'Bảng chi tiết'}</h2>
+              <p className="text-xs text-gray-500">
+                {buckets.length} {isEn ? 'data points' : 'mốc dữ liệu'}
+              </p>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left">
                 <thead>
                   <tr className="bg-gray-50/50 border-b border-gray-50">
-                    {['Moc', 'Khoang ngay', 'Calo', 'Protein', 'Carbs', 'Fat', 'Muc tieu'].map((column) => (
+                    {(isEn
+                      ? ['Point', 'Date range', 'Calories', 'Protein', 'Carbs', 'Fat', 'Target']
+                      : ['Mốc', 'Khoảng ngày', 'Calo', 'Protein', 'Carbs', 'Chất béo', 'Mục tiêu']
+                    ).map((column) => (
                       <th key={column} className="px-6 py-3 text-xs font-bold text-gray-400 uppercase tracking-wide">
                         {column}
                       </th>
@@ -439,11 +472,11 @@ const StatisticsPage = () => {
                         key={bucket.key}
                         onClick={() => openBucketDetail(bucket)}
                         className="hover:bg-gray-50/50 transition-colors cursor-pointer"
-                        title="Mo chi tiet bua an theo ngay"
+                        title={isEn ? 'Open meal detail by date' : 'Mở chi tiết bữa ăn theo ngày'}
                       >
                         <td className="px-6 py-3 font-bold text-gray-900 text-sm">{bucket.label}</td>
                         <td className="px-6 py-3 text-sm text-gray-500">{bucket.startDate} - {bucket.endDate}</td>
-                        <td className="px-6 py-3 font-black text-gray-900">{formatNumber(bucket.calories)}</td>
+                        <td className="px-6 py-3 font-black text-gray-900">{formatNumber(bucket.calories, isEn)}</td>
                         <td className="px-6 py-3 text-sm text-gray-600">{Math.round(bucket.protein || 0)}g</td>
                         <td className="px-6 py-3 text-sm text-gray-600">{Math.round(bucket.carbs || 0)}g</td>
                         <td className="px-6 py-3 text-sm text-gray-600">{Math.round(bucket.fat || 0)}g</td>
@@ -466,8 +499,8 @@ const StatisticsPage = () => {
 
                   {buckets.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="px-6 py-10 text-center text-sm text-gray-400">
-                        Khong c? du lieu cho bo loc hien tai.
+                        <td colSpan={7} className="px-6 py-10 text-center text-sm text-gray-400">
+                        {isEn ? 'No data for the current filter.' : 'Không có dữ liệu cho bộ lọc hiện tại.'}
                       </td>
                     </tr>
                   )}
@@ -482,3 +515,4 @@ const StatisticsPage = () => {
 };
 
 export default StatisticsPage;
+

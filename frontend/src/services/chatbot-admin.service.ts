@@ -94,7 +94,20 @@ export const benchmarkChatbotTraining = async (sampleSize?: number): Promise<Cha
   return response.data.data;
 };
 
-export const runQuickChatAdmin = async (question: string): Promise<ChatbotQuickTestResult> => {
+export const runQuickChatAdmin = async (
+  question: string,
+  files: File[] = [],
+): Promise<ChatbotQuickTestResult> => {
+  if (files.length > 0) {
+    const formData = new FormData();
+    formData.append('question', question);
+    files.forEach((file) => formData.append('files', file));
+    const response = await api.post('/chat/quick', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data.data;
+  }
+
   const response = await api.post('/chat/quick', { question });
   return response.data.data;
 };

@@ -7,22 +7,26 @@ import {
 import { motion } from 'framer-motion';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getSupportSessions } from '../../services/support.service';
+import { useLanguage } from '../../contexts/LanguageContext';
 
-const menuItems = [
-  { path: '/admin', name: 'Dashboard', icon: LayoutDashboard },
-  { path: '/admin/users', name: 'Users', icon: Users },
-  { path: '/admin/foods', name: 'Foods', icon: Utensils },
-  { path: '/admin/recipes', name: 'Recipes', icon: BookOpen },
-  { path: '/admin/reviews', name: 'Reviews', icon: Star },
-  { path: '/admin/chat-ai', name: 'CSKH Inbox', icon: MessageSquare },
-  { path: '/admin/chatbot-ops', name: 'Chatbot Ops', icon: Brain },
-  { path: '/admin/configs', name: 'Configs', icon: Settings },
-  { path: '/admin/logs', name: 'Logs', icon: History },
-  { path: '/admin/notifications', name: 'Notifications', icon: Bell },
-  { path: '/admin/settings', name: 'Settings DB', icon: Database },
+const buildMenuItems = (isEn: boolean) => [
+  { path: '/admin', name: isEn ? 'Dashboard' : 'Tổng quan', icon: LayoutDashboard },
+  { path: '/admin/users', name: isEn ? 'Users' : 'Người dùng', icon: Users },
+  { path: '/admin/foods', name: isEn ? 'Foods' : 'Món ăn', icon: Utensils },
+  { path: '/admin/recipes', name: isEn ? 'Recipes' : 'Công thức', icon: BookOpen },
+  { path: '/admin/reviews', name: isEn ? 'Reviews' : 'Đánh giá', icon: Star },
+  { path: '/admin/chat-ai', name: isEn ? 'Support Inbox' : 'CSKH Inbox', icon: MessageSquare },
+  { path: '/admin/chatbot-ops', name: isEn ? 'Chatbot Ops' : 'Vận hành Chatbot', icon: Brain },
+  { path: '/admin/configs', name: isEn ? 'Configs' : 'Cấu hình', icon: Settings },
+  { path: '/admin/logs', name: isEn ? 'Logs' : 'Nhật ký', icon: History },
+  { path: '/admin/notifications', name: isEn ? 'Notifications' : 'Thông báo', icon: Bell },
+  { path: '/admin/settings', name: isEn ? 'DB Settings' : 'Thiết lập DB', icon: Database },
 ];
 
 const Sidebar = () => {
+  const { language } = useLanguage();
+  const isEn = language === 'en';
+  const menuItems = buildMenuItems(isEn);
   const { theme, toggleTheme } = useTheme();
   const [pendingSupportCount, setPendingSupportCount] = useState(0);
 
@@ -60,7 +64,9 @@ const Sidebar = () => {
       className="fixed left-0 top-0 h-full w-64 bg-gray-900/90 dark:bg-black/90 backdrop-blur-xl text-white shadow-2xl z-20 flex flex-col border-r border-gray-800"
     >
       <div className="p-5 text-2xl font-bold border-b border-gray-800 flex items-center justify-between">
-        <span className="bg-gradient-to-r from-blue-400 to-violet-400 bg-clip-text text-transparent">Food AI Admin</span>
+        <span className="bg-gradient-to-r from-blue-400 to-violet-400 bg-clip-text text-transparent">
+          {isEn ? 'Food AI Admin' : 'Quản trị Food AI'}
+        </span>
         <button onClick={toggleTheme} className="p-2 rounded-xl hover:bg-gray-800 transition-colors">
           {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
         </button>
@@ -90,7 +96,7 @@ const Sidebar = () => {
         ))}
       </nav>
       <div className="p-4 border-t border-gray-800 text-xs text-gray-400 text-center">
-        © 2025 Food AI System
+        © 2025 {isEn ? 'Food AI System' : 'Hệ thống Food AI'}
       </div>
     </motion.aside>
   );

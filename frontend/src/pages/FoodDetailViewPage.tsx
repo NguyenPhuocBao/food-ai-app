@@ -52,7 +52,7 @@ const FoodDetailViewPage = () => {
       const data = await getFoodById(Number(id));
       setFood(data);
     } catch {
-      toast.error('Khong th? tai chi tiet mon an');
+      toast.error('Không thể tải chi tiết món ăn');
     } finally {
       if (showLoading) setLoading(false);
     }
@@ -86,14 +86,14 @@ const FoodDetailViewPage = () => {
       if (isFavorite) {
         await removeFavoriteFood(food.id);
         syncFavoriteState(false);
-        toast.success('Đã bềEkhỏi yêu thích');
+        toast.success('Đã bỏ khỏi yêu thích');
       } else {
         await addFavoriteFood(food.id);
         syncFavoriteState(true);
         toast.success('Đã thêm vào yêu thích');
       }
     } catch {
-      toast.error('Không thềEcập nhật yêu thích');
+      toast.error('Không thể cập nhật yêu thích');
     } finally {
       setTogglingFavorite(false);
     }
@@ -107,14 +107,14 @@ const FoodDetailViewPage = () => {
       if (isFavorite) {
         await unsaveRecipe(food.recipe.id);
         syncFavoriteState(false);
-        toast.success('Đã bềElưu công thức');
+        toast.success('Đã bỏ lưu công thức');
       } else {
         await saveRecipe(food.recipe.id);
         syncFavoriteState(true);
         toast.success('Đã lưu công thức');
       }
     } catch {
-      toast.error('Không thềElưu công thức');
+      toast.error('Không thể lưu công thức');
     } finally {
       setTogglingRecipeSave(false);
     }
@@ -129,7 +129,7 @@ const FoodDetailViewPage = () => {
       toast.success('Đã thêm món ăn vào nhật ký');
       navigate('/diary');
     } catch {
-      toast.error('Không thềEthêm món ăn');
+      toast.error('Không thể thêm món ăn');
     } finally {
       setSubmittingMeal(false);
     }
@@ -143,7 +143,7 @@ const FoodDetailViewPage = () => {
       await markRecipeAsCooked(food.recipe.id);
       toast.success('Đã ghi nhận bạn đã nấu món này');
     } catch {
-      toast.error('Không thềEghi nhận công thức');
+      toast.error('Không thể ghi nhận công thức');
     } finally {
       setMarkingCooked(false);
     }
@@ -152,11 +152,11 @@ const FoodDetailViewPage = () => {
   const handleSubmitReview = async () => {
     if (!food) return;
     if (!user) {
-      toast.error('Ban can Dang nhap de danh gia');
+      toast.error('Bạn cần đăng nhập để đánh giá');
       return;
     }
     if (reviewRating < 1 || reviewRating > 5) {
-      toast.error('Diem danh gia phai tu 1 den 5');
+      toast.error('Điểm đánh giá phải từ 1 - 5');
       return;
     }
 
@@ -168,9 +168,9 @@ const FoodDetailViewPage = () => {
       });
       setReviewComment('');
       await fetchFood(false);
-      toast.success('Da gui danh gia');
+      toast.success('Đã gửi đánh giá');
     } catch (error: any) {
-      toast.error(error?.response?.data?.error || 'Khong th? gui danh gia');
+      toast.error(error?.response?.data?.error || 'Không thể gửi đánh giá');
     } finally {
       setSubmittingReview(false);
     }
@@ -178,13 +178,13 @@ const FoodDetailViewPage = () => {
 
   const handleSubmitReply = async (reviewId: number) => {
     if (!user) {
-      toast.error('Ban can Dang nhap de phan hoi');
+      toast.error('Bạn cần đăng nhập để phản hồi');
       return;
     }
 
     const content = (replyInputs[reviewId] || '').trim();
     if (!content) {
-      toast.error('Nhap noi dung phan hoi');
+      toast.error('Nhập nội dung phản hồi');
       return;
     }
 
@@ -203,9 +203,9 @@ const FoodDetailViewPage = () => {
         };
       });
       setReplyInputs((prev) => ({ ...prev, [reviewId]: '' }));
-      toast.success('Da gui phan hoi');
+      toast.success('Đã gửi phản hồi');
     } catch (error: any) {
-      toast.error(error?.response?.data?.error || 'Khong th? gui phan hoi');
+      toast.error(error?.response?.data?.error || 'Không thể gửi phản hồi');
     } finally {
       setReplyingReviewId(null);
     }
@@ -340,8 +340,8 @@ const FoodDetailViewPage = () => {
 
           <div className="rounded-[32px] bg-white border border-gray-100 shadow-sm p-7">
             <div className="flex items-center justify-between">
-              <h2 className="text-xl font-black text-gray-900">Danh gia cong dong</h2>
-              <span className="text-sm font-bold text-gray-500">{food.reviews?.length || 0} danh gia</span>
+              <h2 className="text-xl font-black text-gray-900">Đánh giá cộng đồng</h2>
+              <span className="text-sm font-bold text-gray-500">{food.reviews?.length || 0} đánh giá</span>
             </div>
             <div className="flex items-center gap-2 mt-4">
               {Array.from({ length: 5 }).map((_, index) => (
@@ -349,10 +349,10 @@ const FoodDetailViewPage = () => {
               ))}
               <span className="font-black text-gray-900">{ratingAverage.toFixed(1)}</span>
             </div>
-            <p className="text-sm text-gray-500 mt-3">{food.favorites?.length || 0} nguoi ?? luu mon nay vao thu vien.</p>
+            <p className="text-sm text-gray-500 mt-3">{food.favorites?.length || 0} người đã lưu món ăn này vào thư viện.</p>
 
             <div className="mt-5 border-t border-gray-100 pt-5 space-y-3">
-              <p className="text-sm font-black text-gray-900">Viet danh gia cua ban</p>
+              <p className="text-sm font-black text-gray-900">Viết đánh giá của bạn</p>
               <div className="flex items-center gap-1">
                 {Array.from({ length: 5 }).map((_, index) => {
                   const score = index + 1;
@@ -375,7 +375,7 @@ const FoodDetailViewPage = () => {
                 value={reviewComment}
                 onChange={(event) => setReviewComment(event.target.value)}
                 rows={3}
-                placeholder="Cam nhan cua ban ve mon an..."
+                placeholder="Cảm nhận của bạn về món ăn..."
                 className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm bg-white text-gray-900 placeholder:text-gray-400 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-400"
               />
               <button
@@ -385,7 +385,7 @@ const FoodDetailViewPage = () => {
                 className="w-full rounded-2xl bg-gray-900 text-white py-3 text-sm font-black disabled:opacity-60 flex items-center justify-center gap-2"
               >
                 {submittingReview ? <Loader2 size={16} className="animate-spin" /> : <SendHorizontal size={16} />}
-                {submittingReview ? '?ang gui...' : 'Gui danh gia'}
+                {submittingReview ? 'Đang gửi...' : 'Gửi đánh giá'}
               </button>
             </div>
           </div>
@@ -525,9 +525,9 @@ const FoodDetailViewPage = () => {
       )}
 
       <section className="bg-white rounded-[32px] border border-gray-100 shadow-sm p-7">
-        <h2 className="text-2xl font-black text-gray-900">Danh gia va thao luan</h2>
+        <h2 className="text-2xl font-black text-gray-900">Đánh giá và thảo luận</h2>
         <div className="mt-4 rounded-2xl border border-gray-100 bg-gray-50/70 p-4 space-y-3">
-          <p className="text-sm font-black text-gray-900">Tao comment moi</p>
+          <p className="text-sm font-black text-gray-900">Tạo bình luận mới</p>
           <div className="flex items-center gap-1">
             {Array.from({ length: 5 }).map((_, index) => {
               const score = index + 1;
@@ -550,7 +550,7 @@ const FoodDetailViewPage = () => {
             value={reviewComment}
             onChange={(event) => setReviewComment(event.target.value)}
             rows={3}
-            placeholder="Chia se cam nhan cua ban ve mon an nay..."
+            placeholder="Chia sẻ cảm nhận của bạn về món ăn này..."
             className="w-full rounded-2xl border border-gray-200 px-3 py-2 text-sm bg-white text-gray-900 placeholder:text-gray-400 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-400"
           />
           <button
@@ -560,11 +560,11 @@ const FoodDetailViewPage = () => {
             className="inline-flex items-center gap-2 rounded-xl bg-gray-900 text-white text-sm font-bold px-4 py-2.5 disabled:opacity-60"
           >
             {submittingReview ? <Loader2 size={14} className="animate-spin" /> : <SendHorizontal size={14} />}
-            {submittingReview ? '?ang gui...' : 'Dang comment'}
+            {submittingReview ? 'Đang gửi...' : 'Đăng bình luận'}
           </button>
         </div>
         {!food.reviews?.length ? (
-          <p className="text-sm text-gray-500 mt-4">Chua co danh gia nao. Hay la nguoi dau tien chia se cam nhan.</p>
+          <p className="text-sm text-gray-500 mt-4">Chưa có đánh giá nào, Hãy là người đầu tiên chia sẽ cảm nhận.</p>
         ) : (
           <div className="space-y-4 mt-6">
             {food.reviews.map((review) => (
@@ -580,7 +580,7 @@ const FoodDetailViewPage = () => {
                     ))}
                   </div>
                 </div>
-                <p className="text-sm text-gray-700 mt-4 leading-relaxed">{review.comment || 'Nguoi dung chua de lai nhan xet chi tiet.'}</p>
+                <p className="text-sm text-gray-700 mt-4 leading-relaxed">{review.comment || 'Người dùng chưa để lại nhận xét chi tiết.'}</p>
 
                 <div className="mt-4 space-y-2">
                   {(review.replies || []).map((reply) => (
@@ -605,7 +605,7 @@ const FoodDetailViewPage = () => {
                         value={replyInputs[review.id] || ''}
                         onChange={(event) => setReplyInputs((prev) => ({ ...prev, [review.id]: event.target.value }))}
                         rows={2}
-                        placeholder="Tra loi danh gia nay..."
+                        placeholder="Trả lời đánh giá này..."
                         className="w-full rounded-2xl border border-gray-200 px-3 py-2 text-sm bg-white text-gray-900 placeholder:text-gray-400 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-400"
                       />
                       <button
@@ -615,7 +615,7 @@ const FoodDetailViewPage = () => {
                         className="inline-flex items-center gap-2 rounded-xl bg-gray-900 text-white text-xs font-bold px-3 py-2 disabled:opacity-60"
                       >
                         {replyingReviewId === review.id ? <Loader2 size={14} className="animate-spin" /> : <SendHorizontal size={14} />}
-                        {replyingReviewId === review.id ? '?ang gui' : 'Gui reply'}
+                        {replyingReviewId === review.id ? 'Đang gửi' : 'Gửi phản hồi'}
                       </button>
                     </div>
                   </div>

@@ -3,19 +3,142 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.respondToRecommendation = exports.markRecommendationViewed = exports.getRecommendations = exports.generateRecommendations = void 0;
 const client_1 = require("@prisma/client");
 const prisma = new client_1.PrismaClient();
-const normalize = (value) => value.toLowerCase().trim();
+const normalize = (value) => value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+const includesAny = (text, keywords) => keywords.some((keyword) => text.includes(keyword));
+const toFoodText = (food) => normalize(`${food.name} ${food.category || ''} ${food.description || ''}`);
+const HEALTHY_KEYWORDS = ['luoc', 'hap', 'nuong', 'salad', 'rau', 'canh', 'boiled', 'steamed', 'grilled'];
+const VEGETABLE_KEYWORDS = ['rau', 'salad', 'cu', 'qua', 'vegetable', 'xanh'];
+const UNHEALTHY_KEYWORDS = [
+    'chien',
+    'ran',
+    'xao',
+    'deep fry',
+    'fried',
+    'tra sua',
+    'nuoc ngot',
+    'ga ran',
+    'xuc xich',
+    'khoai tay chien',
+    'kem',
+    'do an nhanh',
+    'fast food',
+];
+const WEIGHT_GAIN_SUPPORT_KEYWORDS = [
+    'com',
+    'com trang',
+    'gao',
+    'banh mi',
+    'khoai',
+    'oat',
+    'yen mach',
+    'bo',
+    'trung',
+    'sinh to',
+    'fruit',
+    'trai cay',
+    'hoa qua',
+];
+const RICE_FRUIT_KEYWORDS = ['com trang', 'trai cay dia', 'dia trai cay', 'fruit plate', 'fruit platter'];
+const FRUIT_DRINK_KEYWORDS = [
+    'trai cay',
+    'hoa qua',
+    'fruit',
+    'nuoc',
+    'beverage',
+    'drink',
+    'juice',
+    'smoothie',
+    'tra',
+    'tea',
+    'coffee',
+    'cafe',
+    'sinh to',
+];
+const analyzeFood = (food) => {
+    const text = toFoodText(food);
+    const calories = Number(food.calories || 0);
+    const protein = Number(food.protein || 0);
+    const fat = Number(food.fat || 0);
+    const carbs = Number(food.carbs || 0);
+    const proteinDensity = calories > 0 ? protein / calories : 0;
+    const fatRatioByCalories = calories > 0 ? (fat * 9) / calories : 0;
+    const carbRatioByCalories = calories > 0 ? (carbs * 4) / calories : 0;
+    const isHealthyStyle = includesAny(text, HEALTHY_KEYWORDS);
+    const hasVegetable = includesAny(text, VEGETABLE_KEYWORDS);
+    const isUnhealthyStyle = includesAny(text, UNHEALTHY_KEYWORDS);
+    const supportsWeightGain = includesAny(text, WEIGHT_GAIN_SUPPORT_KEYWORDS);
+    const isRiceOrFruit = includesAny(text, RICE_FRUIT_KEYWORDS);
+    const isFruitOrDrink = includesAny(text, FRUIT_DRINK_KEYWORDS);
+    return {
+        calories,
+        protein,
+        fat,
+        carbs,
+        proteinDensity,
+        fatRatioByCalories,
+        carbRatioByCalories,
+        isHealthyStyle,
+        hasVegetable,
+        isUnhealthyStyle,
+        supportsWeightGain,
+        isRiceOrFruit,
+        isFruitOrDrink,
+    };
+};
+const getPortionMultiplier = (goalType, food) => {
+    const analysis = analyzeFood(food);
+    if (analysis.isFruitOrDrink)
+        return 1;
+    if (goalType === 'WEIGHT_LOSS')
+        return 0.5;
+    if (goalType === 'WEIGHT_GAIN' || goalType === 'MUSCLE_GAIN')
+        return 1.5;
+    return 1;
+};
 const scoreByGoal = (goalType, food) => {
-    const proteinDensity = food.calories > 0 ? food.protein / food.calories : 0;
+    const a = analyzeFood(food);
     switch (goalType) {
-        case 'WEIGHT_LOSS':
-            return Math.max(0, 24 - food.calories / 15) + proteinDensity * 800;
-        case 'WEIGHT_GAIN':
-            return food.calories / 18 + proteinDensity * 500;
-        case 'MUSCLE_GAIN':
-            return proteinDensity * 1200 + food.protein;
+        case 'WEIGHT_LOSS': {
+            const calorieScore = Math.max(0, 32 - a.calories / 14);
+            const proteinScore = a.proteinDensity * 900;
+            const veggieScore = a.hasVegetable ? 14 : 0;
+            const healthyStyleScore = a.isHealthyStyle ? 10 : 0;
+            const unhealthyPenalty = a.isUnhealthyStyle ? 42 : 0;
+            const highCalPenalty = a.calories > 650 ? 35 : 0;
+            const fatPenalty = a.fatRatioByCalories > 0.42 ? 22 : 0;
+            const carbPenalty = a.carbs > 85 ? 12 : 0;
+            return calorieScore + proteinScore + veggieScore + healthyStyleScore - unhealthyPenalty - highCalPenalty - fatPenalty - carbPenalty;
+        }
+        case 'WEIGHT_GAIN': {
+            const calorieScore = a.calories / 12;
+            const proteinScore = a.proteinDensity * 750 + a.protein * 0.6;
+            const healthyStyleScore = a.isHealthyStyle ? 12 : 0;
+            const gainSupportScore = a.supportsWeightGain ? 18 : 0;
+            const riceFruitBonus = a.isRiceOrFruit ? 10 : 0;
+            const lowCalPenalty = a.calories < 180 ? 25 : 0;
+            const veryUnhealthyPenalty = a.isUnhealthyStyle ? 28 : 0;
+            const lowProteinPenalty = a.protein < 7 ? 12 : 0;
+            return calorieScore + proteinScore + healthyStyleScore + gainSupportScore + riceFruitBonus - lowCalPenalty - veryUnhealthyPenalty - lowProteinPenalty;
+        }
+        case 'MUSCLE_GAIN': {
+            const proteinScore = a.proteinDensity * 1400 + a.protein;
+            const carbSupportScore = a.carbs >= 22 ? 12 : -8;
+            const calorieSupportScore = a.calories >= 180 ? 10 : -14;
+            const unhealthyPenalty = a.isUnhealthyStyle ? 24 : 0;
+            return proteinScore + carbSupportScore + calorieSupportScore - unhealthyPenalty;
+        }
         case 'MAINTENANCE':
-        default:
-            return 12 - Math.abs(food.calories - 450) / 40 + proteinDensity * 600;
+        default: {
+            const calorieBalance = 14 - Math.abs(a.calories - 420) / 38;
+            const proteinScore = a.proteinDensity * 650;
+            const healthyStyleScore = a.isHealthyStyle ? 8 : 0;
+            const unhealthyPenalty = a.isUnhealthyStyle ? 16 : 0;
+            return calorieBalance + proteinScore + healthyStyleScore - unhealthyPenalty;
+        }
     }
 };
 const scoreByDietaryPreference = (dietaryPref, food) => {
@@ -34,16 +157,61 @@ const scoreByDietaryPreference = (dietaryPref, food) => {
     }
     return score;
 };
-const scoreByAllergy = (allergies, food) => {
-    if (!allergies.length)
-        return 0;
-    const foodText = normalize(`${food.name} ${food.category || ''}`);
-    const matched = allergies
-        .map((item) => normalize(item))
-        .filter((item) => item && foodText.includes(item));
-    if (matched.length > 0)
-        return -100;
-    return 0;
+const findMatchedAllergies = (allergies, food) => allergies
+    .map((item) => normalize(item))
+    .filter((item) => item && toFoodText(food).includes(item));
+const isGoalCompatible = (goalType, food) => {
+    const a = analyzeFood(food);
+    if (goalType === 'WEIGHT_LOSS') {
+        if (a.calories > 680)
+            return false;
+        if (a.fat > 32)
+            return false;
+        if (a.isUnhealthyStyle && !a.isHealthyStyle)
+            return false;
+        return true;
+    }
+    if (goalType === 'WEIGHT_GAIN') {
+        if (a.calories < 140)
+            return false;
+        if (a.protein < 6)
+            return false;
+        return true;
+    }
+    if (goalType === 'MUSCLE_GAIN') {
+        if (a.protein < 10)
+            return false;
+        if (a.calories < 150)
+            return false;
+        return true;
+    }
+    return true;
+};
+const buildGoalReason = (goalType, food) => {
+    const a = analyzeFood(food);
+    const reasons = [];
+    if (goalType === 'WEIGHT_GAIN' || goalType === 'MUSCLE_GAIN') {
+        if (a.supportsWeightGain)
+            reasons.push('ho tro tang can lanh manh');
+        if (a.isHealthyStyle)
+            reasons.push('uu tien cach che bien healthy');
+        if (a.isRiceOrFruit)
+            reasons.push('phu hop ket hop com trang/trai cay dia');
+    }
+    else if (goalType === 'WEIGHT_LOSS') {
+        if (a.hasVegetable)
+            reasons.push('nhieu rau xanh');
+        if (a.isHealthyStyle)
+            reasons.push('uu tien luoc/hap/nuong');
+        if (a.calories <= 450)
+            reasons.push('muc calo hop ly cho giam can');
+    }
+    else {
+        reasons.push('can bang cho muc tieu duy tri');
+    }
+    if (!reasons.length)
+        reasons.push('phu hop muc tieu hien tai');
+    return reasons;
 };
 const generateRecommendations = async (req, res) => {
     try {
@@ -70,6 +238,7 @@ const generateRecommendations = async (req, res) => {
                     id: true,
                     name: true,
                     category: true,
+                    description: true,
                     calories: true,
                     protein: true,
                     fat: true,
@@ -90,35 +259,42 @@ const generateRecommendations = async (req, res) => {
         const recentFoodIds = new Set(recentMeals
             .filter((item) => new Date(item.eatenAt) >= recentCutoff)
             .map((item) => item.foodId));
-        const scoredFoods = foods
+        const scoredRaw = foods
             .map((food) => {
+            const matchedAllergies = findMatchedAllergies(allergies, food);
+            const hasAllergyConflict = matchedAllergies.length > 0;
             const goalScore = scoreByGoal(goalType, food);
             const dietaryScore = scoreByDietaryPreference(dietaryPref, food);
-            const allergyScore = scoreByAllergy(allergies, food);
+            const allergyScore = hasAllergyConflict ? -400 : 0;
             const favoriteScore = favoriteIds.has(food.id) ? 12 : 0;
             const recentPenalty = recentFoodIds.has(food.id) ? -10 : 6;
             const popularityScore = Math.min(12, (food.popularity || 0) / 8);
             const score = goalScore + dietaryScore + allergyScore + favoriteScore + recentPenalty + popularityScore;
             const reasons = [];
+            const portion = getPortionMultiplier(goalType, food);
+            reasons.push(...buildGoalReason(goalType, food));
+            reasons.push(`khau phan de xuat ${portion.toFixed(1)}x`);
             if (favoriteIds.has(food.id))
                 reasons.push('duoc ban yeu thich');
             if (!recentFoodIds.has(food.id))
                 reasons.push('chua an gan day');
-            if (goalType === 'MUSCLE_GAIN' && food.protein >= 20)
-                reasons.push('protein cao');
-            if (goalType === 'WEIGHT_LOSS' && food.calories <= 450)
-                reasons.push('calo phu hop giam can');
             if (food.isVegan && dietaryPref.some((item) => normalize(item).includes('vegan')))
                 reasons.push('hop che do vegan');
-            if (!reasons.length)
-                reasons.push('phu hop muc tieu hien tai');
+            if (hasAllergyConflict)
+                reasons.push(`khong phu hop di ung: ${matchedAllergies.join(', ')}`);
             return {
                 food,
                 score,
-                reason: reasons.slice(0, 2).join(', '),
+                reason: Array.from(new Set(reasons)).slice(0, 3).join(', '),
+                hasAllergyConflict,
+                goalCompatible: isGoalCompatible(goalType, food),
             };
-        })
-            .filter((item) => item.score > -50)
+        });
+        const strictPool = scoredRaw.filter((item) => !item.hasAllergyConflict && item.goalCompatible);
+        const fallbackPool = scoredRaw.filter((item) => !item.hasAllergyConflict);
+        const candidatePool = strictPool.length > 0 ? strictPool : fallbackPool;
+        const scoredFoods = candidatePool
+            .filter((item) => item.score > -80)
             .sort((a, b) => b.score - a.score)
             .slice(0, limit);
         if (!scoredFoods.length) {

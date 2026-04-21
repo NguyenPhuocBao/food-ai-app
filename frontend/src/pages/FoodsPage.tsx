@@ -7,11 +7,15 @@ import { getAssetUrl } from '../services/api';
 import { useDebounce } from '../hooks/useDebounce';
 import type { FoodItem } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import { useLanguage } from '../contexts/LanguageContext';
 
 const FoodsPage = () => {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
+  const { language } = useLanguage();
+  const isEn = language === 'en';
+
   const initialPage = Number(searchParams.get('page') || 1);
   const [foods, setFoods] = useState<FoodItem[]>([]);
   const [popularFoods, setPopularFoods] = useState<FoodItem[]>([]);
@@ -46,7 +50,7 @@ const FoodsPage = () => {
       setCustomFoods(myCustomFoods);
     };
 
-    fetchMeta();
+    void fetchMeta();
   }, []);
 
   useEffect(() => {
@@ -61,14 +65,12 @@ const FoodsPage = () => {
       }
     };
 
-    fetchFoods();
+    void fetchFoods();
   }, [page, selectedCategory, debouncedSearch]);
 
   useEffect(() => {
     if (loading) return;
-    if (page > totalPages) {
-      setPage(totalPages);
-    }
+    if (page > totalPages) setPage(totalPages);
   }, [loading, page, totalPages]);
 
   useEffect(() => {
@@ -89,7 +91,7 @@ const FoodsPage = () => {
     const carbs = Number(customForm.carbs);
 
     if (!customForm.name.trim() || !Number.isFinite(calories) || !Number.isFinite(protein) || !Number.isFinite(fat) || !Number.isFinite(carbs)) {
-      toast.error('Nhap du thong tin mon ca nhan');
+      toast.error(isEn ? 'Please enter full custom food information' : 'Nhập đủ thông tin món cá nhân');
       return;
     }
 
@@ -103,7 +105,7 @@ const FoodsPage = () => {
         carbs,
       });
       setCustomForm({ name: '', calories: '', protein: '', fat: '', carbs: '' });
-      toast.success('Da tao mon ca nhan');
+      toast.success(isEn ? 'Custom food created' : 'Đã tạo món cá nhân');
       const [myFoods, result] = await Promise.all([
         getMyCustomFoods().catch(() => []),
         getFoods(page, 12, selectedCategory || undefined, debouncedSearch || undefined),
@@ -112,7 +114,7 @@ const FoodsPage = () => {
       setFoods(result.items);
       setTotalPages(result.pagination.totalPages || 1);
     } catch {
-      toast.error('Khong th? tao mon ca nhan');
+      toast.error(isEn ? 'Cannot create custom food' : 'Không thể tạo món cá nhân');
     } finally {
       setCreatingCustom(false);
     }
@@ -122,7 +124,7 @@ const FoodsPage = () => {
     setBootstrapping(true);
     try {
       const result = await bootstrapPopularFoods(240);
-      toast.success(`Da bo sung ${result.inserted} mon pho bien`);
+      toast.success(isEn ? `Added ${result.inserted} popular foods` : `Đã bổ sung ${result.inserted} món phổ biến`);
       const [categoryData, popularData] = await Promise.all([
         getCategories().catch(() => []),
         getPopularFoods(6).catch(() => []),
@@ -130,7 +132,7 @@ const FoodsPage = () => {
       setCategories(categoryData);
       setPopularFoods(popularData);
     } catch {
-      toast.error('Khong bootstrap duoc danh muc mon pho bien');
+      toast.error(isEn ? 'Cannot bootstrap popular foods catalog' : 'Không bootstrap được danh mục món phổ biến');
     } finally {
       setBootstrapping(false);
     }
@@ -141,21 +143,23 @@ const FoodsPage = () => {
       <section className="rounded-[32px] overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.28),_transparent_34%),linear-gradient(135deg,_#0f172a,_#111827_55%,_#14532d)] text-white shadow-xl">
         <div className="px-8 py-10 md:px-10 md:py-12 flex flex-col lg:flex-row gap-8 justify-between">
           <div className="max-w-2xl">
-            <p className="text-emerald-200 font-bold text-sm tracking-[0.2em] uppercase mb-4">Thu vien mon an</p>
+            <p className="text-emerald-200 font-bold text-sm tracking-[0.2em] uppercase mb-4">{isEn ? 'Food Library' : 'Thư viện món ăn'}</p>
             <h1 className="text-3xl md:text-5xl font-black leading-tight">
-              Khám phá món ăn và xem công thức ngay trên FoodAI
+              {isEn ? 'Explore foods and recipes on FoodAI' : 'Khám phá món ăn và xem công thức ngay trên FoodAI'}
             </h1>
             <p className="text-emerald-50/90 mt-4 max-w-xl leading-relaxed">
-              Tìm nhanh món ăn theo danh mục, xem chi tiết dinh dưỡng, đọc công thức nấu và thêm trực tiếp vào nhật ký ăn uống.
+              {isEn
+                ? 'Find foods by category, view nutrition details, check recipes, and add directly to your diary.'
+                : 'Tìm nhanh món ăn theo danh mục, xem chi tiết dinh dưỡng, đọc công thức nấu và thêm trực tiếp vào nhật ký ăn uống.'}
             </p>
           </div>
           <div className="grid grid-cols-2 gap-4 min-w-[280px]">
             <div className="rounded-[24px] bg-white/10 backdrop-blur-sm border border-white/10 p-5">
-              <p className="text-sm text-emerald-100">Món nổi bật</p>
+              <p className="text-sm text-emerald-100">{isEn ? 'Popular foods' : 'Món nổi bật'}</p>
               <p className="text-3xl font-black mt-2">{popularFoods.length}</p>
             </div>
             <div className="rounded-[24px] bg-white/10 backdrop-blur-sm border border-white/10 p-5">
-              <p className="text-sm text-emerald-100">Danh mục</p>
+              <p className="text-sm text-emerald-100">{isEn ? 'Categories' : 'Danh mục'}</p>
               <p className="text-3xl font-black mt-2">{categories.length}</p>
             </div>
           </div>
@@ -173,13 +177,13 @@ const FoodsPage = () => {
                   setSearch(event.target.value);
                   setPage(1);
                 }}
-                placeholder="Tìm món ăn..."
+                placeholder={isEn ? 'Search foods...' : 'Tìm món ăn...'}
                 className="w-full rounded-2xl border-0 bg-gray-50 pl-11 pr-4 py-3 text-sm text-gray-900 focus:ring-2 focus:ring-emerald-500/20"
               />
             </div>
 
             <div className="mt-5">
-              <p className="text-sm font-black text-gray-900 mb-3">Danh mục</p>
+              <p className="text-sm font-black text-gray-900 mb-3">{isEn ? 'Categories' : 'Danh mục'}</p>
               <div className="flex flex-wrap gap-2">
                 <button
                   onClick={() => {
@@ -190,7 +194,7 @@ const FoodsPage = () => {
                     !selectedCategory ? 'bg-emerald-500 text-white' : 'bg-gray-100 text-gray-600'
                   }`}
                 >
-                  Tất cả
+                  {isEn ? 'All' : 'Tất cả'}
                 </button>
                 {categories.map((item) => (
                   <button
@@ -213,7 +217,7 @@ const FoodsPage = () => {
           <div className="bg-white rounded-[28px] border border-gray-100 shadow-sm p-5">
             <div className="flex items-center gap-2 mb-4">
               <Sparkles size={18} className="text-amber-500" />
-              <p className="font-black text-gray-900">Món nổi bật</p>
+              <p className="font-black text-gray-900">{isEn ? 'Popular foods' : 'Món nổi bật'}</p>
             </div>
             <div className="space-y-3">
               {popularFoods.map((food) => (
@@ -240,11 +244,11 @@ const FoodsPage = () => {
           </div>
 
           <div className="bg-white rounded-[28px] border border-gray-100 shadow-sm p-5 space-y-3">
-            <p className="font-black text-gray-900">Mon ca nhan</p>
+            <p className="font-black text-gray-900">{isEn ? 'Custom food' : 'Món cá nhân'}</p>
             <input
               value={customForm.name}
               onChange={(event) => setCustomForm((prev) => ({ ...prev, name: event.target.value }))}
-              placeholder="Ten mon"
+              placeholder={isEn ? 'Food name' : 'Tên món'}
               className="w-full rounded-xl bg-gray-50 border-0 px-3 py-2 text-sm"
             />
             <div className="grid grid-cols-2 gap-2">
@@ -278,7 +282,7 @@ const FoodsPage = () => {
               disabled={creatingCustom}
               className="w-full rounded-xl bg-emerald-500 text-white text-sm font-bold py-2 hover:bg-emerald-600 disabled:opacity-60"
             >
-              {creatingCustom ? 'Dang tao...' : 'Tao mon ca nhan'}
+              {creatingCustom ? (isEn ? 'Creating...' : 'Đang tạo...') : (isEn ? 'Create custom food' : 'Tạo món cá nhân')}
             </button>
             <div className="max-h-40 overflow-y-auto space-y-2">
               {customFoods.slice(0, 6).map((food) => (
@@ -288,7 +292,7 @@ const FoodsPage = () => {
                 </div>
               ))}
               {!customFoods.length && (
-                <p className="text-xs text-gray-400">Chua co mon ca nhan.</p>
+                <p className="text-xs text-gray-400">{isEn ? 'No custom foods yet.' : 'Chưa có món cá nhân.'}</p>
               )}
             </div>
           </div>
@@ -296,13 +300,15 @@ const FoodsPage = () => {
           {user?.role === 'ADMIN' && (
             <div className="bg-white rounded-[28px] border border-gray-100 shadow-sm p-5 space-y-3">
               <p className="font-black text-gray-900">Data Strategy</p>
-              <p className="text-xs text-gray-500">Khoi tao 200+ mon pho bien de nang cap du lieu ban dau.</p>
+              <p className="text-xs text-gray-500">
+                {isEn ? 'Bootstrap 200+ popular foods to enrich initial data.' : 'Khởi tạo 200+ món phổ biến để nâng cấp dữ liệu ban đầu.'}
+              </p>
               <button
                 onClick={handleBootstrapPopularFoods}
                 disabled={bootstrapping}
                 className="w-full rounded-xl bg-gray-900 text-white text-sm font-bold py-2 hover:bg-black disabled:opacity-60"
               >
-                {bootstrapping ? 'Dang bootstrap...' : 'Bootstrap mon pho bien'}
+                {bootstrapping ? (isEn ? 'Bootstrapping...' : 'Đang bootstrap...') : (isEn ? 'Bootstrap popular foods' : 'Bootstrap món phổ biến')}
               </button>
             </div>
           )}
@@ -338,7 +344,7 @@ const FoodsPage = () => {
                         </div>
                         {food.recipe && (
                           <span className="shrink-0 rounded-full bg-amber-50 text-amber-700 px-3 py-1 text-xs font-bold">
-                            Có công thức
+                            {isEn ? 'Has recipe' : 'Có công thức'}
                           </span>
                         )}
                       </div>
@@ -365,10 +371,10 @@ const FoodsPage = () => {
                       <div className="flex items-center justify-between text-sm font-bold text-gray-900">
                         <span className="flex items-center gap-2 text-amber-600">
                           <Flame size={16} />
-                          {food.popularity} lượt quan tâm
+                          {isEn ? `${food.popularity} interests` : `${food.popularity} lượt quan tâm`}
                         </span>
                         <span className="inline-flex items-center gap-1 text-emerald-600">
-                          Xem chi tiết <ArrowRight size={16} />
+                          {isEn ? 'View details' : 'Xem chi tiết'} <ArrowRight size={16} />
                         </span>
                       </div>
                     </div>
@@ -382,17 +388,17 @@ const FoodsPage = () => {
                   disabled={page === 1}
                   className="px-4 py-2 rounded-2xl bg-white border border-gray-100 text-sm font-bold text-gray-700 disabled:opacity-40"
                 >
-                  Trước
+                  {isEn ? 'Previous' : 'Trước'}
                 </button>
                 <span className="text-sm font-bold text-gray-500">
-                  Trang {page} / {totalPages}
+                  {isEn ? `Page ${page} / ${totalPages}` : `Trang ${page} / ${totalPages}`}
                 </span>
                 <button
                   onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
                   disabled={page === totalPages}
                   className="px-4 py-2 rounded-2xl bg-white border border-gray-100 text-sm font-bold text-gray-700 disabled:opacity-40"
                 >
-                  Sau
+                  {isEn ? 'Next' : 'Sau'}
                 </button>
               </div>
             </>

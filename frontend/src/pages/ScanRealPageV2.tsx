@@ -25,10 +25,10 @@ import { searchFoods } from '../services/food.service';
 import type { FoodItem, Meal } from '../types';
 
 const MEAL_OPTIONS: Array<{ value: Meal['mealType']; label: string }> = [
-  { value: 'BREAKFAST', label: 'Bua sang' },
-  { value: 'LUNCH', label: 'Bua trua' },
-  { value: 'DINNER', label: 'Bua toi' },
-  { value: 'SNACK', label: 'Bua phu' },
+  { value: 'BREAKFAST', label: 'Bữa sáng' },
+  { value: 'LUNCH', label: 'Bữa trưa' },
+  { value: 'DINNER', label: 'Bữa tối' },
+  { value: 'SNACK', label: 'Bữa phụ' },
 ];
 
 const mapFoodToSuggestion = (
@@ -59,7 +59,7 @@ const extractHistoryName = (item: ScanHistoryItem) =>
   item.result?.prediction?.data?.food_name ||
   item.result?.top_prediction?.class_name ||
   item.result?.data?.food_name ||
-  'Khong xac dinh';
+  'Không xác định';
 
 const ScanRealPageV2 = () => {
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -159,9 +159,9 @@ const ScanRealPageV2 = () => {
       const result = await analyzeFoodImage(file);
       setScanResult(result);
       await loadHistory();
-      toast.success('Da phan tich anh thanh cong');
+      toast.success('Đã phân tích ảnh thành công');
     } catch (error: any) {
-      toast.error(error?.response?.data?.error || 'Khong th? phan tich anh');
+      toast.error(error?.response?.data?.error || 'Không thềEphân tích ảnh');
     } finally {
       setIsScanning(false);
     }
@@ -186,10 +186,10 @@ const ScanRealPageV2 = () => {
     try {
       await confirmScanFood(scanResult.scanId, selectedFood.id).catch(() => null);
       await addMeal(selectedFood.id, mealType, quantity);
-      toast.success('Da luu mon an vao nhat ky');
+      toast.success('Đã lưu món ăn vào nhật ký');
       await loadHistory();
     } catch {
-      toast.error('Khong th? luu mon an vao nhat ky');
+      toast.error('Không thềElưu món ăn vào nhật ký');
     } finally {
       setSavingMeal(false);
     }
@@ -202,10 +202,10 @@ const ScanRealPageV2 = () => {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 h-full">
       <div className="mb-6">
         <h1 className="text-2xl font-black text-gray-900 tracking-tight flex items-center gap-2">
-          <Camera size={28} className="text-emerald-500" /> Scan mon an bang AI
+          <Camera size={28} className="text-emerald-500" /> Scan món ăn bằng AI
         </h1>
         <p className="text-gray-500 text-sm mt-1">
-          Tai anh mon an de AI nhan dien, sau do chon mon phu hop va luu vao nhat ky bua an.
+          Tải ảnh món ăn đềEAI nhận diện, sau đó chọn món phù hợp và lưu vào nhật ký bữa ăn.
         </p>
       </div>
 
@@ -245,7 +245,7 @@ const ScanRealPageV2 = () => {
               onClick={() => inputRef.current?.click()}
               className="bg-white/20 hover:bg-white/30 backdrop-blur-md text-white px-5 py-3 rounded-2xl font-medium transition-colors flex items-center gap-2"
             >
-              <UploadCloud size={20} /> Tai anh len
+              <UploadCloud size={20} /> Tải ảnh lên
             </button>
             <button
               onClick={() => inputRef.current?.click()}
@@ -258,7 +258,7 @@ const ScanRealPageV2 = () => {
               onClick={handleReset}
               className="bg-white/20 hover:bg-white/30 backdrop-blur-md text-white px-5 py-3 rounded-2xl font-medium transition-colors flex items-center gap-2"
             >
-              <RefreshCcw size={20} /> Lam moi
+              <RefreshCcw size={20} /> Làm mới
             </button>
           </div>
         </div>
@@ -270,7 +270,7 @@ const ScanRealPageV2 = () => {
                 <div className="mb-4 flex items-start justify-between gap-4">
                   <div>
                     <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold mb-3 border border-emerald-100">
-                      <CheckCircle2 size={14} /> Do tin cay {Math.round(scanResult.confidence)}%
+                      <CheckCircle2 size={14} /> ĐềEtin cậy {Math.round(scanResult.confidence)}%
                     </div>
                     <h2 className="text-2xl font-bold text-gray-900 leading-tight">{scanResult.foodName}</h2>
                   </div>
@@ -278,18 +278,18 @@ const ScanRealPageV2 = () => {
 
                 {!!scanResult?.prediction?.meta?.aiError && (
                   <div className="mb-4 rounded-2xl bg-amber-50 border border-amber-100 p-3 text-amber-800 text-sm">
-                    Khong ket noi duoc AI service. Ban van co the chon mon thu cong ben duoi.
+                    Không kết nối được AI service. Bạn vẫn có thềEchọn món thủ công bên dưới.
                   </div>
                 )}
 
                 <div className="mb-4">
-                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Tim mon trong database</label>
+                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Tìm món trong database</label>
                   <div className="relative mt-1">
                     <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                     <input
                       value={foodQuery}
                       onChange={(event) => setFoodQuery(event.target.value)}
-                      placeholder="Nhap ten mon an..."
+                      placeholder="Nhập tên món ăn..."
                       className="w-full pl-9 pr-3 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-emerald-200 focus:border-emerald-500"
                     />
                     {searchingFoods && <Loader2 size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 animate-spin" />}
@@ -317,7 +317,7 @@ const ScanRealPageV2 = () => {
                   <>
                     <div className="bg-emerald-600 text-white rounded-[24px] p-5 shadow-lg shadow-emerald-500/20 mb-4 flex justify-between items-center">
                       <div>
-                        <p className="text-emerald-100 text-sm font-medium">Tong nang luong</p>
+                        <p className="text-emerald-100 text-sm font-medium">Tổng năng lượng</p>
                         <p className="text-4xl font-black">
                           {selectedFood.calories} <span className="text-xl font-medium text-emerald-200">kcal</span>
                         </p>
@@ -342,7 +342,7 @@ const ScanRealPageV2 = () => {
 
                     <div className="grid grid-cols-2 gap-3 mb-6">
                       <div>
-                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Loai bua</label>
+                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Loại bữa</label>
                         <select
                           value={mealType}
                           onChange={(event) => setMealType(event.target.value as Meal['mealType'])}
@@ -356,7 +356,7 @@ const ScanRealPageV2 = () => {
                         </select>
                       </div>
                       <div>
-                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">So luong</label>
+                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">SềElượng</label>
                         <input
                           type="number"
                           min={0.1}
@@ -373,12 +373,12 @@ const ScanRealPageV2 = () => {
                       disabled={savingMeal}
                       className="w-full py-4 text-center rounded-2xl font-bold text-lg text-white bg-gray-900 hover:bg-black transition-colors mb-3 disabled:opacity-70"
                     >
-                      {savingMeal ? '?ang luu...' : 'Luu vao nhat ky An uong'}
+                      {savingMeal ? 'Đang lưu...' : 'Lưu vào nhật ký ăn uống'}
                     </button>
                   </>
                 ) : (
                   <div className="rounded-[24px] bg-amber-50 border border-amber-100 p-5 text-amber-800 text-sm leading-relaxed mb-4">
-                    Chua tim thay mon phu hop. Hay nhap ten mon va chon tu danh sach de luu.
+                    Chưa tìm thấy món phù hợp. Hãy nhập tên món và chọn từ danh sách đềElưu.
                   </div>
                 )}
 
@@ -386,7 +386,7 @@ const ScanRealPageV2 = () => {
                   onClick={handleReset}
                   className="w-full py-3 text-center rounded-2xl font-bold text-gray-500 hover:bg-gray-100 transition-colors"
                 >
-                  Scan mon khac
+                  Scan món khác
                 </button>
               </motion.div>
             ) : (
@@ -394,9 +394,9 @@ const ScanRealPageV2 = () => {
                 <div className="w-24 h-24 rounded-full bg-gray-50 flex items-center justify-center mb-4">
                   <Camera size={40} className="text-gray-300" />
                 </div>
-                <p className="font-medium text-gray-500">{isScanning ? 'Dang phan tich anh...' : 'Chua co ket qua scan'}</p>
+                <p className="font-medium text-gray-500">{isScanning ? 'Đang phân tích ảnh...' : 'Chưa có kết quả scan'}</p>
                 <p className="text-sm mt-2">
-                  Chon anh mon an de AI nhan dien va gui ? thong tin dinh duong.
+                  Chọn ảnh món ăn đềEAI nhận diện và gửi đủ thông tin dinh dưỡng.
                 </p>
               </div>
             )}
@@ -405,7 +405,7 @@ const ScanRealPageV2 = () => {
           <div className="bg-white border border-gray-100 rounded-[32px] p-6 shadow-sm">
             <div className="flex items-center gap-2 mb-4">
               <History size={18} className="text-gray-500" />
-              <h3 className="font-black text-gray-900">Lich su scan gan day</h3>
+              <h3 className="font-black text-gray-900">Lịch sử scan gần đây</h3>
             </div>
 
             {loadingHistory ? (
@@ -413,7 +413,7 @@ const ScanRealPageV2 = () => {
                 <Loader2 size={20} className="animate-spin text-gray-400" />
               </div>
             ) : history.length === 0 ? (
-              <p className="text-sm text-gray-400">Ban chua co luot scan nao.</p>
+              <p className="text-sm text-gray-400">Bạn chưa có lượt scan nào.</p>
             ) : (
               <div className="space-y-3">
                 {history.slice(0, 5).map((item) => {
@@ -430,7 +430,7 @@ const ScanRealPageV2 = () => {
                       <div className="min-w-0">
                         <p className="font-bold text-sm text-gray-900 truncate">{historyFoodName}</p>
                         <p className="text-xs text-gray-400">
-                          {Math.round(item.confidence)}% · {new Date(item.createdAt).toLocaleString('vi-VN')}
+                          {Math.round(item.confidence)}% ? {new Date(item.createdAt).toLocaleString('vi-VN')}
                         </p>
                       </div>
                     </div>
@@ -446,3 +446,4 @@ const ScanRealPageV2 = () => {
 };
 
 export default ScanRealPageV2;
+

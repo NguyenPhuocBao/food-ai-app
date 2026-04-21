@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Loader2, Lock, LogOut, Save } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useLanguage } from '../contexts/LanguageContext';
 import { changePassword, updateProfile } from '../services/auth.service';
 import { getPersonalization, updateRoutine } from '../services/health.service';
 import type { User } from '../types';
@@ -47,27 +48,9 @@ const DEFAULT_ROUTINE: RoutineFormState = {
   remindersEnabled: true,
 };
 
-const ACTIVITY_OPTIONS: Array<{ value: ActivityLevel; label: string }> = [
-  { value: 'SEDENTARY', label: 'It van dong' },
-  { value: 'LIGHT', label: 'Van dong nhe' },
-  { value: 'MODERATE', label: 'Van dong vua' },
-  { value: 'ACTIVE', label: 'Van dong cao' },
-  { value: 'VERY_ACTIVE', label: 'Van dong rat cao' },
-];
-
-const GOAL_OPTIONS: Array<{ value: GoalType; label: string }> = [
-  { value: 'WEIGHT_LOSS', label: 'Giam can' },
-  { value: 'MAINTENANCE', label: 'Duy tri' },
-  { value: 'WEIGHT_GAIN', label: 'Tang can' },
-  { value: 'MUSCLE_GAIN', label: 'Tang co' },
-];
-
-const GENDER_OPTIONS: Array<{ value: GenderValue; label: string }> = [
-  { value: '', label: 'Chua chon' },
-  { value: 'MALE', label: 'Nam' },
-  { value: 'FEMALE', label: 'Nu' },
-  { value: 'OTHER', label: 'Khac' },
-];
+const ACTIVITY_OPTIONS: ActivityLevel[] = ['SEDENTARY', 'LIGHT', 'MODERATE', 'ACTIVE', 'VERY_ACTIVE'];
+const GOAL_OPTIONS: GoalType[] = ['WEIGHT_LOSS', 'MAINTENANCE', 'WEIGHT_GAIN', 'MUSCLE_GAIN'];
+const GENDER_OPTIONS: GenderValue[] = ['', 'MALE', 'FEMALE', 'OTHER'];
 
 const toDateInputValue = (raw?: string) => {
   if (!raw) return '';
@@ -119,16 +102,17 @@ const buildInitialForm = (user: User | null): ProfileFormState => {
   };
 };
 
-const getBmiStatus = (bmi: number | null) => {
-  if (bmi === null) return '--';
-  if (bmi < 18.5) return 'Thieu can';
-  if (bmi < 25) return 'Binh thuong';
-  if (bmi < 30) return 'Thua can';
-  return 'Beo phi';
+const getBmiStatus = (bmi: number | null, t: (key: string) => string) => {
+  if (bmi === null) return t('profile.bmi.na');
+  if (bmi < 18.5) return t('profile.bmi.underweight');
+  if (bmi < 25) return t('profile.bmi.normal');
+  if (bmi < 30) return t('profile.bmi.overweight');
+  return t('profile.bmi.obese');
 };
 
 const ProfilePageV2 = () => {
   const { user, logout, refreshUser } = useAuth();
+  const { language, setLanguage, t } = useLanguage();
   const [initialForm, setInitialForm] = useState<ProfileFormState>(buildInitialForm(user));
   const [form, setForm] = useState<ProfileFormState>(buildInitialForm(user));
   const [isSaving, setIsSaving] = useState(false);
@@ -184,6 +168,37 @@ const ProfilePageV2 = () => {
     return Number((weight / (heightMeter * heightMeter)).toFixed(1));
   })();
 
+  const getActivityLabel = (value: ActivityLevel) => {
+    const map: Record<ActivityLevel, string> = {
+      SEDENTARY: t('profile.activity.sedentary'),
+      LIGHT: t('profile.activity.light'),
+      MODERATE: t('profile.activity.moderate'),
+      ACTIVE: t('profile.activity.active'),
+      VERY_ACTIVE: t('profile.activity.veryActive'),
+    };
+    return map[value];
+  };
+
+  const getGoalLabel = (value: GoalType) => {
+    const map: Record<GoalType, string> = {
+      WEIGHT_LOSS: t('profile.goal.weightLoss'),
+      MAINTENANCE: t('profile.goal.maintenance'),
+      WEIGHT_GAIN: t('profile.goal.weightGain'),
+      MUSCLE_GAIN: t('profile.goal.muscleGain'),
+    };
+    return map[value];
+  };
+
+  const getGenderLabel = (value: GenderValue) => {
+    const map: Record<GenderValue, string> = {
+      '': t('profile.gender.none'),
+      MALE: t('profile.gender.male'),
+      FEMALE: t('profile.gender.female'),
+      OTHER: t('profile.gender.other'),
+    };
+    return map[value];
+  };
+
   const handleInputChange = (
     event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => {
@@ -216,9 +231,9 @@ const ProfilePageV2 = () => {
       });
 
       await refreshUser();
-      toast.success('Da cap nhat profile');
+      toast.success(t('profile.toast.profileUpdated'));
     } catch (error: any) {
-      toast.error(error?.response?.data?.error || 'Khong th? cap nhat profile');
+      toast.error(error?.response?.data?.error || t('profile.toast.profileUpdateFailed'));
     } finally {
       setIsSaving(false);
     }
@@ -240,9 +255,9 @@ const ProfilePageV2 = () => {
         waterGoalMl: Number(routine.waterGoalMl) || 2200,
         remindersEnabled: routine.remindersEnabled,
       });
-      toast.success('Da cap nhat lich sinh hoat');
+      toast.success(t('profile.toast.routineUpdated'));
     } catch (error: any) {
-      toast.error(error?.response?.data?.error || 'Khong th? cap nhat lich sinh hoat');
+      toast.error(error?.response?.data?.error || t('profile.toast.routineFailed'));
     } finally {
       setRoutineSaving(false);
     }
@@ -250,15 +265,15 @@ const ProfilePageV2 = () => {
 
   const handleChangePassword = async () => {
     if (!currentPassword || !newPassword || !confirmPassword) {
-      toast.error('Nhap day du thong tin doi mat khau');
+      toast.error(t('profile.toast.passwordRequired'));
       return;
     }
     if (newPassword.length < 6) {
-      toast.error('Mat khau moi can it nhat 6 ky tu');
+      toast.error(t('profile.toast.passwordMin'));
       return;
     }
     if (newPassword !== confirmPassword) {
-      toast.error('Xac nhan mat khau khong khop');
+      toast.error(t('profile.toast.passwordMismatch'));
       return;
     }
 
@@ -268,9 +283,9 @@ const ProfilePageV2 = () => {
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-      toast.success('Da doi mat khau');
+      toast.success(t('profile.toast.passwordChanged'));
     } catch (error: any) {
-      toast.error(error?.response?.data?.error || 'Khong th? doi mat khau');
+      toast.error(error?.response?.data?.error || t('profile.toast.passwordChangeFailed'));
     } finally {
       setIsChangingPassword(false);
     }
@@ -281,9 +296,9 @@ const ProfilePageV2 = () => {
       <section className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-700 rounded-3xl p-6 md:p-8">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-black text-gray-900 dark:text-slate-100">Thong tin ca nhan</h1>
+            <h1 className="text-2xl font-black text-gray-900 dark:text-slate-100">{t('profile.title')}</h1>
             <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">
-              Cap nhat profile, muc tieu dinh duong va thong so co the.
+              {t('profile.subtitle')}
             </p>
           </div>
           <button
@@ -291,7 +306,7 @@ const ProfilePageV2 = () => {
             className="inline-flex items-center gap-2 rounded-xl bg-red-50 text-red-600 px-4 py-2 text-sm font-bold"
           >
             <LogOut size={16} />
-            Dang xuat
+            {t('profile.logout')}
           </button>
         </div>
       </section>
@@ -300,7 +315,7 @@ const ProfilePageV2 = () => {
         <div className="lg:col-span-2 bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-700 rounded-3xl p-6 space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <label className="block">
-              <span className="text-sm font-bold text-gray-700 dark:text-slate-300">Ho va ten</span>
+              <span className="text-sm font-bold text-gray-700 dark:text-slate-300">{t('profile.fullName')}</span>
               <input
                 name="fullName"
                 value={form.fullName}
@@ -310,7 +325,7 @@ const ProfilePageV2 = () => {
             </label>
 
             <label className="block">
-              <span className="text-sm font-bold text-gray-700 dark:text-slate-300">Email</span>
+              <span className="text-sm font-bold text-gray-700 dark:text-slate-300">{t('profile.email')}</span>
               <input
                 value={user?.email || ''}
                 disabled
@@ -319,7 +334,7 @@ const ProfilePageV2 = () => {
             </label>
 
             <label className="block">
-              <span className="text-sm font-bold text-gray-700 dark:text-slate-300">Gioi tinh</span>
+              <span className="text-sm font-bold text-gray-700 dark:text-slate-300">{t('profile.gender')}</span>
               <select
                 name="gender"
                 value={form.gender}
@@ -327,15 +342,15 @@ const ProfilePageV2 = () => {
                 className="mt-2 w-full rounded-xl border border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-800 px-4 py-2.5 text-gray-900 dark:text-slate-100"
               >
                 {GENDER_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
+                  <option key={option} value={option}>
+                    {getGenderLabel(option)}
                   </option>
                 ))}
               </select>
             </label>
 
             <label className="block">
-              <span className="text-sm font-bold text-gray-700 dark:text-slate-300">Ngay sinh</span>
+              <span className="text-sm font-bold text-gray-700 dark:text-slate-300">{t('profile.dateOfBirth')}</span>
               <input
                 type="date"
                 name="dateOfBirth"
@@ -348,7 +363,7 @@ const ProfilePageV2 = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <label className="block">
-              <span className="text-sm font-bold text-gray-700 dark:text-slate-300">Chieu cao (cm)</span>
+              <span className="text-sm font-bold text-gray-700 dark:text-slate-300">{t('profile.height')}</span>
               <input
                 type="number"
                 name="height"
@@ -359,7 +374,7 @@ const ProfilePageV2 = () => {
             </label>
 
             <label className="block">
-              <span className="text-sm font-bold text-gray-700 dark:text-slate-300">Can nang (kg)</span>
+              <span className="text-sm font-bold text-gray-700 dark:text-slate-300">{t('profile.weight')}</span>
               <input
                 type="number"
                 name="weight"
@@ -370,7 +385,7 @@ const ProfilePageV2 = () => {
             </label>
 
             <label className="block">
-              <span className="text-sm font-bold text-gray-700 dark:text-slate-300">Muc van dong</span>
+              <span className="text-sm font-bold text-gray-700 dark:text-slate-300">{t('profile.activityLevel')}</span>
               <select
                 name="activityLevel"
                 value={form.activityLevel}
@@ -378,8 +393,8 @@ const ProfilePageV2 = () => {
                 className="mt-2 w-full rounded-xl border border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-800 px-4 py-2.5 text-gray-900 dark:text-slate-100"
               >
                 {ACTIVITY_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
+                  <option key={option} value={option}>
+                    {getActivityLabel(option)}
                   </option>
                 ))}
               </select>
@@ -388,7 +403,7 @@ const ProfilePageV2 = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <label className="block">
-              <span className="text-sm font-bold text-gray-700 dark:text-slate-300">Che do an uu tien</span>
+              <span className="text-sm font-bold text-gray-700 dark:text-slate-300">{t('profile.dietaryPref')}</span>
               <textarea
                 name="dietaryPrefText"
                 value={form.dietaryPrefText}
@@ -400,7 +415,7 @@ const ProfilePageV2 = () => {
             </label>
 
             <label className="block">
-              <span className="text-sm font-bold text-gray-700 dark:text-slate-300">Di ung</span>
+              <span className="text-sm font-bold text-gray-700 dark:text-slate-300">{t('profile.allergies')}</span>
               <textarea
                 name="allergiesText"
                 value={form.allergiesText}
@@ -413,11 +428,11 @@ const ProfilePageV2 = () => {
           </div>
 
           <div className="border-t border-gray-100 dark:border-slate-700 pt-6 space-y-4">
-            <h2 className="text-lg font-black text-gray-900 dark:text-slate-100">Muc tieu dinh duong</h2>
+            <h2 className="text-lg font-black text-gray-900 dark:text-slate-100">{t('profile.nutritionGoals')}</h2>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <label className="block">
-                <span className="text-sm font-bold text-gray-700 dark:text-slate-300">Goal type</span>
+                <span className="text-sm font-bold text-gray-700 dark:text-slate-300">{t('profile.goalType')}</span>
                 <select
                   name="goalType"
                   value={form.goalType}
@@ -425,15 +440,15 @@ const ProfilePageV2 = () => {
                   className="mt-2 w-full rounded-xl border border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-800 px-4 py-2.5 text-gray-900 dark:text-slate-100"
                 >
                   {GOAL_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
+                    <option key={option} value={option}>
+                      {getGoalLabel(option)}
                     </option>
                   ))}
                 </select>
               </label>
 
               <label className="block">
-                <span className="text-sm font-bold text-gray-700 dark:text-slate-300">Target can nang (kg)</span>
+                <span className="text-sm font-bold text-gray-700 dark:text-slate-300">{t('profile.targetWeight')}</span>
                 <input
                   type="number"
                   name="targetWeight"
@@ -446,7 +461,7 @@ const ProfilePageV2 = () => {
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <label className="block">
-                <span className="text-sm font-bold text-gray-700 dark:text-slate-300">Calories</span>
+                <span className="text-sm font-bold text-gray-700 dark:text-slate-300">{t('profile.targetCalories')}</span>
                 <input
                   type="number"
                   name="targetCalories"
@@ -456,7 +471,7 @@ const ProfilePageV2 = () => {
                 />
               </label>
               <label className="block">
-                <span className="text-sm font-bold text-gray-700 dark:text-slate-300">Protein (g)</span>
+                <span className="text-sm font-bold text-gray-700 dark:text-slate-300">{t('profile.targetProtein')}</span>
                 <input
                   type="number"
                   name="targetProtein"
@@ -466,7 +481,7 @@ const ProfilePageV2 = () => {
                 />
               </label>
               <label className="block">
-                <span className="text-sm font-bold text-gray-700 dark:text-slate-300">Fat (g)</span>
+                <span className="text-sm font-bold text-gray-700 dark:text-slate-300">{t('profile.targetFat')}</span>
                 <input
                   type="number"
                   name="targetFat"
@@ -476,7 +491,7 @@ const ProfilePageV2 = () => {
                 />
               </label>
               <label className="block">
-                <span className="text-sm font-bold text-gray-700 dark:text-slate-300">Carbs (g)</span>
+                <span className="text-sm font-bold text-gray-700 dark:text-slate-300">{t('profile.targetCarbs')}</span>
                 <input
                   type="number"
                   name="targetCarbs"
@@ -490,13 +505,13 @@ const ProfilePageV2 = () => {
 
           <div className="border-t border-gray-100 dark:border-slate-700 pt-6 space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-black text-gray-900 dark:text-slate-100">Lich sinh hoat & nhac nuoc</h2>
+              <h2 className="text-lg font-black text-gray-900 dark:text-slate-100">{t('profile.routineTitle')}</h2>
               {routineLoading && <Loader2 size={16} className="animate-spin text-gray-400" />}
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               <label className="block">
-                <span className="text-sm font-bold text-gray-700 dark:text-slate-300">Thuc day</span>
+                <span className="text-sm font-bold text-gray-700 dark:text-slate-300">{t('profile.wakeUpAt')}</span>
                 <input
                   type="time"
                   value={routine.wakeUpAt}
@@ -505,7 +520,7 @@ const ProfilePageV2 = () => {
                 />
               </label>
               <label className="block">
-                <span className="text-sm font-bold text-gray-700 dark:text-slate-300">An sang</span>
+                <span className="text-sm font-bold text-gray-700 dark:text-slate-300">{t('profile.breakfastAt')}</span>
                 <input
                   type="time"
                   value={routine.breakfastAt}
@@ -514,7 +529,7 @@ const ProfilePageV2 = () => {
                 />
               </label>
               <label className="block">
-                <span className="text-sm font-bold text-gray-700 dark:text-slate-300">An trua</span>
+                <span className="text-sm font-bold text-gray-700 dark:text-slate-300">{t('profile.lunchAt')}</span>
                 <input
                   type="time"
                   value={routine.lunchAt}
@@ -523,7 +538,7 @@ const ProfilePageV2 = () => {
                 />
               </label>
               <label className="block">
-                <span className="text-sm font-bold text-gray-700 dark:text-slate-300">An toi</span>
+                <span className="text-sm font-bold text-gray-700 dark:text-slate-300">{t('profile.dinnerAt')}</span>
                 <input
                   type="time"
                   value={routine.dinnerAt}
@@ -532,7 +547,7 @@ const ProfilePageV2 = () => {
                 />
               </label>
               <label className="block">
-                <span className="text-sm font-bold text-gray-700 dark:text-slate-300">Di ngu</span>
+                <span className="text-sm font-bold text-gray-700 dark:text-slate-300">{t('profile.sleepAt')}</span>
                 <input
                   type="time"
                   value={routine.sleepAt}
@@ -541,7 +556,7 @@ const ProfilePageV2 = () => {
                 />
               </label>
               <label className="block">
-                <span className="text-sm font-bold text-gray-700 dark:text-slate-300">Muc nuoc (ml)</span>
+                <span className="text-sm font-bold text-gray-700 dark:text-slate-300">{t('profile.waterGoal')}</span>
                 <input
                   type="number"
                   value={routine.waterGoalMl}
@@ -557,7 +572,7 @@ const ProfilePageV2 = () => {
                 checked={routine.remindersEnabled}
                 onChange={(event) => handleRoutineChange('remindersEnabled', event.target.checked)}
               />
-              Bat nhac nho uong nuoc va bua an
+              {t('profile.reminders')}
             </label>
 
             <div className="flex justify-end">
@@ -568,7 +583,7 @@ const ProfilePageV2 = () => {
                 className="inline-flex items-center gap-2 rounded-xl bg-sky-500 hover:bg-sky-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-60"
               >
                 {routineSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                {routineSaving ? '?ang luu lich...' : 'Luu lich sinh hoat'}
+                {routineSaving ? t('profile.savingRoutine') : t('profile.saveRoutine')}
               </button>
             </div>
           </div>
@@ -580,7 +595,7 @@ const ProfilePageV2 = () => {
               disabled={!isDirty || isSaving}
               className="rounded-xl border border-gray-300 dark:border-slate-600 px-4 py-2 text-sm font-bold text-gray-700 dark:text-slate-200 disabled:opacity-50"
             >
-              Hoan tac
+              {t('profile.undo')}
             </button>
             <button
               type="button"
@@ -589,43 +604,74 @@ const ProfilePageV2 = () => {
               className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-60"
             >
               {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-              {isSaving ? '?ang luu...' : 'Luu thay doi'}
+              {isSaving ? t('profile.saving') : t('profile.saveChanges')}
             </button>
           </div>
         </div>
 
         <div className="space-y-6">
           <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-700 rounded-3xl p-6">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-gray-500 dark:text-slate-400">Thong ke nhanh</h3>
+            <h3 className="text-sm font-bold uppercase tracking-wider text-gray-500 dark:text-slate-400">{t('profile.quickStats')}</h3>
             <p className="mt-3 text-4xl font-black text-gray-900 dark:text-slate-100">{bmi ?? '--'}</p>
-            <p className="mt-1 text-sm font-semibold text-emerald-600">{getBmiStatus(bmi)}</p>
+            <p className="mt-1 text-sm font-semibold text-emerald-600">{getBmiStatus(bmi, t)}</p>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-700 rounded-3xl p-6 space-y-4">
+            <h3 className="text-sm font-black uppercase tracking-wider text-gray-500 dark:text-slate-400">
+              {t('profile.languageTitle')}
+            </h3>
+            <p className="text-sm text-gray-500 dark:text-slate-400">{t('profile.languageSubtitle')}</p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setLanguage('vi')}
+                className={`rounded-xl px-4 py-2 text-sm font-bold border ${
+                  language === 'vi'
+                    ? 'bg-emerald-500 border-emerald-500 text-white'
+                    : 'bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-600 text-gray-700 dark:text-slate-200'
+                }`}
+              >
+                {t('profile.language.vi')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setLanguage('en')}
+                className={`rounded-xl px-4 py-2 text-sm font-bold border ${
+                  language === 'en'
+                    ? 'bg-emerald-500 border-emerald-500 text-white'
+                    : 'bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-600 text-gray-700 dark:text-slate-200'
+                }`}
+              >
+                {t('profile.language.en')}
+              </button>
+            </div>
           </div>
 
           <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-700 rounded-3xl p-6 space-y-4">
             <div className="flex items-center gap-2">
               <Lock size={16} className="text-gray-500 dark:text-slate-400" />
-              <h3 className="text-sm font-black uppercase tracking-wider text-gray-500 dark:text-slate-400">Doi mat khau</h3>
+              <h3 className="text-sm font-black uppercase tracking-wider text-gray-500 dark:text-slate-400">{t('profile.changePassword')}</h3>
             </div>
 
             <input
               type="password"
               value={currentPassword}
               onChange={(event) => setCurrentPassword(event.target.value)}
-              placeholder="Mat khau hien tai"
+              placeholder={t('profile.currentPassword')}
               className="w-full rounded-xl border border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-800 px-4 py-2.5 text-gray-900 dark:text-slate-100"
             />
             <input
               type="password"
               value={newPassword}
               onChange={(event) => setNewPassword(event.target.value)}
-              placeholder="Mat khau moi"
+              placeholder={t('profile.newPassword')}
               className="w-full rounded-xl border border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-800 px-4 py-2.5 text-gray-900 dark:text-slate-100"
             />
             <input
               type="password"
               value={confirmPassword}
               onChange={(event) => setConfirmPassword(event.target.value)}
-              placeholder="Xac nhan mat khau moi"
+              placeholder={t('profile.confirmPassword')}
               className="w-full rounded-xl border border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-800 px-4 py-2.5 text-gray-900 dark:text-slate-100"
             />
 
@@ -635,7 +681,7 @@ const ProfilePageV2 = () => {
               disabled={isChangingPassword}
               className="w-full rounded-xl bg-gray-900 dark:bg-slate-700 text-white px-4 py-2.5 text-sm font-bold disabled:opacity-60"
             >
-              {isChangingPassword ? 'Dang doi...' : 'Doi mat khau'}
+              {isChangingPassword ? t('profile.changingPassword') : t('profile.changePasswordBtn')}
             </button>
           </div>
         </div>

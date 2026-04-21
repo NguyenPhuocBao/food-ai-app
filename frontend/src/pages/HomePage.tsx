@@ -231,10 +231,10 @@ const HomePage = () => {
                <div className="flex items-center justify-between mb-3">
                  <h3 className="font-black text-gray-900 flex items-center gap-2">
                    <GlassWater size={18} className="text-blue-600" />
-                   Uong nuoc
+                   Uống nước
                  </h3>
                  <span className="text-xs text-gray-500 font-semibold">
-                   Muc tieu {personalization?.routine?.waterGoalMl || hydration.goalMl || 2200} ml
+                   Mục tiêu {personalization?.routine?.waterGoalMl || hydration.goalMl || 2200} ml
                  </span>
                </div>
                <div className="text-2xl font-black text-gray-900">

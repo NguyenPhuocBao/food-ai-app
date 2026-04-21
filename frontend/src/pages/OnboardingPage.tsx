@@ -10,18 +10,18 @@ type GoalType = 'WEIGHT_LOSS' | 'WEIGHT_GAIN' | 'MAINTENANCE' | 'MUSCLE_GAIN';
 type ActivityLevel = 'SEDENTARY' | 'LIGHT' | 'MODERATE' | 'ACTIVE' | 'VERY_ACTIVE';
 
 const GOAL_OPTIONS: Array<{ value: GoalType; label: string }> = [
-  { value: 'WEIGHT_LOSS', label: 'Giam can' },
-  { value: 'MAINTENANCE', label: 'Duy tri' },
-  { value: 'WEIGHT_GAIN', label: 'Tang can' },
-  { value: 'MUSCLE_GAIN', label: 'Tang co' },
+  { value: 'WEIGHT_LOSS', label: 'Giảm cân' },
+  { value: 'MAINTENANCE', label: 'Duy trì' },
+  { value: 'WEIGHT_GAIN', label: 'Tăng cân' },
+  { value: 'MUSCLE_GAIN', label: 'Tăng cơ' },
 ];
 
 const ACTIVITY_OPTIONS: Array<{ value: ActivityLevel; label: string }> = [
-  { value: 'SEDENTARY', label: 'It van dong' },
-  { value: 'LIGHT', label: 'Van dong nhe' },
-  { value: 'MODERATE', label: 'Van dong vua' },
-  { value: 'ACTIVE', label: 'Van dong cao' },
-  { value: 'VERY_ACTIVE', label: 'Van dong rat cao' },
+  { value: 'SEDENTARY', label: 'Ít vận động' },
+  { value: 'LIGHT', label: 'Vận động nhẹ' },
+  { value: 'MODERATE', label: 'Vận động vừa' },
+  { value: 'ACTIVE', label: 'Vận động cao' },
+  { value: 'VERY_ACTIVE', label: 'Vận động rất cao' },
 ];
 
 const defaultCaloriesByGoal = (goalType: GoalType) => {
@@ -99,10 +99,10 @@ const OnboardingPage = () => {
   }, []);
 
   const goalHint = useMemo(() => {
-    if (goalType === 'WEIGHT_LOSS') return 'Uu tien mon it dau mo, it tinh bot nhanh, nhieu chat xo.';
-    if (goalType === 'WEIGHT_GAIN') return 'Uu tien tang tong calo va dam bao bua phu.';
-    if (goalType === 'MUSCLE_GAIN') return 'Tang protein theo bua, theo doi calo va gio tap.';
-    return 'Duy tri can bang nang luong va macro on dinh.';
+    if (goalType === 'WEIGHT_LOSS') return 'Ưu tiên món ít dầu mỡ, ít tinh bột nhanh, nhiều chất xơ.';
+    if (goalType === 'WEIGHT_GAIN') return 'Ưu tiên tăng tổng calo và đảm bảo bữa phụ.';
+    if (goalType === 'MUSCLE_GAIN') return 'Tăng protein theo bữa, theo dõi calo và giờ tập.';
+    return 'Duy trì cân bằng năng lượng và macro ổn định.';
   }, [goalType]);
 
   const handleApplyGoalTemplate = () => {
@@ -132,10 +132,10 @@ const OnboardingPage = () => {
       });
 
       await refreshUser();
-      toast.success('Da luu thong tin onboarding');
+      toast.success('Đã lưu thông tin onboarding');
       navigate('/');
     } catch (error: any) {
-      toast.error(error?.response?.data?.error || 'Khong th? luu onboarding');
+      toast.error(error?.response?.data?.error || 'Không thể lưu onboarding');
     } finally {
       setSaving(false);
     }
@@ -150,16 +150,16 @@ const OnboardingPage = () => {
       <div className="max-w-3xl mx-auto bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-700 rounded-3xl shadow-xl p-6 md:p-8 space-y-6">
         <div>
           <p className="text-xs uppercase tracking-[0.2em] text-emerald-600 font-semibold">Onboarding</p>
-          <h1 className="text-3xl font-black text-gray-900 dark:text-slate-100 mt-2">Thiet lap nhanh cho ban</h1>
+          <h1 className="text-3xl font-black text-gray-900 dark:text-slate-100 mt-2">Thiết lập nhanh cho bạn</h1>
           <p className="text-sm text-gray-500 dark:text-slate-400 mt-2">
-            2 phut de he thong gui ? meal plan va reminder phu hop hon.
+            2 phút để hệ thống gợi ý meal plan và reminder phù hợp hơn.
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="text-sm font-semibold text-gray-700 dark:text-slate-200">Muc tieu</label>
+              <label className="text-sm font-semibold text-gray-700 dark:text-slate-200">Mục tiêu</label>
               <select
                 value={goalType}
                 onChange={(event) => setGoalType(event.target.value as GoalType)}
@@ -174,7 +174,7 @@ const OnboardingPage = () => {
               <p className="text-xs text-emerald-700 dark:text-emerald-300 mt-2">{goalHint}</p>
             </div>
             <div>
-              <label className="text-sm font-semibold text-gray-700 dark:text-slate-200">Muc van dong</label>
+              <label className="text-sm font-semibold text-gray-700 dark:text-slate-200">Mức vận động</label>
               <select
                 value={activityLevel}
                 onChange={(event) => setActivityLevel(event.target.value as ActivityLevel)}
@@ -204,13 +204,13 @@ const OnboardingPage = () => {
               onClick={handleApplyGoalTemplate}
               className="h-10 px-4 rounded-xl border border-emerald-300 text-emerald-700 dark:text-emerald-300 text-sm font-semibold"
             >
-              Ap dung gui ?
+              Áp dụng gợi ý
             </button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="text-sm font-semibold text-gray-700 dark:text-slate-200">Chieu cao (cm)</label>
+              <label className="text-sm font-semibold text-gray-700 dark:text-slate-200">Chiều cao (cm)</label>
               <input
                 value={height}
                 onChange={(event) => setHeight(event.target.value)}
@@ -219,7 +219,7 @@ const OnboardingPage = () => {
               />
             </div>
             <div>
-              <label className="text-sm font-semibold text-gray-700 dark:text-slate-200">Can nang (kg)</label>
+              <label className="text-sm font-semibold text-gray-700 dark:text-slate-200">Cân nặng (kg)</label>
               <input
                 value={weight}
                 onChange={(event) => setWeight(event.target.value)}
@@ -231,27 +231,27 @@ const OnboardingPage = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="text-sm font-semibold text-gray-700 dark:text-slate-200">Di ung (phan tach boi dau phay)</label>
+              <label className="text-sm font-semibold text-gray-700 dark:text-slate-200">Dị ứng (phân tách bởi dấu phẩy)</label>
               <input
                 value={allergiesText}
                 onChange={(event) => setAllergiesText(event.target.value)}
-                placeholder="hai san, sua"
+                placeholder="hải sản, sữa"
                 className="mt-2 w-full rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm"
               />
             </div>
             <div>
-              <label className="text-sm font-semibold text-gray-700 dark:text-slate-200">Che do an uu tien</label>
+              <label className="text-sm font-semibold text-gray-700 dark:text-slate-200">Chế độ ăn ưu tiên</label>
               <input
                 value={dietaryPrefText}
                 onChange={(event) => setDietaryPrefText(event.target.value)}
-                placeholder="an chay, it tinh bot"
+                placeholder="ăn chay, ít tinh bột"
                 className="mt-2 w-full rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm"
               />
             </div>
           </div>
 
           <div className="rounded-2xl border border-gray-200 dark:border-slate-700 p-4 space-y-4">
-            <h2 className="text-sm font-bold text-gray-800 dark:text-slate-100">Routine nhac nho</h2>
+            <h2 className="text-sm font-bold text-gray-800 dark:text-slate-100">Routine nhắc nhở</h2>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
               <div>
                 <label className="text-xs text-gray-500">Breakfast</label>
@@ -295,9 +295,9 @@ const OnboardingPage = () => {
                 checked={remindersEnabled}
                 onChange={(event) => setRemindersEnabled(event.target.checked)}
               />
-              Bat nhac nho bo bua va uong nuoc
+              Bật nhắc nhở bỏ bữa và uống nước
             </label>
-            {loadingRoutine && <p className="text-xs text-gray-500">?ang tai routine hien tai...</p>}
+            {loadingRoutine && <p className="text-xs text-gray-500">Đang tải routine hiện tại...</p>}
           </div>
 
           <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -307,7 +307,7 @@ const OnboardingPage = () => {
               className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-300 text-gray-600 dark:text-slate-300 text-sm font-semibold"
             >
               <SkipForward size={16} />
-              De sau
+              Để sau
             </button>
             <button
               type="submit"
@@ -315,7 +315,7 @@ const OnboardingPage = () => {
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white text-sm font-semibold"
             >
               {saving ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
-              {saving ? '?ang luu...' : 'Hoan tat onboarding'}
+              {saving ? 'Đang lưu...' : 'Hoàn tất onboarding'}
             </button>
           </div>
         </form>

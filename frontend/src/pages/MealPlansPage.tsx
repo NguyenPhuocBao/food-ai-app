@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { CalendarDays, Check, Loader2, Plus, ShoppingBasket, Sparkles, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getFoods } from '../services/food.service';
@@ -184,11 +184,11 @@ const MealPlansPage = () => {
       };
 
       await generateAutoMealPlan(payload);
-      toast.success('Da tao meal plan tu dong theo muc tieu');
+      toast.success('Đã tạo meal plan tự động theo mục tiêu');
       resetForm();
       await loadData();
     } catch {
-      toast.error('Khong th? tao meal plan tu dong');
+      toast.error('Không thể tạo meal plan tự động');
     } finally {
       setAutoGenerating(false);
     }
@@ -209,15 +209,15 @@ const MealPlansPage = () => {
     try {
       const result = await applyActiveMealPlanToday();
       if (result.createdCount > 0 && result.skippedCount > 0) {
-        toast.success(`Da them ${result.createdCount} bua, bo qua ${result.skippedCount} bua da ton tai`);
+        toast.success(`Đã thêm ${result.createdCount} bữa, bỏ qua ${result.skippedCount} bữa đã tồn tại`);
       } else if (result.createdCount > 0) {
-        toast.success(`Da ap dung ${result.createdCount} bua an hom nay`);
+        toast.success(`Đã áp dụng ${result.createdCount} bữa ăn hôm nay`);
       } else {
-        toast('Tat ca bua hom nay da ton tai, khong tao moi');
+        toast('Tất cả bữa hôm nay đã tồn tại, không tạo mới');
       }
       await loadData();
     } catch {
-      toast.error('Khong th? ap dung meal plan cho hom nay');
+      toast.error('Không thể áp dụng meal plan cho hôm nay');
     } finally {
       setApplyingToday(false);
     }
@@ -250,7 +250,7 @@ const MealPlansPage = () => {
       setShoppingPlanId(planId);
       setShoppingList(result);
     } catch {
-      toast.error('Khong th? tai shopping list');
+      toast.error('Không thể tải shopping list');
     } finally {
       setShoppingLoading(false);
     }
@@ -274,7 +274,7 @@ const MealPlansPage = () => {
         };
       });
     } catch {
-      toast.error('Khong th? cap nhat trang thai item');
+      toast.error('Không thể cập nhật trạng thái item');
     }
   };
 
@@ -290,9 +290,9 @@ const MealPlansPage = () => {
           items: current.items.map((item) => ({ ...item, checked: false })),
         };
       });
-      toast.success('Da reset danh sach mua sam');
+      toast.success('Đã reset danh sách mua sắm');
     } catch {
-      toast.error('Khong th? reset shopping list');
+      toast.error('Không thể reset shopping list');
     }
   };
 
@@ -440,7 +440,7 @@ const MealPlansPage = () => {
             </label>
 
             <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4 space-y-3">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-700">Auto Generate Nang Cao</p>
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-700">Auto Generate Nâng Cao</p>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-gray-600 mb-1">Goal template</label>
@@ -454,11 +454,11 @@ const MealPlansPage = () => {
                     }
                     className="w-full rounded-xl bg-white border border-blue-100 px-3 py-2 text-sm"
                   >
-                    <option value="AUTO">Tu dong theo profile</option>
-                    <option value="WEIGHT_LOSS">Giam can</option>
-                    <option value="WEIGHT_GAIN">Tang can</option>
-                    <option value="MUSCLE_GAIN">Tang co</option>
-                    <option value="MAINTENANCE">Duy tri</option>
+                    <option value="AUTO">Tự động theo profile</option>
+                    <option value="WEIGHT_LOSS">Giảm cân</option>
+                    <option value="WEIGHT_GAIN">Tăng cân</option>
+                    <option value="MUSCLE_GAIN">Tăng cơ</option>
+                    <option value="MAINTENANCE">Duy trì</option>
                   </select>
                 </div>
                 <div>
@@ -473,7 +473,7 @@ const MealPlansPage = () => {
                     }
                     className="w-full rounded-xl bg-white border border-blue-100 px-3 py-2 text-sm"
                   >
-                    <option value="AUTO">Tu dong theo goal</option>
+                    <option value="AUTO">Tự động theo goal</option>
                     <option value="BALANCED">Balanced</option>
                     <option value="HIGH_PROTEIN">High protein</option>
                     <option value="LOW_CARB">Low carb</option>
@@ -490,7 +490,7 @@ const MealPlansPage = () => {
                       setAutoConfig((current) => ({ ...current, includeSnack: event.target.checked }))
                     }
                   />
-                  Bao gom bua phu
+                  Bao gồm bữa phụ
                 </label>
                 <label className="flex items-center gap-2 text-xs font-semibold text-gray-700">
                   <input
@@ -500,7 +500,7 @@ const MealPlansPage = () => {
                       setAutoConfig((current) => ({ ...current, useCustomTargets: event.target.checked }))
                     }
                   />
-                  Tu dat macro/calories
+                  Tự đặt macro/calories
                 </label>
               </div>
 
@@ -509,7 +509,7 @@ const MealPlansPage = () => {
                   <input
                     type="number"
                     min="800"
-                    placeholder="Calories/ngay"
+                    placeholder="Calories/ngày"
                     value={autoConfig.targetCalories}
                     onChange={(event) =>
                       setAutoConfig((current) => ({ ...current, targetCalories: event.target.value }))
@@ -557,7 +557,7 @@ const MealPlansPage = () => {
               className="w-full rounded-2xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-black py-3.5 flex items-center justify-center gap-2 disabled:opacity-60"
             >
               {autoGenerating ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
-              {autoGenerating ? 'Dang tao tu dong...' : 'Tao nhanh theo muc tieu'}
+              {autoGenerating ? 'Đang tạo tự động...' : 'Tạo nhanh theo mục tiêu'}
             </button>
 
             <button
@@ -595,7 +595,7 @@ const MealPlansPage = () => {
                       </p>
                       {insightsByPlanId[plan.id] && (
                         <p className="mt-2 text-xs font-bold text-blue-700">
-                          Hom nay: {insightsByPlanId[plan.id].completedMealsToday}/{insightsByPlanId[plan.id].plannedMealsToday} bua
+                          Hôm nay: {insightsByPlanId[plan.id].completedMealsToday}/{insightsByPlanId[plan.id].plannedMealsToday} bữa
                           ({insightsByPlanId[plan.id].adherenceRateToday}%)
                         </p>
                       )}
@@ -608,7 +608,7 @@ const MealPlansPage = () => {
                         }`}
                       >
                         <ShoppingBasket size={16} />
-                        Mua sam
+                        Mua sắm
                       </button>
                       {plan.isActive && (
                         <button
@@ -616,7 +616,7 @@ const MealPlansPage = () => {
                           disabled={applyingToday}
                           className="rounded-2xl bg-emerald-500 text-white px-4 py-2 text-sm font-bold disabled:opacity-60"
                         >
-                          {applyingToday ? 'Dang ap dung...' : 'Ap dung hom nay'}
+                          {applyingToday ? 'Đang áp dụng...' : 'Áp dụng hôm nay'}
                         </button>
                       )}
                       {!plan.isActive && (
@@ -661,7 +661,7 @@ const MealPlansPage = () => {
                           <div>
                             <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-600">Shopping List</p>
                             <p className="text-sm text-blue-800 mt-1">
-                              {shoppingList?.checkedItems ?? 0}/{shoppingList?.totalItems ?? 0} item ?? check
+                              {shoppingList?.checkedItems ?? 0}/{shoppingList?.totalItems ?? 0} item đã check
                               {typeof shoppingList?.completionRate === 'number' ? ` (${shoppingList.completionRate}%)` : ''}
                             </p>
                           </div>
@@ -678,7 +678,7 @@ const MealPlansPage = () => {
                             <Loader2 size={20} className="animate-spin text-blue-600" />
                           </div>
                         ) : !shoppingList?.items.length ? (
-                          <p className="text-sm text-blue-800">Chua co nguyen lieu de tong hop cho plan nay.</p>
+                          <p className="text-sm text-blue-800">Chưa có nguyên liệu để tổng hợp cho plan này.</p>
                         ) : (
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                             {shoppingList.items.map((item) => (
@@ -699,7 +699,7 @@ const MealPlansPage = () => {
                                 <span className="min-w-0">
                                   <span className="block text-sm font-bold text-gray-900">{item.name}</span>
                                   <span className="block text-xs text-gray-600 mt-0.5">
-                                    {item.amount} {item.unit} · {item.recipeCount} cong thuc
+                                    {item.amount} {item.unit} • {item.recipeCount} công thức
                                   </span>
                                 </span>
                               </button>
