@@ -55,7 +55,7 @@ const TYPE_CONFIG = {
 
 const DIRECT_LINKS: NavItem[] = [
   { label: 'Trang chu', path: '/', icon: Home, description: 'Tong quan trong ngay va cac quick action.' },
-  { label: 'AI Coach', path: '/chat-ai', icon: MessageSquare, description: 'Tro chuyen voi AI de xin goi y bua an.' },
+  { label: 'AI Coach', path: '/chat-ai', icon: MessageSquare, description: 'Tro chuyen voi AI de xin gui ? bua an.' },
 ];
 
 const NAV_GROUPS: NavGroup[] = [
@@ -66,7 +66,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: 'Mon an', path: '/foods', icon: UtensilsCrossed, description: 'Thu vien mon an va thong tin dinh duong.' },
       { label: 'Cong thuc', path: '/recipes', icon: BookOpen, description: 'Cong thuc, cach nau va chi tiet mon.' },
-      { label: 'Goi y AI', path: '/recommendations', icon: Sparkles, description: 'Goi y mon an dua tren lich su va muc tieu cua ban.' },
+      { label: 'Gui ? AI', path: '/recommendations', icon: Sparkles, description: 'Gui ? mon an dua tren lich su va muc tieu cua ban.' },
       { label: 'Thu vien', path: '/library', icon: Heart, description: 'Mon yeu thich va cong thuc da luu.' },
     ],
   },
@@ -86,7 +86,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'Ke hoach',
     icon: CalendarDays,
     items: [
-      { label: 'Meal plan', path: '/meal-plans', icon: CalendarDays, description: 'Lap ke hoach an uong theo ngay va bua.' },
+      { label: 'Meal plan', path: '/meal-plans', icon: CalendarDays, description: 'Lap ke hoach An uong theo ngay va bua.' },
     ],
   },
 ];
@@ -343,7 +343,7 @@ const UserShell = () => {
                         {notifications.length === 0 ? (
                           <div className="py-10 text-center text-gray-400">
                             <Bell size={32} className="mx-auto mb-2 text-gray-200" />
-                            <p className="text-sm">Khong co thong bao nao</p>
+                            <p className="text-sm">Khong c? thong bao nao</p>
                           </div>
                         ) : (
                           notifications.map((notification) => {

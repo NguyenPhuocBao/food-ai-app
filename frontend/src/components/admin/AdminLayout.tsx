@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Header from './Header';
 import { motion } from 'framer-motion';
+import AdminSupportFab from './AdminSupportFab';
 
 const AdminLayout = () => {
   return (
@@ -17,6 +18,7 @@ const AdminLayout = () => {
         >
           <Outlet />
         </motion.main>
+        <AdminSupportFab />
       </div>
     </div>
   );

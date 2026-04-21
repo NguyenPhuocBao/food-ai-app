@@ -1,18 +1,25 @@
 import './load-env';
 import app from './app';
 import { startMealReminderScheduler, stopMealReminderScheduler } from './services/meal-reminder.service';
+import {
+  startReviewReplyRetentionScheduler,
+  stopReviewReplyRetentionScheduler,
+} from './services/review-retention.service';
 
 const PORT = process.env.PORT || 5000;
 
 startMealReminderScheduler();
+startReviewReplyRetentionScheduler();
 
 process.on('SIGINT', () => {
   stopMealReminderScheduler();
+  stopReviewReplyRetentionScheduler();
   process.exit(0);
 });
 
 process.on('SIGTERM', () => {
   stopMealReminderScheduler();
+  stopReviewReplyRetentionScheduler();
   process.exit(0);
 });
 

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { 
-  addReview, getReviews, updateReview, deleteReview, markHelpful 
+  addReview, getReviews, updateReview, deleteReview, markHelpful, addReviewReply
 } from '../controllers/review.controller';
 import { authMiddleware } from '../middlewares/auth.middleware';
 
@@ -11,5 +11,6 @@ router.get('/foods/:foodId', getReviews);
 router.put('/:id', authMiddleware, updateReview);
 router.delete('/:id', authMiddleware, deleteReview);
 router.post('/:id/helpful', authMiddleware, markHelpful);
+router.post('/:id/replies', authMiddleware, addReviewReply);
 
 export default router;

@@ -26,6 +26,19 @@ import {
 } from '../../services/chatbot-admin.service';
 
 const DEFAULT_TEST_QUESTION = 'Toi bi tieu duong type 2, bua toi nen an gi?';
+type ProviderKey = 'retrieval' | 'grok' | 'gemini' | 'openai';
+
+const DEFAULT_PROVIDER_LABELS: Record<ProviderKey, string> = {
+  retrieval: 'Retrieval',
+  grok: 'Grok',
+  gemini: 'Gemini',
+  openai: 'OpenAI',
+};
+
+const KNOWN_PROVIDER_ORDER: ProviderKey[] = ['grok', 'gemini', 'openai', 'retrieval'];
+
+const isProviderKey = (value: string): value is ProviderKey =>
+  value === 'retrieval' || value === 'grok' || value === 'gemini' || value === 'openai';
 
 const normalizeExamples = (raw: unknown): ChatbotTrainingExample[] => {
   if (!Array.isArray(raw)) return [];
@@ -107,31 +120,64 @@ const AdminChatbotOps = () => {
     void Promise.all([loadHealth(), loadTraining()]);
   }, []);
 
+  const providerLabels = useMemo(() => {
+    const grokLabel = health?.providers.grok.label || DEFAULT_PROVIDER_LABELS.grok;
+    return {
+      ...DEFAULT_PROVIDER_LABELS,
+      grok: grokLabel,
+    };
+  }, [health]);
+
+  const providerChainDisplay = useMemo(() => {
+    if (!health) return [] as string[];
+    if (Array.isArray(health.providerChainDisplay) && health.providerChainDisplay.length > 0) {
+      return health.providerChainDisplay;
+    }
+    return health.providerChain.map((provider) => (isProviderKey(provider) ? providerLabels[provider] : provider));
+  }, [health, providerLabels]);
+
+  const getProviderDisplayName = (provider: string) => {
+    if (provider === 'fallback') return 'Fallback (rule-based)';
+    if (isProviderKey(provider)) return providerLabels[provider];
+    return provider;
+  };
+
   const providerCards = useMemo(() => {
     if (!health) return [];
-    return [
-      {
-        name: 'Retrieval',
+
+    const providerMap: Record<ProviderKey, { name: string; configured: boolean; detail: string }> = {
+      retrieval: {
+        name: providerLabels.retrieval,
         configured: health.providers.retrieval.enabled,
         detail: health.providers.retrieval.active ? 'Dang active' : 'Dung lam fallback',
       },
-      {
-        name: 'Grok',
+      grok: {
+        name: providerLabels.grok,
         configured: health.providers.grok.configured,
         detail: health.providers.grok.model,
       },
-      {
-        name: 'Gemini',
+      gemini: {
+        name: providerLabels.gemini,
         configured: health.providers.gemini.configured,
         detail: health.providers.gemini.model,
       },
-      {
-        name: 'OpenAI',
+      openai: {
+        name: providerLabels.openai,
         configured: health.providers.openai.configured,
         detail: health.providers.openai.model,
       },
-    ];
-  }, [health]);
+    };
+
+    const orderedProviders = [...health.providerChain.filter(isProviderKey), ...KNOWN_PROVIDER_ORDER].filter(
+      (provider, index, all) => all.indexOf(provider) === index,
+    );
+
+    return orderedProviders.map((provider, index) => ({
+      key: provider,
+      priority: index + 1,
+      ...providerMap[provider],
+    }));
+  }, [health, providerLabels]);
 
   const handleBootstrapDefaults = async () => {
     if (!window.confirm('Ghi de training hien tai bang bo default?')) return;
@@ -162,7 +208,7 @@ const AdminChatbotOps = () => {
     try {
       const examples = parseTrainingJson(jsonEditor);
       if (examples.length === 0) {
-        toast.error('JSON khong hop le hoac khong co QA');
+        toast.error('JSON khong hop le hoac khong c? QA');
         return;
       }
 
@@ -249,7 +295,7 @@ const AdminChatbotOps = () => {
         <div className="rounded-2xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
           <p className="text-xs uppercase tracking-wider text-gray-500">Provider mode</p>
           <p className="mt-2 text-2xl font-black text-gray-900 dark:text-slate-100">{health?.providerMode || '--'}</p>
-          <p className="text-xs text-gray-500 mt-1">{health?.providerChain?.join(' -> ') || '...'}</p>
+          <p className="text-xs text-gray-500 mt-1">{providerChainDisplay.join(' -> ') || '...'}</p>
         </div>
         <div className="rounded-2xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
           <p className="text-xs uppercase tracking-wider text-gray-500">Training source</p>
@@ -281,14 +327,16 @@ const AdminChatbotOps = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {providerCards.map((provider) => (
               <div
-                key={provider.name}
+                key={provider.key}
                 className={`rounded-2xl border p-4 ${
                   provider.configured
                     ? 'border-emerald-200 bg-emerald-50/70 dark:border-emerald-800 dark:bg-emerald-900/20'
                     : 'border-gray-200 bg-gray-50 dark:border-slate-700 dark:bg-slate-800/60'
                 }`}
               >
-                <p className="font-semibold text-gray-900 dark:text-slate-100">{provider.name}</p>
+                <p className="font-semibold text-gray-900 dark:text-slate-100">
+                  #{provider.priority} - {provider.name}
+                </p>
                 <p className="text-xs mt-1 text-gray-500 dark:text-slate-400">{provider.detail}</p>
                 <p className={`text-xs mt-2 font-bold ${provider.configured ? 'text-emerald-600' : 'text-gray-500'}`}>
                   {provider.configured ? 'Configured' : 'Not configured'}
@@ -357,7 +405,7 @@ const AdminChatbotOps = () => {
             ) : (
               <div className="space-y-3">
                 <div className="text-xs font-semibold text-gray-500">
-                  Provider: {quickResult.aiProvider} {quickResult.degraded ? '(degraded)' : ''}
+                  Provider: {getProviderDisplayName(quickResult.aiProvider)} {quickResult.degraded ? '(degraded)' : ''}
                 </div>
                 <p className="whitespace-pre-wrap text-sm text-gray-800 dark:text-slate-100">{quickResult.answer}</p>
                 {quickResult.degradedReason && (

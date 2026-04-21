@@ -37,7 +37,7 @@ const AdminReviewsV2 = () => {
       );
       setAllReviews(reviews);
     } catch {
-      toast.error('Khong the tai danh sach danh gia');
+      toast.error('Khong th? tai danh sach danh gia');
     } finally {
       setLoading(false);
     }
@@ -127,7 +127,7 @@ const AdminReviewsV2 = () => {
     return (
       <EmptyState
         icon={Star}
-        title="Khong co danh gia"
+        title="Khong c? danh gia"
         description="He thong chua co du lieu danh gia."
       />
     );
@@ -184,7 +184,7 @@ const AdminReviewsV2 = () => {
               {paginatedReviews.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-6 py-10 text-center text-gray-500 dark:text-slate-400">
-                    Khong co du lieu
+                    Khong c? du lieu
                   </td>
                 </tr>
               ) : (

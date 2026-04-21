@@ -17,7 +17,7 @@ const AdminMealDetail = () => {
         const response = await api.get(`/admin/meals/${id}`);
         setMeal(response.data.data);
       } catch {
-        toast.error('Khong the tai chi tiet bua an');
+        toast.error('Khong th? tai chi tiet bua an');
       } finally {
         setLoading(false);
       }
@@ -59,7 +59,7 @@ const AdminMealDetail = () => {
           <ArrowLeft size={16} />
           Quay lai
         </button>
-        <p className="mt-4 text-gray-600 dark:text-slate-300">Khong tim thay bua an.</p>
+        <p className="mt-4 text-gray-600 dark:text-slate-300">Khong t?m th?y bua an.</p>
       </div>
     );
   }
@@ -162,7 +162,7 @@ const AdminMealDetail = () => {
             </div>
             <div className="mt-4 rounded-2xl bg-gray-50 p-4 text-sm dark:bg-slate-800">
               <p className="text-xs font-semibold uppercase text-gray-500 dark:text-slate-400">Ghi chu</p>
-              <p className="mt-2 text-gray-700 dark:text-slate-300">{meal.notes || 'Khong co ghi chu.'}</p>
+              <p className="mt-2 text-gray-700 dark:text-slate-300">{meal.notes || 'Khong c? ghi chu.'}</p>
             </div>
           </div>
         </div>

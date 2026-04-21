@@ -27,6 +27,8 @@ const MEAL_CALORIE_RATIO: Record<MealType, number> = {
   [MealType.SNACK]: 0.1,
 };
 const CALORIES_PER_GRAM = { protein: 4, carbs: 4, fat: 9 } as const;
+const WEIGHT_LOSS_OBESE_BMI_THRESHOLD = 27.5;
+const MIN_WEIGHT_LOSS_CALORIES = 1200;
 
 type MacroGoalTemplate = GoalType | 'AUTO';
 type MacroStrategy = 'AUTO' | 'BALANCED' | 'HIGH_PROTEIN' | 'LOW_CARB';
@@ -56,6 +58,12 @@ const normalizeMacroStrategy = (value: unknown): MacroStrategy => {
 const toPositiveNumber = (value: unknown) => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) return undefined;
+  return parsed;
+};
+
+const toValidWeight = (value: unknown) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 30 || parsed > 300) return undefined;
   return parsed;
 };
 
@@ -93,7 +101,7 @@ const applyMacroRatio = (calories: number, ratio: { protein: number; carbs: numb
 const getBaseRatioByGoalType = (goalType: GoalType | undefined) => {
   switch (goalType) {
     case GoalType.WEIGHT_LOSS:
-      return { protein: 0.35, carbs: 0.3, fat: 0.35 };
+      return { protein: 0.45, carbs: 0.25, fat: 0.3 };
     case GoalType.WEIGHT_GAIN:
       return { protein: 0.25, carbs: 0.5, fat: 0.25 };
     case GoalType.MUSCLE_GAIN:
@@ -114,22 +122,106 @@ const applyMacroStrategy = (
   return base;
 };
 
+const buildWeightBasedMacroTargets = (params: {
+  calories: number;
+  goalType?: GoalType;
+  currentWeight?: number;
+}) => {
+  if (!params.currentWeight) return null;
+
+  const weight = toValidWeight(params.currentWeight);
+  if (!weight) return null;
+
+  let proteinPerKg = 1.6;
+  let fatPerKg = 0.8;
+
+  switch (params.goalType) {
+    case GoalType.WEIGHT_LOSS:
+      proteinPerKg = 1.9;
+      fatPerKg = 0.65;
+      break;
+    case GoalType.WEIGHT_GAIN:
+      proteinPerKg = 1.7;
+      fatPerKg = 1;
+      break;
+    case GoalType.MUSCLE_GAIN:
+      proteinPerKg = 2;
+      fatPerKg = 0.8;
+      break;
+    case GoalType.MAINTENANCE:
+    default:
+      proteinPerKg = 1.6;
+      fatPerKg = 0.85;
+      break;
+  }
+
+  let protein = weight * proteinPerKg;
+  let fat = weight * fatPerKg;
+  let carbs = (params.calories - protein * CALORIES_PER_GRAM.protein - fat * CALORIES_PER_GRAM.fat) / CALORIES_PER_GRAM.carbs;
+
+  if (params.goalType === GoalType.WEIGHT_LOSS) carbs = Math.max(70, carbs);
+  if (params.goalType === GoalType.WEIGHT_GAIN) carbs = Math.max(220, carbs);
+  if (params.goalType === GoalType.MUSCLE_GAIN) carbs = Math.max(180, carbs);
+  if (params.goalType === GoalType.MAINTENANCE || !params.goalType) carbs = Math.max(130, carbs);
+
+  // Keep macro targets within practical bounds.
+  protein = Math.max(70, Math.min(260, protein));
+  fat = Math.max(35, Math.min(120, fat));
+  carbs = Math.max(70, Math.min(560, carbs));
+
+  return {
+    protein: Number(protein.toFixed(1)),
+    fat: Number(fat.toFixed(1)),
+    carbs: Number(carbs.toFixed(1)),
+  };
+};
+
 const buildDailyMacroTargets = (params: {
   calories: number;
   goalType?: GoalType;
   macroStrategy: MacroStrategy;
+  currentWeight?: number;
   targetProtein?: number;
   targetFat?: number;
   targetCarbs?: number;
+  fallbackProtein?: number;
+  fallbackFat?: number;
+  fallbackCarbs?: number;
 }): MacroTargets => {
   const ratio = applyMacroStrategy(getBaseRatioByGoalType(params.goalType), params.macroStrategy);
   const auto = applyMacroRatio(params.calories, ratio);
+  const weightBased = buildWeightBasedMacroTargets({
+    calories: params.calories,
+    goalType: params.goalType,
+    currentWeight: params.currentWeight,
+  });
 
   return {
     calories: params.calories,
-    protein: Number(params.targetProtein ?? auto.protein),
-    fat: Number(params.targetFat ?? auto.fat),
-    carbs: Number(params.targetCarbs ?? auto.carbs),
+    protein: Number(
+      (
+        params.targetProtein ??
+        weightBased?.protein ??
+        params.fallbackProtein ??
+        auto.protein
+      ).toFixed(1)
+    ),
+    fat: Number(
+      (
+        params.targetFat ??
+        weightBased?.fat ??
+        params.fallbackFat ??
+        auto.fat
+      ).toFixed(1)
+    ),
+    carbs: Number(
+      (
+        params.targetCarbs ??
+        weightBased?.carbs ??
+        params.fallbackCarbs ??
+        auto.carbs
+      ).toFixed(1)
+    ),
   };
 };
 
@@ -143,21 +235,168 @@ const toMealMacroTargets = (daily: MacroTargets, mealType: MealType): MacroTarge
   };
 };
 
+const calculateBmi = (weightKg?: number, heightCm?: number) => {
+  if (!weightKg || !heightCm) return null;
+  const heightM = heightCm / 100;
+  if (!Number.isFinite(heightM) || heightM <= 0) return null;
+  return Number((weightKg / (heightM * heightM)).toFixed(1));
+};
+
+const resolveWeightLossCalories = (baseCalories: number, goalType?: GoalType, bmi?: number | null, hasOverride = false) => {
+  if (goalType !== GoalType.WEIGHT_LOSS) return baseCalories;
+  if (hasOverride) return baseCalories;
+
+  if (bmi && bmi >= WEIGHT_LOSS_OBESE_BMI_THRESHOLD) {
+    return Math.max(MIN_WEIGHT_LOSS_CALORIES, Math.round(baseCalories * 0.82));
+  }
+
+  return Math.max(MIN_WEIGHT_LOSS_CALORIES, Math.round(baseCalories * 0.9));
+};
+
+const shouldDisableSnackForWeightLoss = (goalType?: GoalType, bmi?: number | null) =>
+  goalType === GoalType.WEIGHT_LOSS && !!bmi && bmi >= WEIGHT_LOSS_OBESE_BMI_THRESHOLD;
+
 type FoodCandidate = {
   id: number;
   name: string;
   category: string | null;
+  description?: string | null;
   calories: number;
   protein: number;
   fat: number;
   carbs: number;
 };
 
+const normalizeSearchText = (value?: string | null) =>
+  (value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+const FRUIT_DRINK_KEYWORDS = [
+  'trai cay',
+  'hoa qua',
+  'fruit',
+  'nuoc',
+  'beverage',
+  'drink',
+  'juice',
+  'smoothie',
+  'tra',
+  'tea',
+  'coffee',
+  'cafe',
+  'sinh to',
+  'sua',
+];
+
+const isFruitOrDrinkFood = (food: FoodCandidate) => {
+  const text = normalizeSearchText(`${food.name} ${food.category || ''} ${food.description || ''}`);
+  return FRUIT_DRINK_KEYWORDS.some((keyword) => text.includes(keyword));
+};
+
+const resolveMealQuantityByGoal = (food: FoodCandidate, goalType: GoalType | undefined, rawQuantity: number) => {
+  if (isFruitOrDrinkFood(food)) return 1;
+
+  if (goalType === GoalType.WEIGHT_LOSS) return 0.5;
+  if (goalType === GoalType.MAINTENANCE) return 1;
+
+  if (goalType === GoalType.WEIGHT_GAIN || goalType === GoalType.MUSCLE_GAIN) {
+    const candidate = roundToHalf(rawQuantity);
+    return Math.max(1.5, Math.min(3, candidate));
+  }
+
+  return Math.max(0.5, Math.min(3, roundToHalf(rawQuantity)));
+};
+
+const GOAL_KEYWORDS = {
+  weightLossPositive: ['salad', 'rau', 'luoc', 'hap', 'nuong', 'boiled', 'steamed', 'grilled'],
+  weightLossNegative: ['chien', 'xao', 'fried', 'xoi', 'mi goi', 'kem', 'tra sua', 'sua dac'],
+  weightGainPositive: ['com', 'gao', 'khoai', 'pasta', 'yogurt', 'bo', 'trung', 'hat', 'banh mi', 'oat'],
+};
+
+const matchKeyword = (text: string, keywords: string[]) => keywords.some((keyword) => text.includes(keyword));
+
+const filterFoodsByGoal = (foods: FoodCandidate[], goalType: GoalType | undefined, mealType: MealType) => {
+  if (!goalType) return foods;
+
+  const filtered = foods.filter((food) => {
+    const calories = Number(food.calories || 0);
+    const fat = Number(food.fat || 0);
+    const carbs = Number(food.carbs || 0);
+    const protein = Number(food.protein || 0);
+
+    if (goalType === GoalType.WEIGHT_LOSS) {
+      if (calories <= 0) return false;
+      if (mealType === MealType.SNACK && calories > 320) return false;
+      if (mealType !== MealType.SNACK && calories > 650) return false;
+      if (fat > 28) return false;
+      if ((mealType === MealType.LUNCH || mealType === MealType.DINNER) && carbs > 75) return false;
+      if (protein < 8) return false;
+    }
+
+    if (goalType === GoalType.WEIGHT_GAIN) {
+      if (calories < 180) return false;
+      if (protein < 6) return false;
+    }
+
+    if (goalType === GoalType.MUSCLE_GAIN) {
+      if (protein < 12) return false;
+      if (calories < 150) return false;
+    }
+
+    return true;
+  });
+
+  return filtered.length >= 8 ? filtered : foods;
+};
+
+const goalFitPenalty = (food: FoodCandidate, goalType: GoalType | undefined, mealType: MealType) => {
+  if (!goalType) return 0;
+
+  const calories = Number(food.calories || 0);
+  const protein = Number(food.protein || 0);
+  const fat = Number(food.fat || 0);
+  const carbs = Number(food.carbs || 0);
+  const totalCalories = Math.max(1, calories);
+  const proteinDensity = protein / totalCalories;
+  const fatRatioByCalories = (fat * CALORIES_PER_GRAM.fat) / totalCalories;
+  const carbRatioByCalories = (carbs * CALORIES_PER_GRAM.carbs) / totalCalories;
+  const text = normalizeSearchText(`${food.name} ${food.category || ''} ${food.description || ''}`);
+
+  let penalty = 0;
+  if (goalType === GoalType.WEIGHT_LOSS) {
+    if (proteinDensity < 0.08) penalty += 100;
+    if (fatRatioByCalories > 0.38) penalty += 90;
+    if (carbRatioByCalories > 0.55) penalty += 70;
+    if (mealType === MealType.SNACK && calories > 260) penalty += 110;
+    if (matchKeyword(text, GOAL_KEYWORDS.weightLossPositive)) penalty -= 65;
+    if (matchKeyword(text, GOAL_KEYWORDS.weightLossNegative)) penalty += 120;
+  }
+
+  if (goalType === GoalType.WEIGHT_GAIN) {
+    if (calories < 260) penalty += 80;
+    if (protein < 12) penalty += 70;
+    if (carbs < 24) penalty += 60;
+    if (matchKeyword(text, GOAL_KEYWORDS.weightGainPositive)) penalty -= 55;
+  }
+
+  if (goalType === GoalType.MUSCLE_GAIN) {
+    if (proteinDensity < 0.095) penalty += 120;
+    if (protein < 18) penalty += 80;
+    if (carbs < 20) penalty += 45;
+    if (fatRatioByCalories > 0.45) penalty += 55;
+  }
+
+  return penalty;
+};
+
 const pickFoodForMeal = (
   foods: FoodCandidate[],
   mealType: MealType,
   target: MacroTargets,
-  usedCounter: Map<number, number>
+  usedCounter: Map<number, number>,
+  goalType?: GoalType
 ) => {
   const keywordsByMeal: Record<MealType, string[]> = {
     [MealType.BREAKFAST]: ['sang', 'breakfast'],
@@ -172,7 +411,8 @@ const pickFoodForMeal = (
     return keywords.some((keyword) => category.includes(keyword));
   });
 
-  const pool = byCategory.length >= 5 ? byCategory : foods;
+  const basePool = byCategory.length >= 5 ? byCategory : foods;
+  const pool = filterFoodsByGoal(basePool, goalType, mealType);
 
   const scored = pool
     .map((food) => {
@@ -189,7 +429,8 @@ const pickFoodForMeal = (
       const carbsGap = Math.abs(predictedCarbs - target.carbs) * 3;
       const varietyPenalty = used * 120;
       const snackPenalty = mealType === MealType.SNACK && Number(food.calories || 0) > 450 ? 180 : 0;
-      const score = calorieGap + proteinGap + fatGap + carbsGap + varietyPenalty + snackPenalty;
+      const fitPenalty = goalFitPenalty(food, goalType, mealType);
+      const score = calorieGap + proteinGap + fatGap + carbsGap + varietyPenalty + snackPenalty + fitPenalty;
       return { food, score };
     })
     .sort((a, b) => a.score - b.score);
@@ -747,6 +988,12 @@ export const generateAutoMealPlan = async (req: any, res: Response) => {
       where: { id: userId },
       include: {
         profile: true,
+        healthMetrics: {
+          where: { weight: { not: null } },
+          orderBy: { recordedAt: 'desc' },
+          take: 1,
+          select: { weight: true },
+        },
         goals: {
           where: { isActive: true },
           orderBy: { startDate: 'desc' },
@@ -758,30 +1005,35 @@ export const generateAutoMealPlan = async (req: any, res: Response) => {
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     const activeGoal = user.goals?.[0];
+    const currentWeight = toValidWeight(user.healthMetrics?.[0]?.weight) || toValidWeight(user.profile?.weight);
     const selectedGoalType = normalizeGoalTemplate(goalTemplate as MacroGoalTemplate, activeGoal?.goalType);
     const normalizedMacroStrategy = normalizeMacroStrategy(macroStrategy);
-    const targetCalories = Number(
-      toPositiveNumber(targetCaloriesOverride) ||
+    const targetCaloriesValue = toPositiveNumber(targetCaloriesOverride);
+    const baseTargetCalories = Number(
+      targetCaloriesValue ||
       activeGoal?.targetCalories ||
       user.profile?.targetCalories ||
       2000
+    );
+    const heightCm = toPositiveNumber(user.profile?.height);
+    const bmi = calculateBmi(currentWeight, heightCm);
+    const targetCalories = resolveWeightLossCalories(
+      baseTargetCalories,
+      selectedGoalType,
+      bmi,
+      Boolean(targetCaloriesValue),
     );
     const dailyMacroTargets = buildDailyMacroTargets({
       calories: targetCalories,
       goalType: selectedGoalType,
       macroStrategy: normalizedMacroStrategy,
-      targetProtein:
-        toPositiveNumber(targetProteinOverride) ||
-        toPositiveNumber(activeGoal?.targetProtein) ||
-        toPositiveNumber(user.profile?.targetProtein),
-      targetFat:
-        toPositiveNumber(targetFatOverride) ||
-        toPositiveNumber(activeGoal?.targetFat) ||
-        toPositiveNumber(user.profile?.targetFat),
-      targetCarbs:
-        toPositiveNumber(targetCarbsOverride) ||
-        toPositiveNumber(activeGoal?.targetCarbs) ||
-        toPositiveNumber(user.profile?.targetCarbs),
+      currentWeight,
+      targetProtein: toPositiveNumber(targetProteinOverride),
+      targetFat: toPositiveNumber(targetFatOverride),
+      targetCarbs: toPositiveNumber(targetCarbsOverride),
+      fallbackProtein: toPositiveNumber(activeGoal?.targetProtein) || toPositiveNumber(user.profile?.targetProtein),
+      fallbackFat: toPositiveNumber(activeGoal?.targetFat) || toPositiveNumber(user.profile?.targetFat),
+      fallbackCarbs: toPositiveNumber(activeGoal?.targetCarbs) || toPositiveNumber(user.profile?.targetCarbs),
     });
     const dietaryPrefs = (user.profile?.dietaryPref || []).map((item: string) => item.toLowerCase());
 
@@ -826,6 +1078,7 @@ export const generateAutoMealPlan = async (req: any, res: Response) => {
         id: true,
         name: true,
         category: true,
+        description: true,
         calories: true,
         protein: true,
         fat: true,
@@ -840,6 +1093,7 @@ export const generateAutoMealPlan = async (req: any, res: Response) => {
           id: true,
           name: true,
           category: true,
+          description: true,
           calories: true,
           protein: true,
           fat: true,
@@ -853,7 +1107,10 @@ export const generateAutoMealPlan = async (req: any, res: Response) => {
     }
 
     const usedCounter = new Map<number, number>();
-    const mealTypes = includeSnack
+    const includeSnackResolved = shouldDisableSnackForWeightLoss(selectedGoalType, bmi)
+      ? false
+      : Boolean(includeSnack);
+    const mealTypes = includeSnackResolved
       ? AUTO_MEAL_TYPES
       : AUTO_MEAL_TYPES.filter((mealType) => mealType !== MealType.SNACK);
 
@@ -870,11 +1127,11 @@ export const generateAutoMealPlan = async (req: any, res: Response) => {
 
       for (const mealType of mealTypes) {
         const targetMeal = toMealMacroTargets(dailyMacroTargets, mealType);
-        const selectedFood = pickFoodForMeal(foods, mealType, targetMeal, usedCounter);
+        const selectedFood = pickFoodForMeal(foods, mealType, targetMeal, usedCounter, selectedGoalType);
         if (!selectedFood) continue;
 
         const rawQuantity = targetMeal.calories / Number(selectedFood.calories || 1);
-        const quantity = Math.max(0.5, Math.min(3, roundToHalf(rawQuantity)));
+        const quantity = resolveMealQuantityByGoal(selectedFood, selectedGoalType, rawQuantity);
 
         detailsData.push({
           dayOfWeek,
@@ -936,13 +1193,17 @@ export const generateAutoMealPlan = async (req: any, res: Response) => {
       data: createdPlan,
       meta: {
         targetCalories,
+        requestedTargetCalories: baseTargetCalories,
         goalType: selectedGoalType || GoalType.MAINTENANCE,
+        currentWeight: currentWeight || null,
+        bmi,
         macroStrategy: normalizedMacroStrategy,
         targetProtein: dailyMacroTargets.protein,
         targetFat: dailyMacroTargets.fat,
         targetCarbs: dailyMacroTargets.carbs,
         totalDays,
         mealsPerDay: mealTypes.length,
+        includeSnack: includeSnackResolved,
       },
     });
   } catch (error: any) {

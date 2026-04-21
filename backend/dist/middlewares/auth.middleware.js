@@ -7,15 +7,33 @@ exports.adminMiddleware = exports.authMiddleware = void 0;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const client_1 = require("@prisma/client");
 const active_user_service_1 = require("../services/active-user.service");
-const JWT_SECRET = process.env.JWT_SECRET || 'food-ai-secret-key-2024';
+const FALLBACK_DEV_SECRET = 'food-ai-secret-key-2024';
 const prisma = new client_1.PrismaClient();
+let warnedInsecureSecret = false;
+const resolveJwtSecret = () => {
+    const secret = String(process.env.JWT_SECRET || '').trim();
+    if (secret)
+        return { secret, insecure: secret === FALLBACK_DEV_SECRET };
+    if (process.env.NODE_ENV === 'production') {
+        return { secret: '', insecure: true };
+    }
+    return { secret: FALLBACK_DEV_SECRET, insecure: true };
+};
 const authMiddleware = async (req, res, next) => {
     try {
+        const { secret: jwtSecret, insecure } = resolveJwtSecret();
+        if (!jwtSecret) {
+            return res.status(500).json({ error: 'Server auth misconfigured: JWT_SECRET is required' });
+        }
+        if (insecure && !warnedInsecureSecret) {
+            warnedInsecureSecret = true;
+            console.warn('[auth] JWT_SECRET is missing or using insecure default. Set a strong JWT_SECRET before deployment.');
+        }
         const token = req.headers.authorization?.split(' ')[1];
         if (!token) {
             return res.status(401).json({ error: 'Unauthorized: No token provided' });
         }
-        const decoded = jsonwebtoken_1.default.verify(token, JWT_SECRET);
+        const decoded = jsonwebtoken_1.default.verify(token, jwtSecret);
         const user = await prisma.user.findUnique({
             where: { id: decoded.id },
             select: { id: true, email: true, role: true, isActive: true, passwordChangedAt: true },

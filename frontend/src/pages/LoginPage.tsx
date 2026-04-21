@@ -48,7 +48,7 @@ const LoginPage = () => {
               Tu van bua an
             </h1>
             <p className="text-gray-300 text-lg max-w-md">
-              He thong AI phan tich nhu cau va dua ra goi y dinh duong phu hop cho ban.
+              He thong AI phan tich nhu cau va dua ra gui ? dinh duong phu hop cho ban.
             </p>
           </motion.div>
         </div>
@@ -66,7 +66,7 @@ const LoginPage = () => {
               <Bot size={24} strokeWidth={2.5} />
             </div>
             <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">Chao mung ban tro lai</h2>
-            <p className="mt-2 text-sm text-gray-500">Dien thong tin dang nhap de tiep tuc.</p>
+            <p className="mt-2 text-sm text-gray-500">Dien thong tin Dang nhap de tiep tuc.</p>
           </div>
 
           <form onSubmit={handleSubmit} className="mt-8 space-y-6">
@@ -153,9 +153,9 @@ const LoginPage = () => {
 
           <div className="mt-8 text-center sm:text-left">
             <p className="text-sm text-gray-600">
-              Chua co tai khoan?{' '}
+              Chua co tai kho?n?{' '}
               <Link to="/register" className="font-semibold text-green-600 hover:text-green-500 transition-colors">
-                Tao tai khoan moi
+                Tao tai kho?n moi
               </Link>
             </p>
           </div>

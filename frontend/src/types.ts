@@ -163,6 +163,19 @@ export interface FoodReview {
       avatar?: string;
     };
   };
+  replies?: Array<{
+    id: number;
+    content: string;
+    createdAt: string;
+    user: {
+      id: number;
+      name: string;
+      role?: 'USER' | 'ADMIN' | 'MODERATOR';
+      profile?: {
+        avatar?: string;
+      };
+    };
+  }>;
 }
 
 export interface FoodDetail extends FoodItem {

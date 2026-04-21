@@ -85,10 +85,10 @@ const pick = <T>(arr: readonly T[], seed: number): T => arr[Math.abs(seed) % arr
 
 const questionStarters = [
   'Ban co the tu van giup toi',
-  'Cho toi goi y ve',
+  'Cho toi gui ? ve',
   'Toi can huong dan cu the cho',
   'Neu toi dang quan tam',
-  'Xin goi y ngan gon ve',
+  'Xin gui ? ngan gon ve',
   'Toi muon toi uu',
   'Truong hop cua toi la',
   'Cho toi cach xu ly',
@@ -116,14 +116,14 @@ const personas = [
   'Toi co lich lam viec that thuong',
   'Toi hay an ngoai',
   'Toi co kha nang nau an co ban',
-  'Toi khong co nhieu thoi gian',
+  'Toi khong c? nhieu thoi gian',
   'Toi dang giam can',
   'Toi dang tang co',
   'Toi muon an lanh manh ben vung',
 ] as const;
 
 const contexts = [
-  'ngan sach an uong khong cao',
+  'ngan sach An uong khong cao',
   'toi de bi doi vao buoi toi',
   'toi hay them do ngot',
   'toi can de xuat don gian',
@@ -170,7 +170,7 @@ const answerIntros = [
   'Ke hoach thuc te cho ban:',
   'Mot cach de ap dung ngay:',
   'Huong uu tien an toan:',
-  'Goi y tam thoi de ban theo:',
+  'Gui ? tam thoi de ban theo:',
 ] as const;
 
 const answerOutros = [

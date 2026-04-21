@@ -182,7 +182,7 @@ export const evaluateMealHealth = (meal: MealInputForHealth): MealHealthResult =
 
   if (scoreParts.proteinBonus > 0) positives.push('Protein tot cho hoi phuc va co bap.');
   if (hasVegetable) positives.push('Da bo sung rau xanh.');
-  if (!saltyRisk) positives.push('Khong co dau hieu mon man cao.');
+  if (!saltyRisk) positives.push('Khong c? dau hieu mon man cao.');
 
   return {
     mealId: meal.id,
@@ -255,7 +255,7 @@ export const evaluateDailyHealth = (date: Date | string, meals: MealInputForHeal
       grade: 'D',
       alerts: ['Chua co du lieu bua an trong ngay.'],
       highlights: [],
-      recommendations: ['Hay bat dau ghi nhat ky it nhat 2 bua/ngay de nhan goi y chinh xac.'],
+      recommendations: ['Hay bat dau ghi nhat ky it nhat 2 bua/ngay de nhan gui ? chinh xac.'],
       mealScores: [],
       stats: {
         meals: 0,

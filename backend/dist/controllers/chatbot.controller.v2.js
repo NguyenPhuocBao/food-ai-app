@@ -12,9 +12,12 @@ const prisma = new client_1.PrismaClient();
 const openai = new openai_1.default({
     apiKey: process.env.OPENAI_API_KEY,
 });
-const grokBaseURL = (process.env.XAI_BASE_URL || 'https://api.x.ai/v1').replace(/\/+$/, '');
+const GROK_API_KEY = process.env.XAI_API_KEY || process.env.GROQ_API_KEY;
+const grokBaseURL = (process.env.XAI_BASE_URL || process.env.GROQ_BASE_URL || 'https://api.x.ai/v1').replace(/\/+$/, '');
+const isGroqCompatibleEndpoint = grokBaseURL.toLowerCase().includes('groq.com');
+const GROK_PROVIDER_LABEL = isGroqCompatibleEndpoint ? 'Groq (OpenAI-compatible)' : 'xAI Grok';
 const grokClient = new openai_1.default({
-    apiKey: process.env.XAI_API_KEY,
+    apiKey: GROK_API_KEY,
     baseURL: grokBaseURL,
 });
 const rawProviderMode = (process.env.CHAT_AI_PROVIDER || 'auto').toLowerCase();
@@ -22,7 +25,7 @@ const CHAT_AI_PROVIDER = rawProviderMode === 'gemini' || rawProviderMode === 'op
     ? rawProviderMode
     : 'auto';
 const CHAT_MODEL = process.env.OPENAI_CHAT_MODEL || 'gpt-4o-mini';
-const GROK_MODEL = process.env.XAI_MODEL || 'grok-4.20-beta-latest-non-reasoning';
+const GROK_MODEL = process.env.XAI_MODEL || process.env.GROQ_MODEL || 'grok-4.20-beta-latest-non-reasoning';
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
 const GEMINI_MODEL_CANDIDATES = (process.env.GEMINI_MODEL_CANDIDATES ||
     `${GEMINI_MODEL},gemini-2.5-flash,gemini-2.0-flash,gemini-1.5-flash-latest,gemini-1.5-flash,gemini-1.5-pro-latest,gemini-1.5-pro`)
@@ -70,10 +73,10 @@ const buildQuotaFallbackReply = (question) => {
 
 Noi dung ban vua gui: "${shortQuestion}"
 
-Goi y nhanh:
+Gui ? nhanh:
 1) Uu tien bua an can bang: 1 phan dam + 1 phan rau + 1 phan tinh bot vua du.
 2) Neu muc tieu giam can: giam do chien, nuoc ngot, tang rau va protein nac.
-3) Neu ban can goi y chinh xac theo macro/calories, vui long thu lai sau khi cap lai quota dich vu AI.`;
+3) Neu ban can gui ? chinh xac theo macro/calories, vui long thu lai sau khi cap lai quota dich vu AI.`;
 };
 const buildServiceFallbackReply = (question) => {
     const shortQuestion = question.length > 120 ? `${question.slice(0, 120)}...` : question;
@@ -81,7 +84,7 @@ const buildServiceFallbackReply = (question) => {
 
 Noi dung ban vua gui: "${shortQuestion}"
 
-Goi y nhanh:
+Gui ? nhanh:
 1) Neu ban can giam can: uu tien dam nac + rau, giam do ngot va do chien.
 2) Neu ban can tang co: chia 3 bua chinh + 1-2 bua phu, dam bao protein moi bua.
 3) Ban co the hoi lai ngan gon hon de he thong tra loi nhanh va sat muc tieu hon.`;
@@ -92,7 +95,7 @@ const MAX_EXAMPLES_IN_PROMPT = 4;
 const DEFAULT_BENCHMARK_SAMPLE_SIZE = 120;
 const MAX_BENCHMARK_SAMPLE_SIZE = 300;
 const isRetrievalOnlyMode = CHAT_AI_PROVIDER === 'retrieval';
-const hasGrok = () => Boolean(process.env.XAI_API_KEY);
+const hasGrok = () => Boolean(GROK_API_KEY);
 const hasGemini = () => Boolean(process.env.GEMINI_API_KEY);
 const hasOpenAI = () => Boolean(process.env.OPENAI_API_KEY);
 const hasAnyChatProvider = () => isRetrievalOnlyMode || hasGrok() || hasGemini() || hasOpenAI();
@@ -101,7 +104,7 @@ const getProviderChain = () => {
         return ['retrieval'];
     }
     if (CHAT_AI_PROVIDER === 'grok') {
-        return ['grok', 'retrieval', 'gemini', 'openai'];
+        return ['grok', 'gemini', 'openai', 'retrieval'];
     }
     if (CHAT_AI_PROVIDER === 'gemini') {
         return ['gemini', 'grok', 'openai', 'retrieval'];
@@ -110,6 +113,15 @@ const getProviderChain = () => {
         return ['openai', 'grok', 'gemini', 'retrieval'];
     }
     return ['grok', 'gemini', 'openai', 'retrieval'];
+};
+const getProviderDisplayName = (provider) => {
+    if (provider === 'grok')
+        return GROK_PROVIDER_LABEL;
+    if (provider === 'gemini')
+        return 'Gemini';
+    if (provider === 'openai')
+        return 'OpenAI';
+    return 'Retrieval';
 };
 const normalizeText = (value) => value
     .normalize('NFD')
@@ -352,7 +364,7 @@ const generateWithRetrieval = async (userId, question) => {
     }
     const lines = [top.answer];
     if (secondary.length > 0) {
-        lines.push(`Goi y bo sung: ${secondary[0].answer}`);
+        lines.push(`Gui ? bo sung: ${secondary[0].answer}`);
     }
     lines.push(`Muc tieu hien tai cua ban: ${goalLabel}.`);
     if (allergies.length > 0) {
@@ -465,11 +477,11 @@ const generateWithOpenAI = async (systemPrompt, turns) => {
         messages,
         temperature: 0.7,
     });
-    return completion.choices[0]?.message?.content?.trim() || 'Xin loi, toi khong the xu ly yeu cau nay.';
+    return completion.choices[0]?.message?.content?.trim() || 'Xin loi, toi khong th? xu ly yeu cau nay.';
 };
 const generateWithGrok = async (systemPrompt, turns) => {
     if (!hasGrok()) {
-        throw new Error('XAI_API_KEY is not configured');
+        throw new Error('XAI_API_KEY or GROQ_API_KEY is not configured');
     }
     const messages = [
         { role: 'system', content: systemPrompt },
@@ -483,7 +495,7 @@ const generateWithGrok = async (systemPrompt, turns) => {
         messages,
         temperature: 0.7,
     });
-    return completion.choices[0]?.message?.content?.trim() || 'Xin loi, toi khong the xu ly yeu cau nay.';
+    return completion.choices[0]?.message?.content?.trim() || 'Xin loi, toi khong th? xu ly yeu cau nay.';
 };
 const generateAssistantReply = async (systemPrompt, turns, userId, question) => {
     const providers = getProviderChain();
@@ -557,7 +569,7 @@ const getSystemPrompt = async (userId, userQuestion) => {
         ? relevantExamples
             .map((example, index) => `${index + 1}) USER: ${example.question}\nASSISTANT: ${example.answer}${example.tags.length ? `\nTAGS: ${example.tags.join(', ')}` : ''}`)
             .join('\n\n')
-        : 'Khong co du lieu train mau.';
+        : 'Khong c? du lieu train mau.';
     return `Ban la AI Health Coach chuyen ve dinh duong va theo doi bua an.
 
 THONG TIN NGUOI DUNG:
@@ -565,7 +577,7 @@ THONG TIN NGUOI DUNG:
 - Can nang: ${profile?.weight || 'Chua cap nhat'} kg
 - Chieu cao: ${profile?.height || 'Chua cap nhat'} cm
 - Muc tieu: ${userGoal}
-- Di ung: ${profile?.allergies?.join(', ') || 'Khong co'}
+- Di ung: ${profile?.allergies?.join(', ') || 'Khong c?'}
 - Calo muc tieu: ${goal?.targetCalories || profile?.targetCalories || 2000}
 - Dinh duong hom nay (${todayKey}): ${nutritionSummary}
 - Cac bua an da ghi nhan: ${mealSummary}
@@ -583,11 +595,13 @@ NGUYEN TAC TRA LOI:
 const healthCheck = async (req, res) => {
     try {
         const trainingConfig = await loadTrainingExamples();
+        const providerChain = getProviderChain();
         return res.json({
             success: true,
             data: {
                 providerMode: CHAT_AI_PROVIDER,
-                providerChain: getProviderChain(),
+                providerChain,
+                providerChainDisplay: providerChain.map((provider) => getProviderDisplayName(provider)),
                 providers: {
                     retrieval: {
                         enabled: true,
@@ -597,6 +611,9 @@ const healthCheck = async (req, res) => {
                         configured: hasGrok(),
                         model: GROK_MODEL,
                         baseUrl: grokBaseURL,
+                        label: GROK_PROVIDER_LABEL,
+                        vendor: isGroqCompatibleEndpoint ? 'groq' : 'xai',
+                        isGroqCompatible: isGroqCompatibleEndpoint,
                     },
                     gemini: {
                         configured: hasGemini(),
@@ -802,7 +819,7 @@ const createSession = async (req, res) => {
         const rawTitle = typeof req.body?.title === 'string' ? req.body.title.trim() : '';
         const title = rawTitle || `Cuoc tro chuyen ${new Date().toLocaleDateString()}`;
         const session = await prisma.chatSession.create({
-            data: { userId, title },
+            data: { userId, title, status: 'AI_ACTIVE' },
         });
         res.json({ success: true, data: session });
     }
@@ -815,7 +832,15 @@ const getSessions = async (req, res) => {
     try {
         const isAdmin = req.user.role === 'ADMIN';
         const requestedUserId = parsePositiveInt(req.query.userId);
-        const where = isAdmin ? (requestedUserId ? { userId: requestedUserId } : {}) : { userId: req.user.id };
+        const where = isAdmin
+            ? {
+                ...(requestedUserId ? { userId: requestedUserId } : {}),
+                status: { not: { startsWith: 'SUPPORT_' } },
+            }
+            : {
+                userId: req.user.id,
+                status: { not: { startsWith: 'SUPPORT_' } },
+            };
         const sessions = await prisma.chatSession.findMany({
             where,
             include: {
@@ -839,8 +864,16 @@ const getSession = async (req, res) => {
         const isAdmin = req.user.role === 'ADMIN';
         const requestedUserId = parsePositiveInt(req.query.userId);
         const where = isAdmin
-            ? { id: sessionId, ...(requestedUserId ? { userId: requestedUserId } : {}) }
-            : { id: sessionId, userId: req.user.id };
+            ? {
+                id: sessionId,
+                ...(requestedUserId ? { userId: requestedUserId } : {}),
+                status: { not: { startsWith: 'SUPPORT_' } },
+            }
+            : {
+                id: sessionId,
+                userId: req.user.id,
+                status: { not: { startsWith: 'SUPPORT_' } },
+            };
         const session = await prisma.chatSession.findFirst({
             where,
             include: {
@@ -864,7 +897,9 @@ const deleteSession = async (req, res) => {
             return res.status(400).json({ error: 'Invalid session id' });
         const isAdmin = req.user.role === 'ADMIN';
         const session = await prisma.chatSession.findFirst({
-            where: isAdmin ? { id: sessionId } : { id: sessionId, userId: req.user.id },
+            where: isAdmin
+                ? { id: sessionId, status: { not: { startsWith: 'SUPPORT_' } } }
+                : { id: sessionId, userId: req.user.id, status: { not: { startsWith: 'SUPPORT_' } } },
         });
         if (!session)
             return res.status(404).json({ error: 'Session not found' });
@@ -886,10 +921,12 @@ const sendMessage = async (req, res) => {
         if (!content)
             return res.status(400).json({ error: 'Message content is required' });
         if (!hasAnyChatProvider()) {
-            return res.status(500).json({ error: 'No AI provider configured. Set CHAT_AI_PROVIDER=\"retrieval\" or XAI_API_KEY or GEMINI_API_KEY or OPENAI_API_KEY.' });
+            return res.status(500).json({
+                error: 'No AI provider configured. Set CHAT_AI_PROVIDER=\"retrieval\" or XAI_API_KEY/GROQ_API_KEY or GEMINI_API_KEY or OPENAI_API_KEY.',
+            });
         }
         const session = await prisma.chatSession.findFirst({
-            where: { id: sessionId, userId },
+            where: { id: sessionId, userId, status: { not: { startsWith: 'SUPPORT_' } } },
         });
         if (!session)
             return res.status(404).json({ error: 'Session not found' });
@@ -907,7 +944,7 @@ const sendMessage = async (req, res) => {
             role: m.role,
             content: m.content,
         }));
-        let responseContent = 'Xin loi, toi khong the xu ly yeu cau nay.';
+        let responseContent = 'Xin loi, toi khong th? xu ly yeu cau nay.';
         let degraded = false;
         let degradedReason = null;
         let aiProviderUsed = 'fallback';
@@ -986,13 +1023,15 @@ const quickChat = async (req, res) => {
         if (!question)
             return res.status(400).json({ error: 'Question required' });
         if (!hasAnyChatProvider()) {
-            return res.status(500).json({ error: 'No AI provider configured. Set CHAT_AI_PROVIDER=\"retrieval\" or XAI_API_KEY or GEMINI_API_KEY or OPENAI_API_KEY.' });
+            return res.status(500).json({
+                error: 'No AI provider configured. Set CHAT_AI_PROVIDER=\"retrieval\" or XAI_API_KEY/GROQ_API_KEY or GEMINI_API_KEY or OPENAI_API_KEY.',
+            });
         }
         const systemPrompt = isRetrievalOnlyMode ? '' : await getSystemPrompt(userId, question);
         const turns = [{ role: 'USER', content: question }];
         try {
             const generated = await generateAssistantReply(systemPrompt, turns, userId, question);
-            const answer = generated.text || 'Xin loi, toi khong the tra loi cau hoi nay.';
+            const answer = generated.text || 'Xin loi, toi khong th? tra loi cau hoi nay.';
             return res.json({ success: true, data: { answer, degraded: false, aiProvider: generated.provider } });
         }
         catch (error) {

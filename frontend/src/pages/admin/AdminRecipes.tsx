@@ -82,7 +82,7 @@ const AdminRecipes = () => {
     return (
       <EmptyState
         icon={Search}
-        title="Khong co cong thuc"
+        title="Khong c? cong thuc"
         description="He thong chua co du lieu cong thuc."
       />
     );
@@ -125,7 +125,7 @@ const AdminRecipes = () => {
               {paginatedRecipes.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-6 py-10 text-center text-gray-500 dark:text-gray-400">
-                    Khong co du lieu
+                    Khong c? du lieu
                   </td>
                 </tr>
               ) : (

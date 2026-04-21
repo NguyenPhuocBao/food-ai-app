@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Edit, Trash2, Clock, Users, Star, BookOpen, Save, X } from 'lucide-react';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
@@ -9,6 +9,10 @@ import ImageUpload from '../../components/admin/ImageUpload';
 const AdminFoodDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const from = (location.state as { from?: string } | null)?.from;
+  const backToFromQuery = location.search ? `/admin/foods${location.search}` : '/admin/foods';
+  const backTo = typeof from === 'string' && from.startsWith('/admin/foods') ? from : backToFromQuery;
   const [food, setFood] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -68,7 +72,7 @@ const AdminFoodDetail = () => {
     if (confirm('Xóa món ăn này? Hành động không thể hoàn tác.')) {
       await api.delete(`/admin/foods/${id}`);
       toast.success('Đã xóa món ăn');
-      navigate('/admin/foods');
+      navigate(backTo);
     }
   };
 
@@ -83,7 +87,7 @@ const AdminFoodDetail = () => {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-4">
-          <button onClick={() => navigate('/admin/foods')} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800">
+          <button onClick={() => navigate(backTo)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800">
             <ArrowLeft size={24} />
           </button>
           <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-violet-600 bg-clip-text text-transparent">{food.name}</h1>

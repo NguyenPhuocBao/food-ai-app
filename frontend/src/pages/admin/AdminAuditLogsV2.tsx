@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react';
-import { Filter, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Filter, Loader2, Search, X } from 'lucide-react';
 import { getAuditLogs } from '../../services/admin.service';
-import EmptyState from '../../components/admin/EmptyState';
 import { formatAdminDateTime } from '../../utils/adminDateTime';
 
 const ACTION_OPTIONS = [
@@ -29,46 +28,75 @@ const toPreview = (value: unknown) => {
 
 const AdminAuditLogsV2 = () => {
   const [logs, setLogs] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [fetching, setFetching] = useState(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [actionFilter, setActionFilter] = useState('');
   const [entityFilter, setEntityFilter] = useState('');
+  const [searchKeyword, setSearchKeyword] = useState('');
+  const [debouncedSearchKeyword, setDebouncedSearchKeyword] = useState('');
+  const requestIdRef = useRef(0);
 
   const loadLogs = async () => {
-    setLoading(true);
+    setFetching(true);
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
     try {
-      const response = await getAuditLogs(page, 30, actionFilter, entityFilter);
+      const response = await getAuditLogs(page, 30, actionFilter, entityFilter, debouncedSearchKeyword);
+      if (requestId !== requestIdRef.current) return;
       setLogs(response.data || []);
       setTotalPages(response.pagination?.totalPages || 1);
     } catch (error) {
       console.error(error);
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) {
+        setFetching(false);
+        setInitialLoading(false);
+      }
     }
   };
 
   useEffect(() => {
-    loadLogs();
-  }, [page, actionFilter, entityFilter]);
+    const timer = setTimeout(() => {
+      setDebouncedSearchKeyword(searchKeyword.trim());
+      setPage(1);
+    }, 120);
 
-  if (loading && page === 1) {
+    return () => clearTimeout(timer);
+  }, [searchKeyword]);
+
+  useEffect(() => {
+    void loadLogs();
+  }, [page, actionFilter, entityFilter, debouncedSearchKeyword]);
+
+  const normalizedSearch = searchKeyword.trim().toLowerCase();
+  const displayLogs = useMemo(() => {
+    if (!normalizedSearch) return logs;
+    return logs.filter((log) => {
+      const text = [
+        log?.action,
+        log?.entity,
+        log?.user?.name,
+        log?.user?.email,
+        log?.ipAddress,
+        log?.userAgent,
+        log?.entityId,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return text.includes(normalizedSearch);
+    });
+  }, [logs, normalizedSearch]);
+
+  if (initialLoading && page === 1) {
     return (
       <div className="space-y-6">
         <div className="h-12 w-56 rounded-2xl bg-gray-200 dark:bg-slate-700 animate-pulse" />
         <div className="h-12 rounded-2xl bg-gray-200 dark:bg-slate-700 animate-pulse" />
         <div className="h-96 rounded-3xl bg-gray-200 dark:bg-slate-700 animate-pulse" />
       </div>
-    );
-  }
-
-  if (!loading && logs.length === 0) {
-    return (
-      <EmptyState
-        icon={Filter}
-        title="Khong co audit log"
-        description="Chua co du lieu phu hop voi bo loc hien tai."
-      />
     );
   }
 
@@ -85,10 +113,26 @@ const AdminAuditLogsV2 = () => {
 
       <div className="flex flex-wrap gap-4 items-center">
         <div className="relative">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+          <input
+            value={searchKeyword}
+            onChange={(event) => {
+              setSearchKeyword(event.target.value);
+              setPage(1);
+            }}
+            placeholder="Tim user, email, action, entity, IP..."
+            className="pl-10 pr-4 py-2 border border-gray-200 dark:border-slate-700 rounded-2xl focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:bg-slate-900 dark:text-slate-100 min-w-[280px]"
+          />
+        </div>
+
+        <div className="relative">
           <Filter className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
           <select
             value={actionFilter}
-            onChange={(event) => setActionFilter(event.target.value)}
+            onChange={(event) => {
+              setActionFilter(event.target.value);
+              setPage(1);
+            }}
             className="pl-10 pr-4 py-2 border border-gray-200 dark:border-slate-700 rounded-2xl focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:bg-slate-900 dark:text-slate-100"
           >
             <option value="">Tat ca hanh dong</option>
@@ -104,7 +148,10 @@ const AdminAuditLogsV2 = () => {
           <Filter className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
           <select
             value={entityFilter}
-            onChange={(event) => setEntityFilter(event.target.value)}
+            onChange={(event) => {
+              setEntityFilter(event.target.value);
+              setPage(1);
+            }}
             className="pl-10 pr-4 py-2 border border-gray-200 dark:border-slate-700 rounded-2xl focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:bg-slate-900 dark:text-slate-100"
           >
             <option value="">Tat ca doi tuong</option>
@@ -120,12 +167,21 @@ const AdminAuditLogsV2 = () => {
           onClick={() => {
             setActionFilter('');
             setEntityFilter('');
+            setSearchKeyword('');
+            setDebouncedSearchKeyword('');
             setPage(1);
           }}
           className="flex items-center gap-2 px-4 py-2 bg-gray-200 dark:bg-slate-700 rounded-2xl hover:bg-gray-300 dark:hover:bg-slate-600 transition text-gray-700 dark:text-slate-200"
         >
           <X size={16} /> Xoa bo loc
         </button>
+
+        {fetching && (
+          <div className="inline-flex items-center gap-2 text-sm text-gray-500 dark:text-slate-400">
+            <Loader2 size={14} className="animate-spin" />
+            Dang tim...
+          </div>
+        )}
       </div>
 
       <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-700 rounded-3xl shadow-xl overflow-hidden">
@@ -141,26 +197,34 @@ const AdminAuditLogsV2 = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
-              {logs.map((log) => (
-                <tr key={log.id} className="hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors">
-                  <td className="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-slate-400">
-                    {formatAdminDateTime(log.createdAt)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-slate-200">
-                    {log.user?.name || 'System'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="px-2 py-1 rounded-full text-xs bg-gray-100 text-gray-700 dark:bg-slate-700 dark:text-slate-200">
-                      {log.action}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-slate-400">{log.entity}</td>
-                  <td className="px-6 py-4 text-sm space-y-1">
-                    <p className="text-amber-700 dark:text-amber-300">Old: {toPreview(log.oldData)}</p>
-                    <p className="text-emerald-700 dark:text-emerald-300">New: {toPreview(log.newData)}</p>
+              {displayLogs.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-10 text-center text-sm text-gray-500 dark:text-slate-400">
+                    Khong t?m th?y du lieu phu hop voi bo loc hien tai.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                displayLogs.map((log) => (
+                  <tr key={log.id} className="hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors">
+                    <td className="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-slate-400">
+                      {formatAdminDateTime(log.createdAt)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-gray-700 dark:text-slate-200">
+                      {log.user?.name || 'System'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="px-2 py-1 rounded-full text-xs bg-gray-100 text-gray-700 dark:bg-slate-700 dark:text-slate-200">
+                        {log.action}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-slate-400">{log.entity}</td>
+                    <td className="px-6 py-4 text-sm space-y-1">
+                      <p className="text-amber-700 dark:text-amber-300">Old: {toPreview(log.oldData)}</p>
+                      <p className="text-emerald-700 dark:text-emerald-300">New: {toPreview(log.newData)}</p>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

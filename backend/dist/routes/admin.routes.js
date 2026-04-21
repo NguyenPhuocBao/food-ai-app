@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const admin_controller_1 = require("../controllers/admin.controller");
+const admin_db_controller_1 = require("../controllers/admin-db.controller");
 const meal_controller_1 = require("../controllers/meal.controller");
 const auth_middleware_1 = require("../middlewares/auth.middleware");
 const router = (0, express_1.Router)();
@@ -18,6 +19,13 @@ router.delete('/foods/:id', auth_middleware_1.authMiddleware, auth_middleware_1.
 // System
 router.get('/statistics', auth_middleware_1.authMiddleware, auth_middleware_1.adminMiddleware, admin_controller_1.getSystemStats);
 router.get('/audit-logs', auth_middleware_1.authMiddleware, auth_middleware_1.adminMiddleware, admin_controller_1.getAuditLogs);
+router.get('/db/tables', auth_middleware_1.authMiddleware, auth_middleware_1.adminMiddleware, admin_db_controller_1.getDbTables);
+router.get('/db/tables/:table/schema', auth_middleware_1.authMiddleware, auth_middleware_1.adminMiddleware, admin_db_controller_1.getDbTableSchema);
+router.get('/db/tables/:table/rows', auth_middleware_1.authMiddleware, auth_middleware_1.adminMiddleware, admin_db_controller_1.getDbTableRows);
+router.post('/db/tables/:table/rows', auth_middleware_1.authMiddleware, auth_middleware_1.adminMiddleware, admin_db_controller_1.createDbTableRow);
+router.put('/db/tables/:table/rows/:rowId', auth_middleware_1.authMiddleware, auth_middleware_1.adminMiddleware, admin_db_controller_1.updateDbTableRow);
+router.delete('/db/tables/:table/rows/:rowId', auth_middleware_1.authMiddleware, auth_middleware_1.adminMiddleware, admin_db_controller_1.deleteDbTableRow);
+router.post('/db/query', auth_middleware_1.authMiddleware, auth_middleware_1.adminMiddleware, admin_db_controller_1.executeDbSelectQuery);
 router.put('/users/:id/ban', auth_middleware_1.authMiddleware, auth_middleware_1.adminMiddleware, admin_controller_1.toggleUserBan);
 router.put('/users/:id/reset-password', auth_middleware_1.authMiddleware, auth_middleware_1.adminMiddleware, admin_controller_1.resetUserPassword);
 router.put('/users/:id/profile', auth_middleware_1.authMiddleware, auth_middleware_1.adminMiddleware, admin_controller_1.updateUserProfileByAdmin);

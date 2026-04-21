@@ -1,10 +1,12 @@
 import { NavLink } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import { 
   LayoutDashboard, Users, Utensils, BookOpen, Star, MessageSquare, 
   Settings, History, Bell, Sun, Moon, Brain, Database
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useTheme } from '../../contexts/ThemeContext';
+import { getSupportSessions } from '../../services/support.service';
 
 const menuItems = [
   { path: '/admin', name: 'Dashboard', icon: LayoutDashboard },
@@ -12,7 +14,7 @@ const menuItems = [
   { path: '/admin/foods', name: 'Foods', icon: Utensils },
   { path: '/admin/recipes', name: 'Recipes', icon: BookOpen },
   { path: '/admin/reviews', name: 'Reviews', icon: Star },
-  { path: '/admin/chat-ai', name: 'Chat AI', icon: MessageSquare },
+  { path: '/admin/chat-ai', name: 'CSKH Inbox', icon: MessageSquare },
   { path: '/admin/chatbot-ops', name: 'Chatbot Ops', icon: Brain },
   { path: '/admin/configs', name: 'Configs', icon: Settings },
   { path: '/admin/logs', name: 'Logs', icon: History },
@@ -22,6 +24,33 @@ const menuItems = [
 
 const Sidebar = () => {
   const { theme, toggleTheme } = useTheme();
+  const [pendingSupportCount, setPendingSupportCount] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadPendingSupport = async () => {
+      try {
+        const sessions = await getSupportSessions();
+        if (!active) return;
+        const pending = sessions.filter((session) => session.status === 'SUPPORT_PENDING').length;
+        setPendingSupportCount(pending);
+      } catch {
+        if (!active) return;
+        setPendingSupportCount(0);
+      }
+    };
+
+    void loadPendingSupport();
+    const interval = setInterval(() => {
+      void loadPendingSupport();
+    }, 5000);
+
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   return (
     <motion.aside 
@@ -51,7 +80,12 @@ const Sidebar = () => {
             }
           >
             <item.icon size={20} />
-            <span>{item.name}</span>
+            <span className="flex-1">{item.name}</span>
+            {item.path === '/admin/chat-ai' && pendingSupportCount > 0 && (
+              <span className="min-w-5 h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold inline-flex items-center justify-center">
+                {pendingSupportCount > 99 ? '99+' : pendingSupportCount}
+              </span>
+            )}
           </NavLink>
         ))}
       </nav>

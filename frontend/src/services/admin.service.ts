@@ -28,8 +28,10 @@ export const deleteFood = async (foodId: number) => {
   await api.delete(`/admin/foods/${foodId}`);
 };
 
-export const getAuditLogs = async (page = 1, limit = 50, action = '', entity = '') => {
-  const response = await api.get(`/admin/audit-logs?page=${page}&limit=${limit}&action=${action}&entity=${entity}`);
+export const getAuditLogs = async (page = 1, limit = 50, action = '', entity = '', search = '') => {
+  const response = await api.get(
+    `/admin/audit-logs?page=${page}&limit=${limit}&action=${encodeURIComponent(action)}&entity=${encodeURIComponent(entity)}&search=${encodeURIComponent(search)}`,
+  );
   return response.data;
 };
 

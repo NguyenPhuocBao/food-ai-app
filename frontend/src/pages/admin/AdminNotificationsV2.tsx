@@ -34,7 +34,7 @@ const AdminNotificationsV2 = () => {
       setNotifications(response.data.data || []);
       setTotalPages(response.data.pagination?.totalPages || 1);
     } catch (error) {
-      toast.error('Khong the tai thong bao');
+      toast.error('Khong th? tai thong bao');
     } finally {
       setLoading(false);
     }
@@ -166,7 +166,7 @@ const AdminNotificationsV2 = () => {
               onClick={() => setShowUserSelector(true)}
               className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition"
             >
-              <Users size={18} /> Gui toi user da chon
+              <Users size={18} /> Gui toi user ?? chon
             </button>
           </div>
         </form>

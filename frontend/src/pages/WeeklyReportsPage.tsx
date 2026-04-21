@@ -37,7 +37,7 @@ const WeeklyReportsPage = () => {
       setReports(merged);
       if (!activeId && merged.length > 0) setActiveId(merged[0].id);
     } catch {
-      toast.error('Khong the tai weekly reports');
+      toast.error('Khong th? tai weekly reports');
     } finally {
       setLoading(false);
     }
@@ -98,7 +98,7 @@ const WeeklyReportsPage = () => {
               className="inline-flex items-center gap-2 rounded-2xl bg-white/20 px-4 py-3 text-sm font-bold text-white hover:bg-white/30"
             >
               <RefreshCcw size={16} />
-              Tai lai
+              Tai loi
             </button>
             <button
               onClick={handleGenerate}
@@ -240,7 +240,7 @@ const WeeklyReportsPage = () => {
                     ))}
                     {!activeReport.reportData?.alerts?.length && (
                       <p className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300">
-                        Khong co canh bao lon trong tuan.
+                        Khong c? canh bao lon trong tuan.
                       </p>
                     )}
                   </div>

@@ -31,7 +31,7 @@ const AdminUsers = () => {
         const users = (response.data.data as AdminUser[]).sort((a, b) => a.id - b.id);
         setAllUsers(users);
       } catch {
-        toast.error('Khong the tai danh sach nguoi dung');
+        toast.error('Khong th? tai danh sach nguoi dung');
       } finally {
         setLoading(false);
       }
@@ -67,7 +67,7 @@ const AdminUsers = () => {
   };
 
   const handleBanToggle = async (userId: number, isActive: boolean) => {
-    const confirmed = window.confirm(isActive ? 'Khoa tai khoan nay?' : 'Mo khoa tai khoan nay?');
+    const confirmed = window.confirm(isActive ? 'Khoa tai kho?n nay?' : 'Mo khoa tai kho?n nay?');
     if (!confirmed) return;
 
     try {
@@ -75,9 +75,9 @@ const AdminUsers = () => {
       setAllUsers((prev) => prev.map((user) => (
         user.id === userId ? { ...user, isActive: !isActive } : user
       )));
-      toast.success(isActive ? 'Da khoa tai khoan' : 'Da mo khoa tai khoan');
+      toast.success(isActive ? 'Da khoa tai kho?n' : 'Da mo khoa tai kho?n');
     } catch {
-      toast.error('Cap nhat trang thai tai khoan that bai');
+      toast.error('Cap nhat trang thai tai kho?n that bai');
     }
   };
 
@@ -94,15 +94,15 @@ const AdminUsers = () => {
   };
 
   const handleDelete = async (userId: number) => {
-    const confirmed = window.confirm('Xoa tai khoan nay vinh vien?');
+    const confirmed = window.confirm('Xoa tai kho?n nay vinh vien?');
     if (!confirmed) return;
 
     try {
       await api.delete(`/admin/users/${userId}`);
       setAllUsers((prev) => prev.filter((user) => user.id !== userId));
-      toast.success('Da xoa tai khoan');
+      toast.success('Da xoa tai kho?n');
     } catch {
-      toast.error('Xoa tai khoan that bai');
+      toast.error('Xoa tai kho?n that bai');
     }
   };
 
@@ -120,7 +120,7 @@ const AdminUsers = () => {
     return (
       <EmptyState
         icon={Search}
-        title="Khong co nguoi dung"
+        title="Khong c? nguoi dung"
         description="He thong chua co du lieu nguoi dung."
       />
     );
@@ -132,7 +132,7 @@ const AdminUsers = () => {
         <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-violet-600 bg-clip-text text-transparent">
           Quan ly nguoi dung
         </h1>
-        <p className="text-gray-500 dark:text-slate-400 mt-1">Trang thai online duoc tinh theo phien dang nhap dang su dung.</p>
+        <p className="text-gray-500 dark:text-slate-400 mt-1">Trang thai online duoc tinh theo phien Dang nhap dang su dung.</p>
       </div>
 
       <div className="relative">
@@ -163,7 +163,7 @@ const AdminUsers = () => {
               {paginatedUsers.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-6 py-10 text-center text-gray-500 dark:text-slate-400">
-                    Khong co du lieu
+                    Khong c? du lieu
                   </td>
                 </tr>
               ) : (
@@ -208,7 +208,7 @@ const AdminUsers = () => {
                         <button
                           onClick={() => handleBanToggle(user.id, user.isActive)}
                           className="text-yellow-600 dark:text-yellow-400"
-                          title={user.isActive ? 'Khoa tai khoan' : 'Mo khoa tai khoan'}
+                          title={user.isActive ? 'Khoa tai kho?n' : 'Mo khoa tai kho?n'}
                         >
                           {user.isActive ? <Lock size={18} /> : <Unlock size={18} />}
                         </button>
@@ -218,7 +218,7 @@ const AdminUsers = () => {
                         <button onClick={() => navigate(`/admin/users/${user.id}`)} className="text-green-600 dark:text-green-400" title="Xem chi tiet">
                           <Edit size={18} />
                         </button>
-                        <button onClick={() => handleDelete(user.id)} className="text-red-600 dark:text-red-400" title="Xoa tai khoan">
+                        <button onClick={() => handleDelete(user.id)} className="text-red-600 dark:text-red-400" title="Xoa tai kho?n">
                           <Trash size={18} />
                         </button>
                       </div>

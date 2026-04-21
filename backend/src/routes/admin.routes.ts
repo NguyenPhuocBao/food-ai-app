@@ -13,6 +13,15 @@ import {
   sendNotificationToMultipleUsers,
   sendNotificationToUser
 } from '../controllers/admin.controller';
+import {
+  createDbTableRow,
+  deleteDbTableRow,
+  executeDbSelectQuery,
+  getDbTableRows,
+  getDbTableSchema,
+  getDbTables,
+  updateDbTableRow,
+} from '../controllers/admin-db.controller';
 import { deleteMeal, getMealById } from '../controllers/meal.controller';
 import { authMiddleware, adminMiddleware } from '../middlewares/auth.middleware';
 
@@ -34,6 +43,13 @@ router.delete('/foods/:id', authMiddleware, adminMiddleware, deleteFood);
 // System
 router.get('/statistics', authMiddleware, adminMiddleware, getSystemStats);
 router.get('/audit-logs', authMiddleware, adminMiddleware, getAuditLogs);
+router.get('/db/tables', authMiddleware, adminMiddleware, getDbTables);
+router.get('/db/tables/:table/schema', authMiddleware, adminMiddleware, getDbTableSchema);
+router.get('/db/tables/:table/rows', authMiddleware, adminMiddleware, getDbTableRows);
+router.post('/db/tables/:table/rows', authMiddleware, adminMiddleware, createDbTableRow);
+router.put('/db/tables/:table/rows/:rowId', authMiddleware, adminMiddleware, updateDbTableRow);
+router.delete('/db/tables/:table/rows/:rowId', authMiddleware, adminMiddleware, deleteDbTableRow);
+router.post('/db/query', authMiddleware, adminMiddleware, executeDbSelectQuery);
 
 router.put('/users/:id/ban', authMiddleware, adminMiddleware, toggleUserBan);
 router.put('/users/:id/reset-password', authMiddleware, adminMiddleware, resetUserPassword);

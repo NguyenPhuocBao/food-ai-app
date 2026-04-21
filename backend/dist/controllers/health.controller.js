@@ -52,7 +52,7 @@ const getMealHealth = async (req, res) => {
         fallbackError(res, 'meal', {
             score: 0,
             grade: 'D',
-            alerts: ['Khong the phan tich bua an luc nay.'],
+            alerts: ['Khong th? phan tich bua an luc nay.'],
             positives: [],
         });
     }
@@ -100,7 +100,7 @@ const getDailyHealth = async (req, res) => {
         fallbackError(res, 'daily', {
             score: 0,
             grade: 'D',
-            alerts: ['Khong the lay du lieu suc khoe hom nay.'],
+            alerts: ['Khong th? lay du lieu suc khoe hom nay.'],
             highlights: [],
             recommendations: [],
             mealScores: [],
@@ -166,7 +166,7 @@ const getWeeklyHealth = async (req, res) => {
             daily: [],
             summary: {
                 avgScore: 0,
-                alerts: ['Khong the tong hop suc khoe tuan nay.'],
+                alerts: ['Khong th? tong hop suc khoe tuan nay.'],
                 recommendations: ['Hay tiep tuc ghi nhat ky de he thong phan tich lai.'],
                 hydration: { totalMl: 0, days: 7, avgMl: 0, goalMl: 2200 },
             },
@@ -299,7 +299,7 @@ const getWeeklyActions = async (req, res) => {
     }
     catch (error) {
         fallbackError(res, 'weekly-actions', {
-            recommendations: ['Khong the lay khuyen nghi tuan nay.'],
+            recommendations: ['Khong th? lay khuyen nghi tuan nay.'],
             alerts: [],
             healthScore: 0,
         });

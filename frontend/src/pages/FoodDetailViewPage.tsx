@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, CheckCircle2, Clock3, Flame, Heart, Loader2, Plus, Star, Users } from 'lucide-react';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { ArrowLeft, CheckCircle2, Clock3, Flame, Heart, Loader2, MessageCircle, Plus, SendHorizontal, Star, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
 import { getFoodById } from '../services/food.service';
@@ -8,6 +8,7 @@ import { addFavoriteFood, removeFavoriteFood } from '../services/favorite.servic
 import { addMeal } from '../services/meal.service';
 import { getAssetUrl } from '../services/api';
 import { markRecipeAsCooked, saveRecipe, unsaveRecipe } from '../services/recipe.service';
+import { addReview, addReviewReply } from '../services/review.service';
 import type { FoodDetail } from '../types';
 
 const MEAL_TYPES = [
@@ -19,8 +20,16 @@ const MEAL_TYPES = [
 
 const FoodDetailViewPage = () => {
   const { id } = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const from = (location.state as { from?: string } | null)?.from;
+  const backTo =
+    typeof from === 'string' && from.startsWith('/foods')
+      ? from
+      : location.search
+        ? `/foods${location.search}`
+        : null;
   const [food, setFood] = useState<FoodDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [mealType, setMealType] = useState('DINNER');
@@ -29,23 +38,28 @@ const FoodDetailViewPage = () => {
   const [markingCooked, setMarkingCooked] = useState(false);
   const [togglingFavorite, setTogglingFavorite] = useState(false);
   const [togglingRecipeSave, setTogglingRecipeSave] = useState(false);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState('');
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const [replyInputs, setReplyInputs] = useState<Record<number, string>>({});
+  const [replyingReviewId, setReplyingReviewId] = useState<number | null>(null);
+
+  const fetchFood = async (showLoading = true) => {
+    if (!id) return;
+    if (showLoading) setLoading(true);
+
+    try {
+      const data = await getFoodById(Number(id));
+      setFood(data);
+    } catch {
+      toast.error('Khong th? tai chi tiet mon an');
+    } finally {
+      if (showLoading) setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchFood = async () => {
-      if (!id) return;
-
-      setLoading(true);
-      try {
-        const data = await getFoodById(Number(id));
-        setFood(data);
-      } catch {
-        toast.error('Không thể tải chi tiết món ăn');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchFood();
+    void fetchFood();
   }, [id]);
 
   const isFavorite = !!user && !!food?.favorites?.some((favorite) => favorite.userId === user.id);
@@ -72,14 +86,14 @@ const FoodDetailViewPage = () => {
       if (isFavorite) {
         await removeFavoriteFood(food.id);
         syncFavoriteState(false);
-        toast.success('Đã bỏ khỏi yêu thích');
+        toast.success('Đã bềEkhỏi yêu thích');
       } else {
         await addFavoriteFood(food.id);
         syncFavoriteState(true);
         toast.success('Đã thêm vào yêu thích');
       }
     } catch {
-      toast.error('Không thể cập nhật yêu thích');
+      toast.error('Không thềEcập nhật yêu thích');
     } finally {
       setTogglingFavorite(false);
     }
@@ -93,14 +107,14 @@ const FoodDetailViewPage = () => {
       if (isFavorite) {
         await unsaveRecipe(food.recipe.id);
         syncFavoriteState(false);
-        toast.success('Đã bỏ lưu công thức');
+        toast.success('Đã bềElưu công thức');
       } else {
         await saveRecipe(food.recipe.id);
         syncFavoriteState(true);
         toast.success('Đã lưu công thức');
       }
     } catch {
-      toast.error('Không thể lưu công thức');
+      toast.error('Không thềElưu công thức');
     } finally {
       setTogglingRecipeSave(false);
     }
@@ -115,7 +129,7 @@ const FoodDetailViewPage = () => {
       toast.success('Đã thêm món ăn vào nhật ký');
       navigate('/diary');
     } catch {
-      toast.error('Không thể thêm món ăn');
+      toast.error('Không thềEthêm món ăn');
     } finally {
       setSubmittingMeal(false);
     }
@@ -129,10 +143,80 @@ const FoodDetailViewPage = () => {
       await markRecipeAsCooked(food.recipe.id);
       toast.success('Đã ghi nhận bạn đã nấu món này');
     } catch {
-      toast.error('Không thể ghi nhận công thức');
+      toast.error('Không thềEghi nhận công thức');
     } finally {
       setMarkingCooked(false);
     }
+  };
+
+  const handleSubmitReview = async () => {
+    if (!food) return;
+    if (!user) {
+      toast.error('Ban can Dang nhap de danh gia');
+      return;
+    }
+    if (reviewRating < 1 || reviewRating > 5) {
+      toast.error('Diem danh gia phai tu 1 den 5');
+      return;
+    }
+
+    setSubmittingReview(true);
+    try {
+      await addReview(food.id, {
+        rating: reviewRating,
+        comment: reviewComment.trim() || undefined,
+      });
+      setReviewComment('');
+      await fetchFood(false);
+      toast.success('Da gui danh gia');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.error || 'Khong th? gui danh gia');
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
+
+  const handleSubmitReply = async (reviewId: number) => {
+    if (!user) {
+      toast.error('Ban can Dang nhap de phan hoi');
+      return;
+    }
+
+    const content = (replyInputs[reviewId] || '').trim();
+    if (!content) {
+      toast.error('Nhap noi dung phan hoi');
+      return;
+    }
+
+    setReplyingReviewId(reviewId);
+    try {
+      const reply = await addReviewReply(reviewId, content);
+      setFood((current) => {
+        if (!current?.reviews) return current;
+        return {
+          ...current,
+          reviews: current.reviews.map((review) =>
+            review.id === reviewId
+              ? { ...review, replies: [...(review.replies || []), reply] }
+              : review
+          ),
+        };
+      });
+      setReplyInputs((prev) => ({ ...prev, [reviewId]: '' }));
+      toast.success('Da gui phan hoi');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.error || 'Khong th? gui phan hoi');
+    } finally {
+      setReplyingReviewId(null);
+    }
+  };
+
+  const handleBack = () => {
+    if (backTo) {
+      navigate(backTo);
+      return;
+    }
+    navigate(-1);
   };
 
   if (loading) {
@@ -147,7 +231,7 @@ const FoodDetailViewPage = () => {
     return (
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16 text-center">
         <p className="text-lg font-bold text-gray-900">Không tìm thấy món ăn.</p>
-        <Link to="/foods" className="inline-flex mt-4 px-4 py-2 rounded-2xl bg-gray-900 text-white font-bold">
+        <Link to={backTo || '/foods'} className="inline-flex mt-4 px-4 py-2 rounded-2xl bg-gray-900 text-white font-bold">
           Quay lại thư viện
         </Link>
       </div>
@@ -156,7 +240,7 @@ const FoodDetailViewPage = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      <button onClick={() => navigate(-1)} className="inline-flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-gray-900">
+      <button onClick={handleBack} className="inline-flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-gray-900">
         <ArrowLeft size={16} />
         Quay lại
       </button>
@@ -256,8 +340,8 @@ const FoodDetailViewPage = () => {
 
           <div className="rounded-[32px] bg-white border border-gray-100 shadow-sm p-7">
             <div className="flex items-center justify-between">
-              <h2 className="text-xl font-black text-gray-900">Đánh giá cộng đồng</h2>
-              <span className="text-sm font-bold text-gray-500">{food.reviews?.length || 0} đánh giá</span>
+              <h2 className="text-xl font-black text-gray-900">Danh gia cong dong</h2>
+              <span className="text-sm font-bold text-gray-500">{food.reviews?.length || 0} danh gia</span>
             </div>
             <div className="flex items-center gap-2 mt-4">
               {Array.from({ length: 5 }).map((_, index) => (
@@ -265,7 +349,45 @@ const FoodDetailViewPage = () => {
               ))}
               <span className="font-black text-gray-900">{ratingAverage.toFixed(1)}</span>
             </div>
-            <p className="text-sm text-gray-500 mt-3">{food.favorites?.length || 0} người dùng đã lưu món này trong thư viện yêu thích.</p>
+            <p className="text-sm text-gray-500 mt-3">{food.favorites?.length || 0} nguoi ?? luu mon nay vao thu vien.</p>
+
+            <div className="mt-5 border-t border-gray-100 pt-5 space-y-3">
+              <p className="text-sm font-black text-gray-900">Viet danh gia cua ban</p>
+              <div className="flex items-center gap-1">
+                {Array.from({ length: 5 }).map((_, index) => {
+                  const score = index + 1;
+                  return (
+                    <button
+                      key={score}
+                      type="button"
+                      onClick={() => setReviewRating(score)}
+                      className="p-1"
+                    >
+                      <Star
+                        size={18}
+                        className={score <= reviewRating ? 'fill-amber-400 text-amber-400' : 'text-gray-300'}
+                      />
+                    </button>
+                  );
+                })}
+              </div>
+              <textarea
+                value={reviewComment}
+                onChange={(event) => setReviewComment(event.target.value)}
+                rows={3}
+                placeholder="Cam nhan cua ban ve mon an..."
+                className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm bg-white text-gray-900 placeholder:text-gray-400 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-400"
+              />
+              <button
+                type="button"
+                onClick={handleSubmitReview}
+                disabled={submittingReview}
+                className="w-full rounded-2xl bg-gray-900 text-white py-3 text-sm font-black disabled:opacity-60 flex items-center justify-center gap-2"
+              >
+                {submittingReview ? <Loader2 size={16} className="animate-spin" /> : <SendHorizontal size={16} />}
+                {submittingReview ? '?ang gui...' : 'Gui danh gia'}
+              </button>
+            </div>
           </div>
 
           {food.recipe && (
@@ -395,18 +517,57 @@ const FoodDetailViewPage = () => {
         <section className="bg-white rounded-[32px] border border-gray-100 shadow-sm p-10 text-center">
           <CheckCircle2 size={44} className="mx-auto text-emerald-400 mb-4" />
           <h2 className="text-2xl font-black text-gray-900">Món ăn này chưa có công thức chi tiết</h2>
-          <p className="text-gray-500 mt-3">Bạn vẫn có thể thêm món vào nhật ký hoặc thử một món khác trong thư viện công thức.</p>
+          <p className="text-gray-500 mt-3">Bạn vẫn có thềEthêm món vào nhật ký hoặc thử một món khác trong thư viện công thức.</p>
           <Link to="/recipes" className="inline-flex mt-6 rounded-2xl bg-gray-900 text-white font-bold px-5 py-3">
             Xem thư viện công thức
           </Link>
         </section>
       )}
 
-      {!!food.reviews?.length && (
-        <section className="bg-white rounded-[32px] border border-gray-100 shadow-sm p-7">
-          <h2 className="text-2xl font-black text-gray-900">Đánh giá gần đây</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-            {food.reviews.slice(0, 6).map((review) => (
+      <section className="bg-white rounded-[32px] border border-gray-100 shadow-sm p-7">
+        <h2 className="text-2xl font-black text-gray-900">Danh gia va thao luan</h2>
+        <div className="mt-4 rounded-2xl border border-gray-100 bg-gray-50/70 p-4 space-y-3">
+          <p className="text-sm font-black text-gray-900">Tao comment moi</p>
+          <div className="flex items-center gap-1">
+            {Array.from({ length: 5 }).map((_, index) => {
+              const score = index + 1;
+              return (
+                <button
+                  key={`composer-${score}`}
+                  type="button"
+                  onClick={() => setReviewRating(score)}
+                  className="p-1"
+                >
+                  <Star
+                    size={18}
+                    className={score <= reviewRating ? 'fill-amber-400 text-amber-400' : 'text-gray-300'}
+                  />
+                </button>
+              );
+            })}
+          </div>
+          <textarea
+            value={reviewComment}
+            onChange={(event) => setReviewComment(event.target.value)}
+            rows={3}
+            placeholder="Chia se cam nhan cua ban ve mon an nay..."
+            className="w-full rounded-2xl border border-gray-200 px-3 py-2 text-sm bg-white text-gray-900 placeholder:text-gray-400 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-400"
+          />
+          <button
+            type="button"
+            onClick={handleSubmitReview}
+            disabled={submittingReview}
+            className="inline-flex items-center gap-2 rounded-xl bg-gray-900 text-white text-sm font-bold px-4 py-2.5 disabled:opacity-60"
+          >
+            {submittingReview ? <Loader2 size={14} className="animate-spin" /> : <SendHorizontal size={14} />}
+            {submittingReview ? '?ang gui...' : 'Dang comment'}
+          </button>
+        </div>
+        {!food.reviews?.length ? (
+          <p className="text-sm text-gray-500 mt-4">Chua co danh gia nao. Hay la nguoi dau tien chia se cam nhan.</p>
+        ) : (
+          <div className="space-y-4 mt-6">
+            {food.reviews.map((review) => (
               <div key={review.id} className="rounded-[24px] border border-gray-100 p-5">
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -419,14 +580,55 @@ const FoodDetailViewPage = () => {
                     ))}
                   </div>
                 </div>
-                <p className="text-sm text-gray-600 mt-4 leading-relaxed">{review.comment || 'Người dùng chưa để lại nhận xét chi tiết.'}</p>
+                <p className="text-sm text-gray-700 mt-4 leading-relaxed">{review.comment || 'Nguoi dung chua de lai nhan xet chi tiet.'}</p>
+
+                <div className="mt-4 space-y-2">
+                  {(review.replies || []).map((reply) => (
+                    <div key={reply.id} className="rounded-2xl bg-gray-50 border border-gray-100 px-4 py-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs font-black text-gray-700">
+                          {reply.user.name}
+                          {reply.user.role === 'ADMIN' && <span className="ml-2 rounded-full bg-blue-100 text-blue-700 px-2 py-0.5 text-[10px]">ADMIN</span>}
+                        </p>
+                        <p className="text-[11px] text-gray-400">{new Date(reply.createdAt).toLocaleString('vi-VN')}</p>
+                      </div>
+                      <p className="text-sm text-gray-700 mt-1">{reply.content}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {user && (
+                  <div className="mt-4 flex items-start gap-2">
+                    <MessageCircle size={16} className="mt-2 text-gray-400" />
+                    <div className="flex-1 space-y-2">
+                      <textarea
+                        value={replyInputs[review.id] || ''}
+                        onChange={(event) => setReplyInputs((prev) => ({ ...prev, [review.id]: event.target.value }))}
+                        rows={2}
+                        placeholder="Tra loi danh gia nay..."
+                        className="w-full rounded-2xl border border-gray-200 px-3 py-2 text-sm bg-white text-gray-900 placeholder:text-gray-400 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-400"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleSubmitReply(review.id)}
+                        disabled={replyingReviewId === review.id}
+                        className="inline-flex items-center gap-2 rounded-xl bg-gray-900 text-white text-xs font-bold px-3 py-2 disabled:opacity-60"
+                      >
+                        {replyingReviewId === review.id ? <Loader2 size={14} className="animate-spin" /> : <SendHorizontal size={14} />}
+                        {replyingReviewId === review.id ? '?ang gui' : 'Gui reply'}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
-        </section>
-      )}
+        )}
+      </section>
     </div>
   );
 };
 
 export default FoodDetailViewPage;
+
+

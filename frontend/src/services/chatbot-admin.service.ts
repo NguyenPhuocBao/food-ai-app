@@ -3,9 +3,17 @@ import api from './api';
 export interface ChatbotProviderHealth {
   providerMode: string;
   providerChain: string[];
+  providerChainDisplay?: string[];
   providers: {
     retrieval: { enabled: boolean; active: boolean };
-    grok: { configured: boolean; model: string; baseUrl: string };
+    grok: {
+      configured: boolean;
+      model: string;
+      baseUrl: string;
+      label?: string;
+      vendor?: 'groq' | 'xai';
+      isGroqCompatible?: boolean;
+    };
     gemini: { configured: boolean; model: string; candidates: string[]; apiVersions: string[] };
     openai: { configured: boolean; model: string };
   };

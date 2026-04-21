@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, ChevronLeft, ChevronRight, BarChart2, Calendar as CalendarIcon, Droplets, Target, Flame, Loader2, Trash2, Search, X, CheckCircle, ShieldAlert, GlassWater } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { getMealsByDate, addMeal, deleteMeal } from '../services/meal.service';
 import { getDailyStats } from '../services/statistics.service';
 import { searchFoods } from '../services/food.service';
@@ -18,6 +19,15 @@ const MEAL_TYPES = [
 const formatTime = (dateStr: string) => {
   const d = new Date(dateStr);
   return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+};
+
+const parseDateQuery = (value: string | null) => {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return new Date();
+  }
+
+  const parsed = new Date(`${value}T00:00:00`);
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
 };
 
 // ── Add Meal Modal ──────────────────────────────────────────────────────────
@@ -171,7 +181,8 @@ const AddMealModal = ({
 
 // ── Main Page ───────────────────────────────────────────────────────────────
 const DiaryPage = () => {
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [currentDate, setCurrentDate] = useState<Date>(() => parseDateQuery(searchParams.get('date')));
   const [meals, setMeals] = useState<Meal[]>([]);
   const [dailyStats, setDailyStats] = useState<any>(null);
   const [dailyHealth, setDailyHealth] = useState<any>(null);
@@ -180,6 +191,15 @@ const DiaryPage = () => {
   const [addModal, setAddModal] = useState<{ mealType: string } | null>(null);
 
   const dateStr = currentDate.toISOString().split('T')[0];
+
+  useEffect(() => {
+    const urlDate = searchParams.get('date') || '';
+    if (urlDate === dateStr) return;
+
+    const next = new URLSearchParams(searchParams);
+    next.set('date', dateStr);
+    setSearchParams(next, { replace: true });
+  }, [dateStr, searchParams, setSearchParams]);
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
@@ -225,7 +245,7 @@ const DiaryPage = () => {
       }));
       toast.success(`Da ghi nhan ${amountMl}ml nuoc`);
     } catch {
-      toast.error('Khong the ghi nhan nuoc uong luc nay');
+      toast.error('Khong th? ghi nhan nuoc uong luc nay');
     } finally {
       setIsLoggingWater(false);
     }
@@ -399,7 +419,7 @@ const DiaryPage = () => {
                 ))}
                 {!healthSummary.alerts?.length && (
                   <div className="rounded-xl bg-emerald-50 text-emerald-700 px-3 py-2 text-xs font-semibold">
-                    Khong co canh bao lon trong ngay.
+                    Khong c? canh bao lon trong ngay.
                   </div>
                 )}
               </div>

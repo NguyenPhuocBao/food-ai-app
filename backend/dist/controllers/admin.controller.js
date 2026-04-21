@@ -10,6 +10,10 @@ const active_user_service_1 = require("../services/active-user.service");
 const timezone_util_1 = require("../utils/timezone.util");
 const prisma = new client_1.PrismaClient();
 const toLocalDateKey = (date) => (0, timezone_util_1.toAppDateKey)(date);
+const SUPPORT_PREFIX = 'SUPPORT_';
+const SUPPORT_STATUS_OPEN = 'SUPPORT_OPEN';
+const SUPPORT_STATUS_PENDING = 'SUPPORT_PENDING';
+const SUPPORT_STATUS_CLOSED = 'SUPPORT_CLOSED';
 const getAllUsers = async (req, res) => {
     try {
         const { page = 1, limit = 20, search } = req.query;
@@ -264,9 +268,11 @@ const getSystemStats = async (req, res) => {
     try {
         const startOfToday = (0, timezone_util_1.toAppDayStart)(new Date());
         const startOfWindow = (0, timezone_util_1.shiftAppDays)(startOfToday, -6);
+        const supportFirstResponseWindowStart = (0, timezone_util_1.shiftAppDays)(startOfToday, -30);
+        const supportPendingThreshold = new Date(Date.now() - (24 * 60 * 60 * 1000));
         const activeUserIds = await (0, active_user_service_1.getActiveUserIds)();
         const activeUserSet = new Set(activeUserIds);
-        const [totalUsers, newUsersThisWeek, totalFoods, totalRecipes, totalMeals, mealsToday, totalScans, scansToday, confirmedScans, totalReviews, totalFavorites, totalMealPlans, activeMealPlans, topCategories, popularFoods, recentUsers, recentMeals, recentScans, recentFavorites, recentUserSignups, activeUsers,] = await Promise.all([
+        const [totalUsers, newUsersThisWeek, totalFoods, totalRecipes, totalMeals, mealsToday, totalScans, scansToday, confirmedScans, totalReviews, totalFavorites, totalMealPlans, activeMealPlans, topCategories, popularFoods, recentUsers, recentMeals, recentScans, recentFavorites, recentUserSignups, activeUsers, supportSessionStatusCounts, supportSessionsToday, supportPendingOver24h, supportMessagesTotal, supportSessionsForFirstResponse,] = await Promise.all([
             prisma.user.count(),
             prisma.user.count({ where: { createdAt: { gte: startOfWindow } } }),
             prisma.foodItem.count(),
@@ -326,7 +332,67 @@ const getSystemStats = async (req, res) => {
                     },
                 })
                 : Promise.resolve(0),
+            prisma.chatSession.groupBy({
+                by: ['status'],
+                where: {
+                    status: { startsWith: SUPPORT_PREFIX },
+                },
+                _count: { status: true },
+            }),
+            prisma.chatSession.count({
+                where: {
+                    status: { startsWith: SUPPORT_PREFIX },
+                    createdAt: { gte: startOfToday },
+                },
+            }),
+            prisma.chatSession.count({
+                where: {
+                    status: SUPPORT_STATUS_PENDING,
+                    updatedAt: { lte: supportPendingThreshold },
+                },
+            }),
+            prisma.chatMessage.count({
+                where: {
+                    session: {
+                        status: { startsWith: SUPPORT_PREFIX },
+                    },
+                },
+            }),
+            prisma.chatSession.findMany({
+                where: {
+                    status: { startsWith: SUPPORT_PREFIX },
+                    createdAt: { gte: supportFirstResponseWindowStart },
+                },
+                select: {
+                    id: true,
+                    messages: {
+                        orderBy: { createdAt: 'asc' },
+                        select: { role: true, createdAt: true },
+                    },
+                },
+            }),
         ]);
+        const supportStatusMap = supportSessionStatusCounts.reduce((acc, item) => {
+            acc[item.status] = item._count.status;
+            return acc;
+        }, {});
+        let supportFirstResponseSamples30d = 0;
+        let supportFirstResponseTotalMinutes30d = 0;
+        supportSessionsForFirstResponse.forEach((session) => {
+            const firstUserMessage = session.messages.find((message) => message.role === 'USER');
+            if (!firstUserMessage)
+                return;
+            const firstAdminReply = session.messages.find((message) => message.role === 'ADMIN' &&
+                message.createdAt.getTime() >= firstUserMessage.createdAt.getTime());
+            if (!firstAdminReply)
+                return;
+            const diffMinutes = (firstAdminReply.createdAt.getTime() - firstUserMessage.createdAt.getTime()) / 60000;
+            supportFirstResponseTotalMinutes30d += Math.max(0, diffMinutes);
+            supportFirstResponseSamples30d += 1;
+        });
+        const avgFirstResponseMinutes30d = supportFirstResponseSamples30d > 0
+            ? Math.round((supportFirstResponseTotalMinutes30d / supportFirstResponseSamples30d) * 10) / 10
+            : null;
         const dailyMap = new Map();
         for (let offset = 0; offset < 7; offset += 1) {
             const current = (0, timezone_util_1.shiftAppDays)(startOfWindow, offset);
@@ -404,6 +470,19 @@ const getSystemStats = async (req, res) => {
                     total: totalMealPlans,
                     active: activeMealPlans,
                 },
+                support: {
+                    totalSessions: (supportStatusMap[SUPPORT_STATUS_OPEN] || 0) +
+                        (supportStatusMap[SUPPORT_STATUS_PENDING] || 0) +
+                        (supportStatusMap[SUPPORT_STATUS_CLOSED] || 0),
+                    open: supportStatusMap[SUPPORT_STATUS_OPEN] || 0,
+                    pending: supportStatusMap[SUPPORT_STATUS_PENDING] || 0,
+                    closed: supportStatusMap[SUPPORT_STATUS_CLOSED] || 0,
+                    today: supportSessionsToday,
+                    pendingOver24h: supportPendingOver24h,
+                    totalMessages: supportMessagesTotal,
+                    avgFirstResponseMinutes30d,
+                    firstResponseSamples30d: supportFirstResponseSamples30d,
+                },
                 topCategories: topCategories.map((item) => ({
                     name: item.category,
                     value: item._count.category,
@@ -426,12 +505,34 @@ const getSystemStats = async (req, res) => {
 exports.getSystemStats = getSystemStats;
 const getAuditLogs = async (req, res) => {
     try {
-        const { page = 1, limit = 50, action, entity } = req.query;
+        const { page = 1, limit = 50, action, entity, search } = req.query;
         const where = {};
         if (action)
             where.action = action;
         if (entity)
             where.entity = entity;
+        const keyword = String(search || '').trim();
+        if (keyword) {
+            const relationSearch = {
+                user: {
+                    is: {
+                        OR: [
+                            { name: { contains: keyword, mode: 'insensitive' } },
+                            { email: { contains: keyword, mode: 'insensitive' } },
+                        ],
+                    },
+                },
+            };
+            const numericKeyword = Number.parseInt(keyword, 10);
+            where.OR = [
+                { action: { contains: keyword, mode: 'insensitive' } },
+                { entity: { contains: keyword, mode: 'insensitive' } },
+                { ipAddress: { contains: keyword, mode: 'insensitive' } },
+                { userAgent: { contains: keyword, mode: 'insensitive' } },
+                relationSearch,
+                ...(Number.isInteger(numericKeyword) ? [{ entityId: numericKeyword }] : []),
+            ];
+        }
         const logs = await prisma.auditLog.findMany({
             where,
             skip: (Number(page) - 1) * Number(limit),

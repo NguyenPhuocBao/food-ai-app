@@ -18,6 +18,24 @@ const normalizeText = (value: string) =>
     .toLowerCase();
 
 const unique = <T>(items: T[]) => Array.from(new Set(items));
+const MAX_SCAN_SUGGESTIONS = 12;
+
+const SCAN_CANDIDATE_HINTS: Array<{ key: string; aliases: string[] }> = [
+  { key: 'pho', aliases: ['pho bo', 'pho ga', 'pho xao'] },
+  { key: 'bun', aliases: ['bun bo hue', 'bun cha', 'bun rieu', 'bun thit nuong'] },
+  { key: 'com', aliases: ['com tam', 'com ga', 'com gao lut', 'com suon'] },
+  { key: 'mi', aliases: ['mi quang', 'mi xao bo', 'mi trung ga', 'mi tom rau bo'] },
+  { key: 'banh mi', aliases: ['banh mi trung', 'banh mi ga nuong', 'banh mi nguyen cam'] },
+  { key: 'chao', aliases: ['chao ga', 'chao tom', 'chao yen mach'] },
+  { key: 'salad', aliases: ['salad uc ga', 'salad ca ngu', 'salad tong hop'] },
+  { key: 'ga', aliases: ['ga nuong', 'ga luoc', 'ga hap gung'] },
+  { key: 'bo', aliases: ['bo xao', 'bo luc lac', 'bo ham rau cu'] },
+  { key: 'ca', aliases: ['ca kho to', 'ca hoi ap chao', 'ca hap xi dau'] },
+  { key: 'tom', aliases: ['tom hap', 'tom rim', 'tom chien toi'] },
+  { key: 'dau hu', aliases: ['dau hu sot ca chua', 'dau hu xao nam', 'dau hu kho nam'] },
+  { key: 'nuoc', aliases: ['nuoc ep tao can tay', 'nuoc ep dua leo', 'sua tuoi khong duong'] },
+  { key: 'sinh to', aliases: ['sinh to bo', 'sinh to chuoi'] },
+];
 
 const toFoodPayload = (food: any) => ({
   id: food.id,
@@ -35,6 +53,21 @@ const parseConfidence = (value: unknown) => {
   if (!Number.isFinite(parsed)) return 0;
   const percent = parsed > 1 ? parsed : parsed * 100;
   return Math.max(0, Math.min(100, percent));
+};
+
+const expandCandidateNames = (candidateNames: string[]) => {
+  const expanded = [...candidateNames];
+  const normalized = candidateNames.map((item) => normalizeText(item)).filter(Boolean);
+
+  for (const candidate of normalized) {
+    for (const hint of SCAN_CANDIDATE_HINTS) {
+      if (candidate.includes(hint.key)) {
+        expanded.push(...hint.aliases);
+      }
+    }
+  }
+
+  return unique(expanded).slice(0, 24);
 };
 
 const extractCandidateNames = (prediction: any, originalFileName: string) => {
@@ -124,13 +157,43 @@ const findSuggestedFoods = async (candidateNames: string[]) => {
     });
 
   if (normalizedCandidates.length === 0) {
-    return ranked.slice(0, 8).map((item) => item.food);
+    return ranked.slice(0, MAX_SCAN_SUGGESTIONS).map((item) => item.food);
   }
 
-  const filtered = ranked.filter((item) => item.score >= 50).slice(0, 8);
-  if (filtered.length > 0) return filtered.map((item) => item.food);
+  const result: any[] = [];
+  const usedIds = new Set<number>();
+  const usedCategories = new Set<string>();
 
-  return ranked.slice(0, 8).map((item) => item.food);
+  const pushFood = (food: any) => {
+    if (usedIds.has(food.id)) return;
+    usedIds.add(food.id);
+    if (food.category) usedCategories.add(String(food.category));
+    result.push(food);
+  };
+
+  ranked
+    .filter((item) => item.score >= 50)
+    .slice(0, MAX_SCAN_SUGGESTIONS)
+    .forEach((item) => pushFood(item.food));
+
+  if (result.length < MAX_SCAN_SUGGESTIONS) {
+    ranked
+      .filter((item) => !usedIds.has(item.food.id))
+      .forEach((item) => {
+        if (result.length >= MAX_SCAN_SUGGESTIONS) return;
+        if (!item.food.category || usedCategories.has(String(item.food.category))) return;
+        pushFood(item.food);
+      });
+  }
+
+  if (result.length < MAX_SCAN_SUGGESTIONS) {
+    ranked.forEach((item) => {
+      if (result.length >= MAX_SCAN_SUGGESTIONS) return;
+      pushFood(item.food);
+    });
+  }
+
+  return result.slice(0, MAX_SCAN_SUGGESTIONS);
 };
 
 export const analyzeImage = async (req: any, res: Response) => {
@@ -160,7 +223,8 @@ export const analyzeImage = async (req: any, res: Response) => {
     }
 
     const candidateNames = extractCandidateNames(prediction, req.file.originalname || path.basename(imagePath));
-    const suggestedFoods = await findSuggestedFoods(candidateNames);
+    const expandedCandidateNames = expandCandidateNames(candidateNames);
+    const suggestedFoods = await findSuggestedFoods(expandedCandidateNames);
     const foodItem = suggestedFoods[0] || null;
 
     const rawFoodName = candidateNames[0] || foodItem?.name || 'Khong xac dinh';
@@ -175,7 +239,7 @@ export const analyzeImage = async (req: any, res: Response) => {
       prediction,
       meta: {
         aiError,
-        candidateNames,
+        candidateNames: expandedCandidateNames,
         suggestedFoodIds: suggestedFoods.map((food) => food.id),
       },
     };

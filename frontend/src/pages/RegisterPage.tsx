@@ -19,7 +19,7 @@ const RegisterPage = () => {
     try {
       await register(email, password, name);
       toast.success('Đăng ký thành công!');
-      navigate('/');
+      navigate('/onboarding');
     } catch (error: any) {
       console.error('Registration error:', error.response?.data || error.message);
       toast.error(error.response?.data?.error || 'Đăng ký thất bại. Vui lòng thử lại!');

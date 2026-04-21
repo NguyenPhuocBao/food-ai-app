@@ -218,7 +218,7 @@ const ProfilePageV2 = () => {
       await refreshUser();
       toast.success('Da cap nhat profile');
     } catch (error: any) {
-      toast.error(error?.response?.data?.error || 'Khong the cap nhat profile');
+      toast.error(error?.response?.data?.error || 'Khong th? cap nhat profile');
     } finally {
       setIsSaving(false);
     }
@@ -242,7 +242,7 @@ const ProfilePageV2 = () => {
       });
       toast.success('Da cap nhat lich sinh hoat');
     } catch (error: any) {
-      toast.error(error?.response?.data?.error || 'Khong the cap nhat lich sinh hoat');
+      toast.error(error?.response?.data?.error || 'Khong th? cap nhat lich sinh hoat');
     } finally {
       setRoutineSaving(false);
     }
@@ -270,7 +270,7 @@ const ProfilePageV2 = () => {
       setConfirmPassword('');
       toast.success('Da doi mat khau');
     } catch (error: any) {
-      toast.error(error?.response?.data?.error || 'Khong the doi mat khau');
+      toast.error(error?.response?.data?.error || 'Khong th? doi mat khau');
     } finally {
       setIsChangingPassword(false);
     }
@@ -568,7 +568,7 @@ const ProfilePageV2 = () => {
                 className="inline-flex items-center gap-2 rounded-xl bg-sky-500 hover:bg-sky-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-60"
               >
                 {routineSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                {routineSaving ? 'Dang luu lich...' : 'Luu lich sinh hoat'}
+                {routineSaving ? '?ang luu lich...' : 'Luu lich sinh hoat'}
               </button>
             </div>
           </div>
@@ -589,7 +589,7 @@ const ProfilePageV2 = () => {
               className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-60"
             >
               {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-              {isSaving ? 'Dang luu...' : 'Luu thay doi'}
+              {isSaving ? '?ang luu...' : 'Luu thay doi'}
             </button>
           </div>
         </div>

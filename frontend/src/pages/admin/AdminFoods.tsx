@@ -1,5 +1,5 @@
-﻿import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+﻿import { useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Search, Trash } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
@@ -15,11 +15,14 @@ function removeAccents(str: string) {
 
 const AdminFoods = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const initialPage = Number(searchParams.get('page') || 1);
   const [allFoods, setAllFoods] = useState<any[]>([]);
-  const [filteredFoods, setFilteredFoods] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchInput, setSearchInput] = useState('');
-  const [page, setPage] = useState(1);
+  const [searchInput, setSearchInput] = useState(searchParams.get('q') || '');
+  const [page, setPage] = useState(Number.isFinite(initialPage) && initialPage > 0 ? Math.floor(initialPage) : 1);
   const itemsPerPage = 20;
 
   useEffect(() => {
@@ -38,21 +41,33 @@ const AdminFoods = () => {
     void loadAllFoods();
   }, []);
 
-  useEffect(() => {
-    if (!searchInput.trim()) {
-      setFilteredFoods(allFoods);
-    } else {
-      const normalizedSearch = removeAccents(searchInput.toLowerCase());
-      const filtered = allFoods.filter((food) =>
-        removeAccents(String(food.name || '').toLowerCase()).includes(normalizedSearch),
-      );
-      setFilteredFoods(filtered);
-    }
-    setPage(1);
-  }, [searchInput, allFoods]);
+  const filteredFoods = useMemo(() => {
+    if (!searchInput.trim()) return allFoods;
+    const normalizedSearch = removeAccents(searchInput.toLowerCase());
+    return allFoods.filter((food) =>
+      removeAccents(String(food.name || '').toLowerCase()).includes(normalizedSearch),
+    );
+  }, [allFoods, searchInput]);
 
   const totalPages = Math.max(1, Math.ceil(filteredFoods.length / itemsPerPage));
   const paginatedFoods = filteredFoods.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+
+  useEffect(() => {
+    if (loading) return;
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [loading, page, totalPages]);
+
+  useEffect(() => {
+    const nextParams = new URLSearchParams();
+    if (page > 1) nextParams.set('page', String(page));
+    if (searchInput.trim()) nextParams.set('q', searchInput.trim());
+
+    if (nextParams.toString() !== searchParams.toString()) {
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [page, searchInput, searchParams, setSearchParams]);
 
   const handleDelete = async (id: number) => {
     if (!window.confirm('Xoa mon an nay?')) return;
@@ -80,7 +95,7 @@ const AdminFoods = () => {
     return (
       <EmptyState
         icon={Search}
-        title="Khong co mon an"
+        title="Khong c? mon an"
         description="He thong chua co du lieu mon an."
       />
     );
@@ -101,7 +116,10 @@ const AdminFoods = () => {
           type="text"
           placeholder="Tim kiem mon an..."
           value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
+          onChange={(e) => {
+            setSearchInput(e.target.value);
+            setPage(1);
+          }}
           className="w-full pl-12 pr-4 py-3 border border-gray-200 dark:border-gray-700 rounded-2xl focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:bg-gray-800 transition"
         />
       </div>
@@ -122,7 +140,7 @@ const AdminFoods = () => {
               {paginatedFoods.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-6 py-10 text-center text-gray-500 dark:text-gray-400">
-                    Khong co du lieu
+                    Khong c? du lieu
                   </td>
                 </tr>
               ) : (
@@ -131,7 +149,11 @@ const AdminFoods = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-gray-400">{food.id}</td>
                     <td
                       className="px-6 py-4 whitespace-nowrap font-medium text-blue-600 dark:text-blue-400 cursor-pointer hover:underline"
-                      onClick={() => navigate(`/admin/foods/${food.id}`)}
+                      onClick={() =>
+                        navigate(`/admin/foods/${food.id}${location.search}`, {
+                          state: { from: `${location.pathname}${location.search}` },
+                        })
+                      }
                     >
                       {food.name}
                     </td>

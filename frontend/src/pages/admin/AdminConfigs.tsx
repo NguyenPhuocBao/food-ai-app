@@ -70,9 +70,9 @@ const NUTRITION_FIELDS: FieldDef[] = [
 ];
 
 const AI_FIELDS: FieldDef[] = [
-  { key: 'ai_recommendation_model', label: 'Model goi y', type: 'text' },
+  { key: 'ai_recommendation_model', label: 'Model gui ?', type: 'text' },
   { key: 'ai_temperature', label: 'Temperature', type: 'number' },
-  { key: 'ai_max_suggestions', label: 'So goi y moi lan', type: 'number' },
+  { key: 'ai_max_suggestions', label: 'So gui ? moi lan', type: 'number' },
   { key: 'ai_min_confidence', label: 'Nguong tu tin toi thieu', type: 'number' },
   { key: 'ai_system_prompt', label: 'System prompt', type: 'textarea' },
   { key: 'enable_meal_plan_ai', label: 'Bat AI meal plan', type: 'boolean' },
@@ -141,7 +141,7 @@ const AdminConfigs = () => {
     });
 
     if (Object.keys(updates).length === 0) {
-      toast('Khong co thay doi de luu');
+      toast('Khong c? thay doi de luu');
       return;
     }
 
@@ -234,7 +234,7 @@ const AdminConfigs = () => {
   );
 
   if (loading) {
-    return <div className="p-6 text-center text-gray-500">Dang tai config...</div>;
+    return <div className="p-6 text-center text-gray-500">?ang tai config...</div>;
   }
 
   return (
@@ -281,7 +281,7 @@ const AdminConfigs = () => {
             Provider mode: <span className="font-semibold">{health?.providerMode || 'unknown'}</span>
           </div>
           <div className="text-sm text-gray-600 dark:text-slate-300">
-            Provider chain: {health?.providerChain?.join(' -> ') || 'unknown'}
+            Provider chain: {health?.providerChainDisplay?.join(' -> ') || health?.providerChain?.join(' -> ') || 'unknown'}
           </div>
           <div className="text-sm text-gray-600 dark:text-slate-300">
             Training examples: {health?.training?.totalExamples ?? '--'} (source: {health?.training?.source || '--'})

@@ -15,6 +15,10 @@ import {
 const prisma = new PrismaClient();
 
 const toLocalDateKey = (date: Date) => toAppDateKey(date);
+const SUPPORT_PREFIX = 'SUPPORT_';
+const SUPPORT_STATUS_OPEN = 'SUPPORT_OPEN';
+const SUPPORT_STATUS_PENDING = 'SUPPORT_PENDING';
+const SUPPORT_STATUS_CLOSED = 'SUPPORT_CLOSED';
 
 export const getAllUsers = async (req: Request, res: Response) => {
   try {
@@ -257,6 +261,8 @@ export const getSystemStats = async (req: Request, res: Response) => {
   try {
     const startOfToday = toAppDayStart(new Date());
     const startOfWindow = shiftAppDays(startOfToday, -6);
+    const supportFirstResponseWindowStart = shiftAppDays(startOfToday, -30);
+    const supportPendingThreshold = new Date(Date.now() - (24 * 60 * 60 * 1000));
 
     const activeUserIds = await getActiveUserIds();
     const activeUserSet = new Set(activeUserIds);
@@ -283,6 +289,11 @@ export const getSystemStats = async (req: Request, res: Response) => {
       recentFavorites,
       recentUserSignups,
       activeUsers,
+      supportSessionStatusCounts,
+      supportSessionsToday,
+      supportPendingOver24h,
+      supportMessagesTotal,
+      supportSessionsForFirstResponse,
     ] = await Promise.all([
       prisma.user.count(),
       prisma.user.count({ where: { createdAt: { gte: startOfWindow } } }),
@@ -343,7 +354,74 @@ export const getSystemStats = async (req: Request, res: Response) => {
             },
           })
         : Promise.resolve(0),
+      prisma.chatSession.groupBy({
+        by: ['status'],
+        where: {
+          status: { startsWith: SUPPORT_PREFIX },
+        },
+        _count: { status: true },
+      }),
+      prisma.chatSession.count({
+        where: {
+          status: { startsWith: SUPPORT_PREFIX },
+          createdAt: { gte: startOfToday },
+        },
+      }),
+      prisma.chatSession.count({
+        where: {
+          status: SUPPORT_STATUS_PENDING,
+          updatedAt: { lte: supportPendingThreshold },
+        },
+      }),
+      prisma.chatMessage.count({
+        where: {
+          session: {
+            status: { startsWith: SUPPORT_PREFIX },
+          },
+        },
+      }),
+      prisma.chatSession.findMany({
+        where: {
+          status: { startsWith: SUPPORT_PREFIX },
+          createdAt: { gte: supportFirstResponseWindowStart },
+        },
+        select: {
+          id: true,
+          messages: {
+            orderBy: { createdAt: 'asc' },
+            select: { role: true, createdAt: true },
+          },
+        },
+      }),
     ]);
+
+    const supportStatusMap = supportSessionStatusCounts.reduce<Record<string, number>>((acc, item) => {
+      acc[item.status] = item._count.status;
+      return acc;
+    }, {});
+
+    let supportFirstResponseSamples30d = 0;
+    let supportFirstResponseTotalMinutes30d = 0;
+
+    supportSessionsForFirstResponse.forEach((session) => {
+      const firstUserMessage = session.messages.find((message) => message.role === 'USER');
+      if (!firstUserMessage) return;
+
+      const firstAdminReply = session.messages.find(
+        (message) =>
+          message.role === 'ADMIN' &&
+          message.createdAt.getTime() >= firstUserMessage.createdAt.getTime(),
+      );
+      if (!firstAdminReply) return;
+
+      const diffMinutes = (firstAdminReply.createdAt.getTime() - firstUserMessage.createdAt.getTime()) / 60000;
+      supportFirstResponseTotalMinutes30d += Math.max(0, diffMinutes);
+      supportFirstResponseSamples30d += 1;
+    });
+
+    const avgFirstResponseMinutes30d = supportFirstResponseSamples30d > 0
+      ? Math.round((supportFirstResponseTotalMinutes30d / supportFirstResponseSamples30d) * 10) / 10
+      : null;
 
     const dailyMap = new Map<string, {
       date: string;
@@ -432,6 +510,20 @@ export const getSystemStats = async (req: Request, res: Response) => {
           total: totalMealPlans,
           active: activeMealPlans,
         },
+        support: {
+          totalSessions:
+            (supportStatusMap[SUPPORT_STATUS_OPEN] || 0) +
+            (supportStatusMap[SUPPORT_STATUS_PENDING] || 0) +
+            (supportStatusMap[SUPPORT_STATUS_CLOSED] || 0),
+          open: supportStatusMap[SUPPORT_STATUS_OPEN] || 0,
+          pending: supportStatusMap[SUPPORT_STATUS_PENDING] || 0,
+          closed: supportStatusMap[SUPPORT_STATUS_CLOSED] || 0,
+          today: supportSessionsToday,
+          pendingOver24h: supportPendingOver24h,
+          totalMessages: supportMessagesTotal,
+          avgFirstResponseMinutes30d,
+          firstResponseSamples30d: supportFirstResponseSamples30d,
+        },
         topCategories: topCategories.map((item) => ({
           name: item.category,
           value: item._count.category,
@@ -453,10 +545,35 @@ export const getSystemStats = async (req: Request, res: Response) => {
 
 export const getAuditLogs = async (req: Request, res: Response) => {
   try {
-    const { page = 1, limit = 50, action, entity } = req.query;
+    const { page = 1, limit = 50, action, entity, search } = req.query;
     const where: any = {};
     if (action) where.action = action;
     if (entity) where.entity = entity;
+
+    const keyword = String(search || '').trim();
+    if (keyword) {
+      const relationSearch = {
+        user: {
+          is: {
+            OR: [
+              { name: { contains: keyword, mode: 'insensitive' as const } },
+              { email: { contains: keyword, mode: 'insensitive' as const } },
+            ],
+          },
+        },
+      };
+
+      const numericKeyword = Number.parseInt(keyword, 10);
+      where.OR = [
+        { action: { contains: keyword, mode: 'insensitive' as const } },
+        { entity: { contains: keyword, mode: 'insensitive' as const } },
+        { ipAddress: { contains: keyword, mode: 'insensitive' as const } },
+        { userAgent: { contains: keyword, mode: 'insensitive' as const } },
+        relationSearch,
+        ...(Number.isInteger(numericKeyword) ? [{ entityId: numericKeyword }] : []),
+      ];
+    }
+
     const logs = await prisma.auditLog.findMany({
       where,
       skip: (Number(page) - 1) * Number(limit),

@@ -128,7 +128,7 @@ const evaluateMealHealth = (meal) => {
     if (hasVegetable)
         positives.push('Da bo sung rau xanh.');
     if (!saltyRisk)
-        positives.push('Khong co dau hieu mon man cao.');
+        positives.push('Khong c? dau hieu mon man cao.');
     return {
         mealId: meal.id,
         score,
@@ -188,7 +188,7 @@ const evaluateDailyHealth = (date, meals) => {
             grade: 'D',
             alerts: ['Chua co du lieu bua an trong ngay.'],
             highlights: [],
-            recommendations: ['Hay bat dau ghi nhat ky it nhat 2 bua/ngay de nhan goi y chinh xac.'],
+            recommendations: ['Hay bat dau ghi nhat ky it nhat 2 bua/ngay de nhan gui ? chinh xac.'],
             mealScores: [],
             stats: {
                 meals: 0,

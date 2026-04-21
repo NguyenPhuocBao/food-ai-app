@@ -20,13 +20,18 @@ api.interceptors.request.use((config) => {
   const isAdminRequest =
     config.url?.startsWith('/admin') ||
     config.url?.includes('userId=') ||
-    (isAdminRoute && config.url?.startsWith('/chat'));
+    (isAdminRoute && (config.url?.startsWith('/chat') || config.url?.startsWith('/support')));
   
   const adminToken = localStorage.getItem('admin_token');
   const userToken = localStorage.getItem('token');
 
-  if (isAdminRequest && adminToken) {
-    config.headers.Authorization = `Bearer ${adminToken}`;
+  // Tach rieng token theo role, khong fallback cheo:
+  // - Request admin chi dung admin_token
+  // - Request user chi dung token user
+  if (isAdminRequest) {
+    if (adminToken) {
+      config.headers.Authorization = `Bearer ${adminToken}`;
+    }
   } else if (userToken) {
     config.headers.Authorization = `Bearer ${userToken}`;
   }
@@ -41,7 +46,9 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       const url = error.config.url;
       const isAdminRoute = window.location.pathname.startsWith('/admin');
-      const isAdminRequest = url?.startsWith('/admin') || (isAdminRoute && url?.startsWith('/chat'));
+      const isAdminRequest =
+        url?.startsWith('/admin') ||
+        (isAdminRoute && (url?.startsWith('/chat') || url?.startsWith('/support')));
 
       if (isAdminRequest) {
         localStorage.removeItem('admin_token');

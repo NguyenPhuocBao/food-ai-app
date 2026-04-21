@@ -13,6 +13,7 @@ const USER_ROUTES: Array<{ prefix: string; title: string }> = [
   { prefix: '/library', title: 'Library' },
   { prefix: '/recommendations', title: 'Recommendations' },
   { prefix: '/weekly-reports', title: 'Weekly Reports' },
+  { prefix: '/onboarding', title: 'Onboarding' },
 ];
 
 const ADMIN_ROUTES: Array<{ prefix: string; title: string }> = [

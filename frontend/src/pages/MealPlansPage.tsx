@@ -188,7 +188,7 @@ const MealPlansPage = () => {
       resetForm();
       await loadData();
     } catch {
-      toast.error('Khong the tao meal plan tu dong');
+      toast.error('Khong th? tao meal plan tu dong');
     } finally {
       setAutoGenerating(false);
     }
@@ -217,7 +217,7 @@ const MealPlansPage = () => {
       }
       await loadData();
     } catch {
-      toast.error('Khong the ap dung meal plan cho hom nay');
+      toast.error('Khong th? ap dung meal plan cho hom nay');
     } finally {
       setApplyingToday(false);
     }
@@ -250,7 +250,7 @@ const MealPlansPage = () => {
       setShoppingPlanId(planId);
       setShoppingList(result);
     } catch {
-      toast.error('Khong the tai shopping list');
+      toast.error('Khong th? tai shopping list');
     } finally {
       setShoppingLoading(false);
     }
@@ -274,7 +274,7 @@ const MealPlansPage = () => {
         };
       });
     } catch {
-      toast.error('Khong the cap nhat trang thai item');
+      toast.error('Khong th? cap nhat trang thai item');
     }
   };
 
@@ -292,7 +292,7 @@ const MealPlansPage = () => {
       });
       toast.success('Da reset danh sach mua sam');
     } catch {
-      toast.error('Khong the reset shopping list');
+      toast.error('Khong th? reset shopping list');
     }
   };
 
@@ -661,7 +661,7 @@ const MealPlansPage = () => {
                           <div>
                             <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-600">Shopping List</p>
                             <p className="text-sm text-blue-800 mt-1">
-                              {shoppingList?.checkedItems ?? 0}/{shoppingList?.totalItems ?? 0} item da check
+                              {shoppingList?.checkedItems ?? 0}/{shoppingList?.totalItems ?? 0} item ?? check
                               {typeof shoppingList?.completionRate === 'number' ? ` (${shoppingList.completionRate}%)` : ''}
                             </p>
                           </div>

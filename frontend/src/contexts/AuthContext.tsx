@@ -103,10 +103,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logoutUser = useCallback(() => {
     localStorage.removeItem('token');
     setUser(null);
-    toast.success('Dang xuat tai khoan nguoi dung thanh cong');
-    if (!window.location.pathname.startsWith('/admin')) {
-      const hasAdminToken = Boolean(localStorage.getItem('admin_token'));
-      window.location.href = hasAdminToken ? '/admin' : '/login';
+    toast.success('Dang xuat tai kho?n nguoi dung thanh cong');
+    if (!window.location.pathname.includes('/login')) {
+      window.location.href = '/login';
     }
   }, []);
 

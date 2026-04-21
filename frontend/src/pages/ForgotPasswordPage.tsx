@@ -20,7 +20,7 @@ const ForgotPasswordPage = () => {
       await forgotPassword(email);
       setSuccessMsg('Neu email ton tai, he thong da gui huong dan dat lai mat khau.');
     } catch (error: any) {
-      setErrorMsg(error.response?.data?.error || 'Khong the gui yeu cau. Vui long thu lai.');
+      setErrorMsg(error.response?.data?.error || 'Khong th? gui yeu cau. Vui long thu lai.');
     } finally {
       setIsLoading(false);
     }
@@ -47,7 +47,7 @@ const ForgotPasswordPage = () => {
               mat khau
             </h1>
             <p className="text-gray-300 text-lg max-w-md">
-              Nhap email da dang ky, he thong se gui link dat lai mat khau den ban.
+              Nhap email ?? dang ky, he thong se gui link dat lai mat khau den ban.
             </p>
           </motion.div>
         </div>
@@ -115,7 +115,7 @@ const ForgotPasswordPage = () => {
                 isLoading ? 'opacity-80 cursor-not-allowed' : ''
               }`}
             >
-              {isLoading ? 'Dang gui...' : (
+              {isLoading ? '?ang gui...' : (
                 <>
                   Gui link dat lai
                   <ArrowRight size={18} className="ml-2" />
@@ -128,7 +128,7 @@ const ForgotPasswordPage = () => {
             <p className="text-sm text-gray-600">
               Nho mat khau roi?{' '}
               <Link to="/login" className="font-semibold text-green-600 hover:text-green-500 transition-colors">
-                Quay lai dang nhap
+                Quay lai Dang nhap
               </Link>
             </p>
           </div>

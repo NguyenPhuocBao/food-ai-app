@@ -8,4 +8,5 @@ router.get('/daily', auth_middleware_1.authMiddleware, statistics_controller_1.g
 router.get('/weekly', auth_middleware_1.authMiddleware, statistics_controller_1.getWeeklyStats);
 router.get('/monthly', auth_middleware_1.authMiddleware, statistics_controller_1.getMonthlyStats);
 router.get('/trends', auth_middleware_1.authMiddleware, statistics_controller_1.getTrends);
+router.get('/overview', auth_middleware_1.authMiddleware, statistics_controller_1.getNutritionOverview);
 exports.default = router;

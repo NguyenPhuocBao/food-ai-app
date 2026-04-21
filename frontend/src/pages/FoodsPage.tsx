@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { ArrowRight, Flame, Loader2, Search, Sparkles } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getCategories, getFoods, getPopularFoods, createCustomFood, getMyCustomFoods, bootstrapPopularFoods } from '../services/food.service';
@@ -9,14 +9,17 @@ import type { FoodItem } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 
 const FoodsPage = () => {
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
+  const initialPage = Number(searchParams.get('page') || 1);
   const [foods, setFoods] = useState<FoodItem[]>([]);
   const [popularFoods, setPopularFoods] = useState<FoodItem[]>([]);
   const [customFoods, setCustomFoods] = useState<FoodItem[]>([]);
   const [categories, setCategories] = useState<{ category: string; _count: number }[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState('');
-  const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
+  const [selectedCategory, setSelectedCategory] = useState(searchParams.get('category') || '');
+  const [search, setSearch] = useState(searchParams.get('q') || '');
+  const [page, setPage] = useState(Number.isFinite(initialPage) && initialPage > 0 ? Math.floor(initialPage) : 1);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [creatingCustom, setCreatingCustom] = useState(false);
@@ -62,8 +65,22 @@ const FoodsPage = () => {
   }, [page, selectedCategory, debouncedSearch]);
 
   useEffect(() => {
-    setPage(1);
-  }, [selectedCategory, debouncedSearch]);
+    if (loading) return;
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [loading, page, totalPages]);
+
+  useEffect(() => {
+    const nextParams = new URLSearchParams();
+    if (page > 1) nextParams.set('page', String(page));
+    if (selectedCategory) nextParams.set('category', selectedCategory);
+    if (search.trim()) nextParams.set('q', search.trim());
+
+    if (nextParams.toString() !== searchParams.toString()) {
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [page, search, selectedCategory, searchParams, setSearchParams]);
 
   const handleCreateCustomFood = async () => {
     const calories = Number(customForm.calories);
@@ -95,7 +112,7 @@ const FoodsPage = () => {
       setFoods(result.items);
       setTotalPages(result.pagination.totalPages || 1);
     } catch {
-      toast.error('Khong the tao mon ca nhan');
+      toast.error('Khong th? tao mon ca nhan');
     } finally {
       setCreatingCustom(false);
     }
@@ -152,7 +169,10 @@ const FoodsPage = () => {
               <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 value={search}
-                onChange={(event) => setSearch(event.target.value)}
+                onChange={(event) => {
+                  setSearch(event.target.value);
+                  setPage(1);
+                }}
                 placeholder="Tìm món ăn..."
                 className="w-full rounded-2xl border-0 bg-gray-50 pl-11 pr-4 py-3 text-sm text-gray-900 focus:ring-2 focus:ring-emerald-500/20"
               />
@@ -162,7 +182,10 @@ const FoodsPage = () => {
               <p className="text-sm font-black text-gray-900 mb-3">Danh mục</p>
               <div className="flex flex-wrap gap-2">
                 <button
-                  onClick={() => setSelectedCategory('')}
+                  onClick={() => {
+                    setSelectedCategory('');
+                    setPage(1);
+                  }}
                   className={`px-3 py-2 rounded-full text-xs font-bold transition-colors ${
                     !selectedCategory ? 'bg-emerald-500 text-white' : 'bg-gray-100 text-gray-600'
                   }`}
@@ -172,7 +195,10 @@ const FoodsPage = () => {
                 {categories.map((item) => (
                   <button
                     key={item.category}
-                    onClick={() => setSelectedCategory(item.category)}
+                    onClick={() => {
+                      setSelectedCategory(item.category);
+                      setPage(1);
+                    }}
                     className={`px-3 py-2 rounded-full text-xs font-bold transition-colors ${
                       selectedCategory === item.category ? 'bg-emerald-500 text-white' : 'bg-gray-100 text-gray-600'
                     }`}
@@ -193,7 +219,8 @@ const FoodsPage = () => {
               {popularFoods.map((food) => (
                 <Link
                   key={food.id}
-                  to={`/foods/${food.id}`}
+                  to={`/foods/${food.id}${location.search}`}
+                  state={{ from: `${location.pathname}${location.search}` }}
                   className="flex items-center gap-3 rounded-2xl border border-gray-100 p-3 hover:border-emerald-200 hover:bg-emerald-50/40 transition-colors"
                 >
                   <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center overflow-hidden shrink-0">
@@ -292,7 +319,8 @@ const FoodsPage = () => {
                 {foods.map((food) => (
                   <Link
                     key={food.id}
-                    to={`/foods/${food.id}`}
+                    to={`/foods/${food.id}${location.search}`}
+                    state={{ from: `${location.pathname}${location.search}` }}
                     className="group bg-white rounded-[28px] border border-gray-100 shadow-sm overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all"
                   >
                     <div className="h-48 bg-gradient-to-br from-emerald-50 via-white to-amber-50 flex items-center justify-center overflow-hidden">

@@ -25,7 +25,7 @@ import {
 } from '../services/chatbot.service';
 
 const suggestions = [
-  'Goi y bua toi duoi 500 calo',
+  'Gui ? bua toi duoi 500 calo',
   'Toi di ung hai san, hom nay an gi?',
   'Tao thuc don chay cho tuan nay',
   'Lam sao nau uc ga khong bi kho?',
@@ -77,7 +77,7 @@ const ChatPageV2 = () => {
       const fullSession = await getSession(session.id);
       setActiveSession(fullSession);
     } catch {
-      toast.error('Khong the tao cuoc tro chuyen moi');
+      toast.error('Khong th? tao cuoc tro chuyen moi');
     }
   };
 
@@ -87,7 +87,7 @@ const ChatPageV2 = () => {
       const fullSession = await getSession(sessionId);
       setActiveSession(fullSession);
     } catch {
-      toast.error('Khong the tai cuoc tro chuyen');
+      toast.error('Khong th? tai cuoc tro chuyen');
     } finally {
       setIsLoadingMessages(false);
     }
@@ -110,7 +110,7 @@ const ChatPageV2 = () => {
 
       toast.success('Da xoa cuoc tro chuyen');
     } catch {
-      toast.error('Khong the xoa cuoc tro chuyen');
+      toast.error('Khong th? xoa cuoc tro chuyen');
     }
   };
 
@@ -127,7 +127,7 @@ const ChatPageV2 = () => {
         setActiveSession(fullSession);
         sessionId = newSession.id;
       } catch {
-        toast.error('Khong the tao cuoc tro chuyen');
+        toast.error('Khong th? tao cuoc tro chuyen');
         return;
       }
     }

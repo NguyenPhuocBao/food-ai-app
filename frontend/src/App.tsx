@@ -14,6 +14,7 @@ import ScanPage from './pages/ScanRealPageV2';
 import DiaryPage from './pages/DiaryPage';
 import ChatPage from './pages/ChatPageV2';
 import ProfilePage from './pages/ProfilePageV2';
+import OnboardingPage from './pages/OnboardingPage';
 import StatisticsPage from './pages/StatisticsPage';
 import FoodsPage from './pages/FoodsPage';
 import FoodDetailPage from './pages/FoodDetailViewPage';
@@ -40,6 +41,7 @@ import AdminRecipeEdit from './pages/admin/AdminRecipeEdit';
 import AdminMealPlans from './pages/admin/AdminMealPlans';
 import AdminMealDetail from './pages/admin/AdminMealDetail';
 import AdminChatbotOps from './pages/admin/AdminChatbotOps';
+import SupportChatWidget from './components/common/SupportChatWidget';
 
 function App() {
   return (
@@ -53,6 +55,7 @@ function App() {
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route element={<ProtectedRoute />}>
+            <Route path="/onboarding" element={<OnboardingPage />} />
             <Route element={<UserLayout />}>
               <Route path="/" element={<HomePage />} />
               <Route path="/scan" element={<ScanPage />} />
@@ -91,6 +94,7 @@ function App() {
             </Route>
           </Route>
         </Routes>
+        <SupportChatWidget />
       </BrowserRouter>
     </AuthProvider>
   );

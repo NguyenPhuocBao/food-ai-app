@@ -36,10 +36,10 @@ const ResetPasswordPage = () => {
     setIsLoading(true);
     try {
       await resetPassword(token, newPassword);
-      setSuccessMsg('Dat lai mat khau thanh cong. Dang chuyen den trang dang nhap...');
+      setSuccessMsg('Dat lai mat khau thanh cong. Dang chuyen den trang Dang nhap...');
       setTimeout(() => navigate('/login'), 1200);
     } catch (error: any) {
-      setErrorMsg(error.response?.data?.error || 'Khong the dat lai mat khau. Vui long thu lai.');
+      setErrorMsg(error.response?.data?.error || 'Khong th? dat lai mat khau. Vui long thu lai.');
     } finally {
       setIsLoading(false);
     }
@@ -66,7 +66,7 @@ const ResetPasswordPage = () => {
               moi
             </h1>
             <p className="text-gray-300 text-lg max-w-md">
-              Chon mat khau moi de tiep tuc su dung tai khoan FoodAI an toan hon.
+              Chon mat khau moi de tiep tuc su dung tai kho?n FoodAI an toan hon.
             </p>
           </motion.div>
         </div>
@@ -153,7 +153,7 @@ const ResetPasswordPage = () => {
                 isLoading ? 'opacity-80 cursor-not-allowed' : ''
               }`}
             >
-              {isLoading ? 'Dang cap nhat...' : (
+              {isLoading ? 'dang cap nhat...' : (
                 <>
                   Cap nhat mat khau
                   <ArrowRight size={18} className="ml-2" />
@@ -164,9 +164,9 @@ const ResetPasswordPage = () => {
 
           <div className="mt-8 text-center sm:text-left">
             <p className="text-sm text-gray-600">
-              Da co mat khau?{' '}
+              ?? co mat khau?{' '}
               <Link to="/login" className="font-semibold text-green-600 hover:text-green-500 transition-colors">
-                Quay lai dang nhap
+                Quay lai Dang nhap
               </Link>
             </p>
           </div>

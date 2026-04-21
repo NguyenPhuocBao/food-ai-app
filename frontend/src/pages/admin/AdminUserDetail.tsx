@@ -5,7 +5,7 @@ import {
   Activity, Camera, Calendar, Heart, Eye, 
   Star, MessageSquare, User, Mail, Shield, CheckCircle, XCircle,
   Ruler, Weight, Target, AlertCircle, TrendingUp, PieChart as PieChartIcon,
-  Utensils, Clock
+  Utensils, Clock, Loader2, X
 } from 'lucide-react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, 
@@ -29,6 +29,9 @@ const AdminUserDetail = () => {
   const [chats, setChats] = useState<any[]>([]);
   const [reviews, setReviews] = useState<any[]>([]);
   const [weeklyCalories, setWeeklyCalories] = useState<any[]>([]);
+  const [chatDetailLoading, setChatDetailLoading] = useState(false);
+  const [selectedChatSession, setSelectedChatSession] = useState<any>(null);
+  const [showChatDetailModal, setShowChatDetailModal] = useState(false);
   const [showBanModal, setShowBanModal] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -78,6 +81,21 @@ const AdminUserDetail = () => {
     await api.delete(`/admin/users/${user.id}`);
     toast.success('Đã xóa người dùng');
     navigate('/admin/users');
+  };
+
+  const handleOpenChatSession = async (sessionId: number) => {
+    setShowChatDetailModal(true);
+    setChatDetailLoading(true);
+    setSelectedChatSession(null);
+    try {
+      const response = await api.get(`/chat/sessions/${sessionId}?userId=${id}`);
+      setSelectedChatSession(response.data.data || null);
+    } catch {
+      toast.error('Khong th? tai chi tiet phien chat AI');
+      setShowChatDetailModal(false);
+    } finally {
+      setChatDetailLoading(false);
+    }
   };
 
   const calculateBMI = (height: number, weight: number) => {
@@ -318,7 +336,7 @@ const AdminUserDetail = () => {
         ) : (
           <div className="space-y-3">
             {chats.slice(0, 5).map(chat => (
-              <div key={chat.id} className="flex justify-between items-center p-3 border rounded-2xl cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition" onClick={() => navigate(`/admin/chat-ai?session=${chat.id}`)}>
+              <div key={chat.id} className="flex justify-between items-center p-3 border rounded-2xl cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition" onClick={() => void handleOpenChatSession(chat.id)}>
                 <div>
                   <div className="font-medium">{chat.title}</div>
                   <div className="text-sm text-gray-500">Tin nhắn: {chat._count?.messages || 0}</div>
@@ -350,6 +368,63 @@ const AdminUserDetail = () => {
           </div>
         )}
       </div>
+
+      {showChatDetailModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-3xl bg-white dark:bg-gray-900 rounded-3xl shadow-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                  {selectedChatSession?.title || 'Chi tiet phien chat AI'}
+                </h3>
+                {selectedChatSession?.updatedAt && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Cap nhat: {formatAdminDateTime(selectedChatSession.updatedAt)}
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={() => setShowChatDetailModal(false)}
+                className="w-9 h-9 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 inline-flex items-center justify-center"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="max-h-[65vh] overflow-y-auto p-5 space-y-3 bg-gray-50/40 dark:bg-gray-900/40">
+              {chatDetailLoading ? (
+                <div className="py-16 flex items-center justify-center">
+                  <Loader2 size={26} className="animate-spin text-emerald-500" />
+                </div>
+              ) : !selectedChatSession?.messages?.length ? (
+                <div className="py-12 text-center text-gray-500">Phien nay chua co tin nhan.</div>
+              ) : (
+                selectedChatSession.messages.map((msg: any) => (
+                  <div key={msg.id} className={`flex ${msg.role === 'USER' ? 'justify-end' : 'justify-start'}`}>
+                    <div
+                      className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm whitespace-pre-wrap ${
+                        msg.role === 'USER'
+                          ? 'bg-emerald-600 text-white'
+                          : msg.role === 'ASSISTANT'
+                          ? 'bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 text-gray-800 dark:text-gray-200'
+                          : 'bg-amber-50 text-amber-800 border border-amber-200'
+                      }`}
+                    >
+                      <div className="text-[11px] font-semibold mb-1 opacity-80">
+                        {msg.role === 'USER' ? 'User' : msg.role === 'ASSISTANT' ? 'Food AI' : msg.role}
+                      </div>
+                      <div>{msg.content}</div>
+                      <div className={`text-[10px] mt-1 ${msg.role === 'USER' ? 'text-emerald-100' : 'text-gray-400'}`}>
+                        {formatAdminDateTime(msg.createdAt)}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modals */}
       <ConfirmModal isOpen={showBanModal} onClose={() => setShowBanModal(false)} onConfirm={handleBan} title={user.isActive ? 'Khóa tài khoản' : 'Mở khóa tài khoản'} message={user.isActive ? `Bạn có chắc muốn khóa tài khoản ${user.name}?` : `Bạn có chắc muốn mở khóa tài khoản ${user.name}?`} confirmText={user.isActive ? 'Khóa' : 'Mở khóa'} />

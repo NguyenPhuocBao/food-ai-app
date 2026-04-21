@@ -32,15 +32,10 @@ const parseTime = (value, fallbackHour, fallbackMinute) => {
     }
     return { hour, minute };
 };
-const BREAKFAST_AT = parseTime(process.env.BREAKFAST_REMINDER_AT || '', 9, 30);
-const LUNCH_AT = parseTime(process.env.LUNCH_REMINDER_AT || '', 13, 30);
-const DINNER_AT = parseTime(process.env.DINNER_REMINDER_AT || '', 20, 0);
-const NO_MEAL_EMAIL_AT = parseTime(process.env.NO_MEAL_EMAIL_AT || '', 21, 30);
-const REMINDER_WINDOWS = [
-    { mealType: client_1.MealType.BREAKFAST, ...BREAKFAST_AT },
-    { mealType: client_1.MealType.LUNCH, ...LUNCH_AT },
-    { mealType: client_1.MealType.DINNER, ...DINNER_AT },
-];
+const DEFAULT_BREAKFAST_AT = parseTime(process.env.BREAKFAST_REMINDER_AT || '', 9, 30);
+const DEFAULT_LUNCH_AT = parseTime(process.env.LUNCH_REMINDER_AT || '', 13, 30);
+const DEFAULT_DINNER_AT = parseTime(process.env.DINNER_REMINDER_AT || '', 20, 0);
+const DEFAULT_NO_MEAL_AT = parseTime(process.env.NO_MEAL_EMAIL_AT || '', 21, 30);
 const WATER_CHECKPOINTS = [
     { hour: 10, minute: 0, ratio: 0.25 },
     { hour: 14, minute: 0, ratio: 0.5 },
@@ -57,7 +52,7 @@ const getReminderMessage = (mealType) => {
     if (mealType === client_1.MealType.LUNCH) {
         return {
             title: 'Ban chua them bua trua',
-            message: 'Hay them mon an cho bua trua de cap nhat nhat ky an uong.',
+            message: 'Hay them mon an cho bua trua de cap nhat nhat ky An uong.',
         };
     }
     return {
@@ -83,6 +78,31 @@ const getAppTimeParts = (date = new Date()) => {
     const hour = Number(formatted.find((part) => part.type === 'hour')?.value || 0);
     const minute = Number(formatted.find((part) => part.type === 'minute')?.value || 0);
     return { hour, minute };
+};
+const toMinutes = (hour, minute) => hour * 60 + minute;
+const toClock = (totalMinutes) => {
+    const normalized = ((totalMinutes % (24 * 60)) + 24 * 60) % (24 * 60);
+    return { hour: Math.floor(normalized / 60), minute: normalized % 60 };
+};
+const resolveRoutineClock = (raw, fallback) => parseTime(raw || '', fallback.hour, fallback.minute);
+const getReminderWindows = (routine) => {
+    const breakfast = resolveRoutineClock(routine.breakfastAt, DEFAULT_BREAKFAST_AT);
+    const lunch = resolveRoutineClock(routine.lunchAt, DEFAULT_LUNCH_AT);
+    const dinner = resolveRoutineClock(routine.dinnerAt, DEFAULT_DINNER_AT);
+    return [
+        { mealType: client_1.MealType.BREAKFAST, ...breakfast },
+        { mealType: client_1.MealType.LUNCH, ...lunch },
+        { mealType: client_1.MealType.DINNER, ...dinner },
+    ];
+};
+const getNoMealAt = (routine) => {
+    const bedtime = resolveRoutineClock(routine.sleepAt, DEFAULT_NO_MEAL_AT);
+    const bedtimeMinus30 = toClock(toMinutes(bedtime.hour, bedtime.minute) - 30);
+    const earliestNotify = toMinutes(20, 0);
+    if (toMinutes(bedtimeMinus30.hour, bedtimeMinus30.minute) < earliestNotify) {
+        return DEFAULT_NO_MEAL_AT;
+    }
+    return bedtimeMinus30;
 };
 const isAfterTime = (nowHour, nowMinute, thresholdHour, thresholdMinute) => nowHour > thresholdHour || (nowHour === thresholdHour && nowMinute >= thresholdMinute);
 const buildReminderKey = (type, dateKey, userId) => `${REMINDER_KEY_PREFIX}:${type}:${dateKey}:${userId}`;
@@ -168,28 +188,33 @@ const runMealReminderCycle = async () => {
         });
         const sentKeys = new Set(sentRows.map((row) => row.key));
         for (const user of users) {
-            for (const window of REMINDER_WINDOWS) {
-                if (!isAfterTime(hour, minute, window.hour, window.minute))
-                    continue;
-                const mealCount = mealCountByType.get(`${user.id}:${window.mealType}`) || 0;
-                if (mealCount > 0)
-                    continue;
-                const reminderKey = buildReminderKey(`missing_${window.mealType.toLowerCase()}`, dateKey, user.id);
-                if (sentKeys.has(reminderKey))
-                    continue;
-                const message = getReminderMessage(window.mealType);
-                await createNotification(user.id, message.title, message.message, {
-                    source: 'meal_reminder',
-                    reminderType: `missing_${window.mealType.toLowerCase()}`,
-                    dateKey,
-                });
-                sentKeys.add(reminderKey);
-                await markReminderSent(reminderKey);
-            }
             const [routine, hydration] = await Promise.all([
                 (0, personalization_service_1.getPersonalRoutine)(user.id),
                 (0, personalization_service_1.getHydrationRecord)(user.id, now),
             ]);
+            const mealWindows = getReminderWindows(routine);
+            const noMealAt = getNoMealAt(routine);
+            if (routine.remindersEnabled) {
+                for (const window of mealWindows) {
+                    if (!isAfterTime(hour, minute, window.hour, window.minute))
+                        continue;
+                    const mealCount = mealCountByType.get(`${user.id}:${window.mealType}`) || 0;
+                    if (mealCount > 0)
+                        continue;
+                    const reminderKey = buildReminderKey(`missing_${window.mealType.toLowerCase()}`, dateKey, user.id);
+                    if (sentKeys.has(reminderKey))
+                        continue;
+                    const message = getReminderMessage(window.mealType);
+                    await createNotification(user.id, message.title, message.message, {
+                        source: 'meal_reminder',
+                        reminderType: `missing_${window.mealType.toLowerCase()}`,
+                        dateKey,
+                        triggerAt: `${String(window.hour).padStart(2, '0')}:${String(window.minute).padStart(2, '0')}`,
+                    });
+                    sentKeys.add(reminderKey);
+                    await markReminderSent(reminderKey);
+                }
+            }
             if (routine.remindersEnabled) {
                 for (let index = 0; index < WATER_CHECKPOINTS.length; index++) {
                     const checkpoint = WATER_CHECKPOINTS[index];
@@ -213,7 +238,10 @@ const runMealReminderCycle = async () => {
                     await markReminderSent(waterKey);
                 }
             }
-            if (!isAfterTime(hour, minute, NO_MEAL_EMAIL_AT.hour, NO_MEAL_EMAIL_AT.minute)) {
+            if (!routine.remindersEnabled) {
+                continue;
+            }
+            if (!isAfterTime(hour, minute, noMealAt.hour, noMealAt.minute)) {
                 continue;
             }
             const totalMeals = totalMealCount.get(user.id) || 0;

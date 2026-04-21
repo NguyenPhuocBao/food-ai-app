@@ -89,7 +89,7 @@ export const getDailyHealth = async (date?: string): Promise<DailyHealth> => {
       date: date || '',
       score: 0,
       grade: 'D',
-      alerts: ['Khong the tai phan tich suc khoe hom nay.'],
+      alerts: ['Khong th? tai phan tich suc khoe hom nay.'],
       highlights: [],
       recommendations: [],
       mealScores: [],

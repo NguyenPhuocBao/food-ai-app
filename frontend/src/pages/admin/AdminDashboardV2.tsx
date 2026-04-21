@@ -15,6 +15,7 @@ import {
   Activity,
   CalendarDays,
   Camera,
+  Headset,
   Heart,
   Sparkles,
   Users,
@@ -33,6 +34,17 @@ interface AdminDashboardStats {
   scans: { total: number; today: number; confirmed: number };
   library: { favorites: number; reviews: number };
   mealPlans: { total: number; active: number };
+  support: {
+    totalSessions: number;
+    open: number;
+    pending: number;
+    closed: number;
+    today: number;
+    pendingOver24h: number;
+    totalMessages: number;
+    avgFirstResponseMinutes30d: number | null;
+    firstResponseSamples30d: number;
+  };
   topCategories: Array<{ name: string; value: number }>;
   weeklyOverview: Array<{
     date: string;
@@ -118,6 +130,22 @@ const AdminDashboardV2 = () => {
     );
   }
 
+  const supportStats = stats.support ?? {
+    totalSessions: 0,
+    open: 0,
+    pending: 0,
+    closed: 0,
+    today: 0,
+    pendingOver24h: 0,
+    totalMessages: 0,
+    avgFirstResponseMinutes30d: null,
+    firstResponseSamples30d: 0,
+  };
+
+  const firstResponseLabel = supportStats.avgFirstResponseMinutes30d === null
+    ? 'Chua co du lieu'
+    : `${supportStats.avgFirstResponseMinutes30d} phut`;
+
   return (
     <div className="space-y-6">
       <section className="rounded-[32px] overflow-hidden bg-[radial-gradient(circle_at_top_right,_rgba(59,130,246,0.24),_transparent_30%),linear-gradient(135deg,_#111827,_#0f172a_60%,_#1d4ed8)] text-white shadow-2xl">
@@ -136,7 +164,7 @@ const AdminDashboardV2 = () => {
             <div className="rounded-[24px] bg-white/10 backdrop-blur-sm border border-white/10 p-5">
               <p className="text-sm text-blue-100">Dang online</p>
               <p className="text-3xl font-black mt-2">{stats.users.active}</p>
-              <p className="text-xs text-blue-100 mt-2">{activeUserRate}% tong tai khoan</p>
+              <p className="text-xs text-blue-100 mt-2">{activeUserRate}% tong tai kho?n</p>
             </div>
             <div className="rounded-[24px] bg-white/10 backdrop-blur-sm border border-white/10 p-5">
               <p className="text-sm text-blue-100">Cua so online</p>
@@ -153,6 +181,7 @@ const AdminDashboardV2 = () => {
         <AdvancedStatCard title="Meals hom nay" value={stats.meals.today} icon={Activity} color="#F97316" />
         <AdvancedStatCard title="Scan AI hom nay" value={stats.scans.today} icon={Camera} color="#F59E0B" />
         <AdvancedStatCard title="Meal plan active" value={stats.mealPlans.active} icon={CalendarDays} color="#8B5CF6" />
+        <AdvancedStatCard title="CSKH pending" value={supportStats.pending} icon={Headset} color="#F97316" />
         <AdvancedStatCard title="Luot luu thu vien" value={stats.library.favorites} icon={Heart} color="#EC4899" />
       </section>
 
@@ -282,6 +311,36 @@ const AdminDashboardV2 = () => {
         </div>
 
         <div className="space-y-6">
+          <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-700 rounded-3xl shadow-xl p-6">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">KPI cham soc khach hang</h2>
+            <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">Theo doi ticket va toc do phan hoi</p>
+            <div className="grid grid-cols-2 gap-3 mt-5">
+              <div className="rounded-2xl bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-900/30 p-3">
+                <p className="text-xs text-amber-700 dark:text-amber-300">Pending</p>
+                <p className="text-2xl font-black text-amber-800 dark:text-amber-200 mt-1">{supportStats.pending}</p>
+              </div>
+              <div className="rounded-2xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/30 p-3">
+                <p className="text-xs text-blue-700 dark:text-blue-300">Open</p>
+                <p className="text-2xl font-black text-blue-800 dark:text-blue-200 mt-1">{supportStats.open}</p>
+              </div>
+              <div className="rounded-2xl bg-rose-50 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-900/30 p-3">
+                <p className="text-xs text-rose-700 dark:text-rose-300">Pending qua 24h</p>
+                <p className="text-2xl font-black text-rose-800 dark:text-rose-200 mt-1">{supportStats.pendingOver24h}</p>
+              </div>
+              <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-900/30 p-3">
+                <p className="text-xs text-emerald-700 dark:text-emerald-300">Ticket hom nay</p>
+                <p className="text-2xl font-black text-emerald-800 dark:text-emerald-200 mt-1">{supportStats.today}</p>
+              </div>
+            </div>
+            <div className="mt-4 rounded-2xl border border-gray-100 dark:border-slate-700 p-4 bg-gray-50/60 dark:bg-slate-800/40">
+              <p className="text-xs text-gray-500 dark:text-slate-400">First response TB (30 ngay)</p>
+              <p className="text-xl font-black text-gray-900 dark:text-slate-100 mt-1">{firstResponseLabel}</p>
+              <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
+                Tren {supportStats.firstResponseSamples30d} ticket ?? co user message va admin reply
+              </p>
+            </div>
+          </div>
+
           <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-700 rounded-3xl shadow-xl p-6">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">Suc khoe san pham</h2>
             <div className="space-y-4 mt-5">

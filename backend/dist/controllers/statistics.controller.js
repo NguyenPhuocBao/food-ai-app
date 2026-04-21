@@ -1,12 +1,184 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getTrends = exports.getMonthlyStats = exports.getWeeklyStats = exports.getDailyStats = void 0;
+exports.getTrends = exports.getMonthlyStats = exports.getWeeklyStats = exports.getDailyStats = exports.getNutritionOverview = void 0;
 const client_1 = require("@prisma/client");
 const timezone_util_1 = require("../utils/timezone.util");
 const prisma = new client_1.PrismaClient();
 const VN_UTC_OFFSET_HOURS = (0, timezone_util_1.getAppUtcOffsetHours)();
 const toVnDateKey = timezone_util_1.toAppDateKey;
 const toVnDayStart = timezone_util_1.toAppDayStart;
+const parseGroupBy = (raw) => {
+    const value = String(raw || '').trim().toLowerCase();
+    if (value === 'week')
+        return 'week';
+    if (value === 'month')
+        return 'month';
+    return 'day';
+};
+const formatDayLabel = (dateKey) => {
+    const [year, month, day] = dateKey.split('-');
+    return `${day}/${month}/${year.slice(-2)}`;
+};
+const formatMonthLabel = (monthKey) => {
+    const [year, month] = monthKey.split('-');
+    return `Thang ${month}/${year}`;
+};
+const getWeekStartFromDayStart = (dayStart) => {
+    const localDate = new Date(dayStart.getTime() + VN_UTC_OFFSET_HOURS * 60 * 60 * 1000);
+    const weekday = localDate.getUTCDay();
+    return (0, timezone_util_1.shiftAppDays)(dayStart, -weekday);
+};
+const getNutritionOverview = async (req, res) => {
+    try {
+        const userId = (req.user.role === 'ADMIN' && req.query.userId)
+            ? parseInt(req.query.userId, 10)
+            : req.user.id;
+        const groupBy = parseGroupBy(req.query.groupBy);
+        const windowDays = Math.max(1, Math.min(90, Number(req.query.days) || 7));
+        const todayStart = toVnDayStart(new Date());
+        const startDate = (0, timezone_util_1.shiftAppDays)(todayStart, -(windowDays - 1));
+        const endExclusive = (0, timezone_util_1.shiftAppDays)(todayStart, 1);
+        const [nutritionRows, profile] = await Promise.all([
+            prisma.dailyNutrition.findMany({
+                where: {
+                    userId,
+                    date: { gte: startDate, lt: endExclusive },
+                },
+                orderBy: { date: 'asc' },
+            }),
+            prisma.userProfile.findUnique({ where: { userId } }),
+        ]);
+        const nutritionMap = new Map(nutritionRows.map((row) => [toVnDateKey(row.date), row]));
+        const daily = Array.from({ length: windowDays }, (_, index) => {
+            const dayStart = (0, timezone_util_1.shiftAppDays)(startDate, index);
+            const dateKey = toVnDateKey(dayStart);
+            const row = nutritionMap.get(dateKey);
+            const calories = row?.totalCalories || 0;
+            const protein = row?.totalProtein || 0;
+            const fat = row?.totalFat || 0;
+            const carbs = row?.totalCarbs || 0;
+            return {
+                date: dateKey,
+                dayLabel: formatDayLabel(dateKey),
+                dayStart,
+                calories,
+                protein,
+                fat,
+                carbs,
+                hasLog: calories > 0,
+            };
+        });
+        const bucketMap = new Map();
+        daily.forEach((item) => {
+            let key = item.date;
+            let label = item.dayLabel;
+            let bucketStart = item.dayStart;
+            let bucketEnd = item.dayStart;
+            if (groupBy === 'week') {
+                bucketStart = getWeekStartFromDayStart(item.dayStart);
+                bucketEnd = (0, timezone_util_1.shiftAppDays)(bucketStart, 6);
+                key = toVnDateKey(bucketStart);
+                label = `Tuan ${key}`;
+            }
+            else if (groupBy === 'month') {
+                key = item.date.slice(0, 7);
+                label = formatMonthLabel(key);
+            }
+            const existing = bucketMap.get(key);
+            if (!existing) {
+                bucketMap.set(key, {
+                    key,
+                    label,
+                    startDate: toVnDateKey(bucketStart),
+                    endDate: toVnDateKey(bucketEnd),
+                    calories: item.calories,
+                    protein: item.protein,
+                    fat: item.fat,
+                    carbs: item.carbs,
+                    days: 1,
+                    loggedDays: item.hasLog ? 1 : 0,
+                });
+                return;
+            }
+            existing.calories += item.calories;
+            existing.protein += item.protein;
+            existing.fat += item.fat;
+            existing.carbs += item.carbs;
+            existing.days += 1;
+            if (item.hasLog)
+                existing.loggedDays += 1;
+            if (item.date < existing.startDate)
+                existing.startDate = item.date;
+            if (item.date > existing.endDate)
+                existing.endDate = item.date;
+        });
+        const buckets = Array.from(bucketMap.values()).sort((left, right) => left.startDate.localeCompare(right.startDate));
+        const activeDays = daily.filter((item) => item.hasLog).length;
+        const total = buckets.reduce((acc, bucket) => ({
+            calories: acc.calories + bucket.calories,
+            protein: acc.protein + bucket.protein,
+            fat: acc.fat + bucket.fat,
+            carbs: acc.carbs + bucket.carbs,
+        }), { calories: 0, protein: 0, fat: 0, carbs: 0 });
+        const average = activeDays > 0
+            ? {
+                calories: Math.round(total.calories / activeDays),
+                protein: Math.round((total.protein / activeDays) * 10) / 10,
+                fat: Math.round((total.fat / activeDays) * 10) / 10,
+                carbs: Math.round((total.carbs / activeDays) * 10) / 10,
+            }
+            : { calories: 0, protein: 0, fat: 0, carbs: 0 };
+        const bucketsWithCalories = buckets.filter((bucket) => bucket.calories > 0);
+        const bestBucketSource = bucketsWithCalories.length > 0 ? bucketsWithCalories : buckets;
+        const bestBucket = bestBucketSource.reduce((best, bucket) => (bucket.calories > best.calories ? bucket : best), bestBucketSource[0] || null);
+        const worstBucket = bestBucketSource.reduce((worst, bucket) => (bucket.calories < worst.calories ? bucket : worst), bestBucketSource[0] || null);
+        let streak = 0;
+        for (let index = daily.length - 1; index >= 0; index -= 1) {
+            if (!daily[index].hasLog)
+                break;
+            streak += 1;
+        }
+        res.json({
+            success: true,
+            data: {
+                range: {
+                    days: windowDays,
+                    groupBy,
+                    startDate: toVnDateKey(startDate),
+                    endDate: toVnDateKey(todayStart),
+                },
+                target: {
+                    calories: profile?.targetCalories || 2000,
+                    protein: profile?.targetProtein || 150,
+                    fat: profile?.targetFat || 55,
+                    carbs: profile?.targetCarbs || 250,
+                },
+                summary: {
+                    total,
+                    average,
+                    activeDays,
+                    streak,
+                    bestBucket,
+                    worstBucket,
+                },
+                daily: daily.map((item) => ({
+                    date: item.date,
+                    dayLabel: item.dayLabel,
+                    calories: item.calories,
+                    protein: item.protein,
+                    fat: item.fat,
+                    carbs: item.carbs,
+                    hasLog: item.hasLog,
+                })),
+                buckets,
+            },
+        });
+    }
+    catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+exports.getNutritionOverview = getNutritionOverview;
 const getDailyStats = async (req, res) => {
     try {
         const { date } = req.query;

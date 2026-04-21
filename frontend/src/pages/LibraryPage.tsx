@@ -53,10 +53,10 @@ const LibraryPage = () => {
           <div className="max-w-2xl">
             <p className="text-rose-500 font-bold text-sm tracking-[0.2em] uppercase mb-4">Thu vien ca nhan</p>
             <h1 className="text-3xl md:text-5xl font-black text-gray-900 leading-tight">
-              Mon an yeu thich va cong thuc da luu cua ban
+              Mon an yeu thich va cong thuc ?? luu cua ban
             </h1>
             <p className="text-gray-600 mt-4 max-w-xl leading-relaxed">
-              Tap hop nhung mon an ban danh dau de quay lai nhanh, theo doi cong thuc da luu va tiep tuc len ke
+              Tap hop nhung mon an ban danh dau de quay lai nhanh, theo doi cong thuc ?? luu va tiep tuc len ke
               hoach bua an tu thu vien rieng.
             </p>
           </div>
@@ -67,7 +67,7 @@ const LibraryPage = () => {
               <p className="text-3xl font-black text-gray-900 mt-2">{favoriteFoods.length}</p>
             </div>
             <div className="rounded-[24px] bg-white/80 border border-white p-5 shadow-sm">
-              <p className="text-sm text-gray-500">Cong thuc da luu</p>
+              <p className="text-sm text-gray-500">Cong thuc ?? luu</p>
               <p className="text-3xl font-black text-gray-900 mt-2">{savedRecipes.length}</p>
             </div>
           </div>
@@ -95,7 +95,7 @@ const LibraryPage = () => {
           >
             <span className="inline-flex items-center gap-2">
               <Bookmark size={16} />
-              Cong thuc da luu
+              Cong thuc ?? luu
             </span>
           </button>
         </div>

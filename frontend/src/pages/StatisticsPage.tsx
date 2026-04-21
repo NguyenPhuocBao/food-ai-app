@@ -1,37 +1,130 @@
-import React, { useState, useEffect } from 'react';
-import { BarChart2, TrendingUp, TrendingDown, Flame, Target, Droplets, Calendar, Award, Loader2 } from 'lucide-react';
-import { getWeeklyStats, getTrends } from '../services/statistics.service';
+import { type ElementType, useEffect, useMemo, useState } from 'react';
+import {
+  Award,
+  BarChart2,
+  Calendar,
+  Flame,
+  Loader2,
+  Target,
+  TrendingDown,
+  TrendingUp,
+} from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { motion } from 'framer-motion';
+import {
+  getNutritionOverview,
+  type StatisticsGroupBy,
+} from '../services/statistics.service';
 
-// ── Mini Bar Chart component (no library needed) ─────────────────────────
+type OverviewBucket = {
+  key: string;
+  label: string;
+  startDate: string;
+  endDate: string;
+  calories: number;
+  protein: number;
+  fat: number;
+  carbs: number;
+  days: number;
+  loggedDays: number;
+};
+
+type OverviewResponse = {
+  range: {
+    days: number;
+    groupBy: StatisticsGroupBy;
+    startDate: string;
+    endDate: string;
+  };
+  target: {
+    calories: number;
+    protein: number;
+    fat: number;
+    carbs: number;
+  };
+  summary: {
+    total: {
+      calories: number;
+      protein: number;
+      fat: number;
+      carbs: number;
+    };
+    average: {
+      calories: number;
+      protein: number;
+      fat: number;
+      carbs: number;
+    };
+    activeDays: number;
+    streak: number;
+    bestBucket: OverviewBucket | null;
+    worstBucket: OverviewBucket | null;
+  };
+  daily: Array<{
+    date: string;
+    dayLabel: string;
+    calories: number;
+    protein: number;
+    fat: number;
+    carbs: number;
+    hasLog: boolean;
+  }>;
+  buckets: OverviewBucket[];
+};
+
+const PERIOD_OPTIONS: Array<{ value: 7 | 14 | 30; label: string }> = [
+  { value: 7, label: '7 ngay' },
+  { value: 14, label: '14 ngay' },
+  { value: 30, label: '30 ngay' },
+];
+
+const GROUP_OPTIONS: Array<{ value: StatisticsGroupBy; label: string }> = [
+  { value: 'day', label: 'Theo ngay' },
+  { value: 'week', label: 'Theo tuan' },
+  { value: 'month', label: 'Theo thang' },
+];
+
+const formatNumber = (value: number) => Math.round(value || 0).toLocaleString('vi-VN');
+
+const shortBucketLabel = (bucket: OverviewBucket, groupBy: StatisticsGroupBy) => {
+  if (groupBy === 'day') return bucket.label.slice(0, 5);
+  if (groupBy === 'week') {
+    const parts = bucket.startDate.split('-');
+    return `W${parts[2]}/${parts[1]}`;
+  }
+  const month = bucket.key.split('-')[1];
+  return `T${month}`;
+};
+
 const MiniBarChart = ({
   data,
   goal,
-  color = 'bg-emerald-500',
+  groupBy,
 }: {
-  data: { day: string; calories: number }[];
+  data: OverviewBucket[];
   goal: number;
-  color?: string;
+  groupBy: StatisticsGroupBy;
 }) => {
-  const max = Math.max(...data.map(d => d.calories), goal);
+  const maxValue = Math.max(goal, ...data.map((item) => item.calories), 1);
+
   return (
     <div className="flex items-end gap-1.5 h-28">
-      {data.map((d, i) => {
-        const height = max > 0 ? (d.calories / max) * 100 : 0;
-        const isToday = i === data.length - 1;
+      {data.map((bucket, index) => {
+        const barHeight = Math.max(4, Math.round((bucket.calories / maxValue) * 100));
+        const isLatest = index === data.length - 1;
+
         return (
-          <div key={i} className="flex-1 flex flex-col items-center gap-1 group relative">
-            <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-[10px] font-bold px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
-              {d.calories} kcal
+          <div key={bucket.key} className="flex-1 flex flex-col items-center gap-1 group relative">
+            <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[10px] font-bold px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+              {formatNumber(bucket.calories)} kcal
             </div>
             <div className="w-full rounded-t-lg overflow-hidden flex flex-col-reverse" style={{ height: '90%' }}>
               <div
-                className={`w-full rounded-t-lg transition-all duration-700 ${isToday ? color : 'bg-gray-200'}`}
-                style={{ height: `${Math.max(4, height)}%` }}
+                className={`w-full rounded-t-lg transition-all duration-700 ${isLatest ? 'bg-emerald-500' : 'bg-gray-200'}`}
+                style={{ height: `${barHeight}%` }}
               />
             </div>
-            <span className="text-[10px] text-gray-400 font-medium">{d.day.slice(0, 2)}</span>
+            <span className="text-[10px] text-gray-400 font-medium">{shortBucketLabel(bucket, groupBy)}</span>
           </div>
         );
       })}
@@ -39,61 +132,59 @@ const MiniBarChart = ({
   );
 };
 
-// ── Macro Ring (SVG donut) ───────────────────────────────────────────────
-const MacroRing = ({
-  protein,
-  carbs,
-  fat,
-}: { protein: number; carbs: number; fat: number }) => {
+const MacroRing = ({ protein, carbs, fat }: { protein: number; carbs: number; fat: number }) => {
   const total = protein + carbs + fat || 1;
   const p = (protein / total) * 100;
   const c = (carbs / total) * 100;
   const f = (fat / total) * 100;
 
   const radius = 36;
-  const circ = 2 * Math.PI * radius;
-  const dash = (pct: number) => (pct / 100) * circ;
+  const circumference = 2 * Math.PI * radius;
+  const dash = (pct: number) => (pct / 100) * circumference;
 
   let offset = 0;
   const segments = [
-    { val: p, color: '#10b981', label: 'Protein' },
-    { val: c, color: '#f59e0b', label: 'Carbs' },
-    { val: f, color: '#60a5fa', label: 'Fat' },
+    { value: p, color: '#10b981', label: 'Protein' },
+    { value: c, color: '#f59e0b', label: 'Carbs' },
+    { value: f, color: '#60a5fa', label: 'Fat' },
   ];
 
   return (
     <div className="flex items-center gap-6">
       <svg width="90" height="90" viewBox="0 0 90 90">
         <circle cx="45" cy="45" r={radius} fill="none" stroke="#f3f4f6" strokeWidth="10" />
-        {segments.map((seg, i) => {
-          const el = (
+        {segments.map((segment, idx) => {
+          const element = (
             <circle
-              key={i}
-              cx="45" cy="45" r={radius}
+              key={idx}
+              cx="45"
+              cy="45"
+              r={radius}
               fill="none"
-              stroke={seg.color}
+              stroke={segment.color}
               strokeWidth="10"
-              strokeDasharray={`${dash(seg.val)} ${circ - dash(seg.val)}`}
-              strokeDashoffset={-offset * (circ / 100)}
+              strokeDasharray={`${dash(segment.value)} ${circumference - dash(segment.value)}`}
+              strokeDashoffset={-offset * (circumference / 100)}
               strokeLinecap="round"
               transform="rotate(-90 45 45)"
               style={{ transition: 'stroke-dasharray 0.8s ease' }}
             />
           );
-          offset += seg.val;
-          return el;
+          offset += segment.value;
+          return element;
         })}
       </svg>
+
       <div className="space-y-2">
         {[
-          { label: 'Protein', val: Math.round(protein), color: 'bg-emerald-500' },
-          { label: 'Carbs', val: Math.round(carbs), color: 'bg-amber-400' },
-          { label: 'Fat', val: Math.round(fat), color: 'bg-blue-400' },
-        ].map(s => (
-          <div key={s.label} className="flex items-center gap-2">
-            <span className={`w-2.5 h-2.5 rounded-full ${s.color}`} />
-            <span className="text-xs text-gray-500 font-medium w-12">{s.label}</span>
-            <span className="text-xs font-black text-gray-900">{s.val}g</span>
+          { label: 'Protein', value: Math.round(protein), color: 'bg-emerald-500' },
+          { label: 'Carbs', value: Math.round(carbs), color: 'bg-amber-400' },
+          { label: 'Fat', value: Math.round(fat), color: 'bg-blue-400' },
+        ].map((item) => (
+          <div key={item.label} className="flex items-center gap-2">
+            <span className={`w-2.5 h-2.5 rounded-full ${item.color}`} />
+            <span className="text-xs text-gray-500 font-medium w-12">{item.label}</span>
+            <span className="text-xs font-black text-gray-900">{item.value}g</span>
           </div>
         ))}
       </div>
@@ -101,7 +192,6 @@ const MacroRing = ({
   );
 };
 
-// ── StatCard ──────────────────────────────────────────────────────────────
 const StatCard = ({
   icon: Icon,
   label,
@@ -109,7 +199,7 @@ const StatCard = ({
   sub,
   color,
 }: {
-  icon: React.ElementType;
+  icon: ElementType;
   label: string;
   value: string | number;
   sub?: string;
@@ -127,79 +217,88 @@ const StatCard = ({
   </div>
 );
 
-// ── Main Page ─────────────────────────────────────────────────────────────
 const StatisticsPage = () => {
   const { user } = useAuth();
-  const [weeklyData, setWeeklyData] = useState<any>(null);
-  const [trendData, setTrendData] = useState<any>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const navigate = useNavigate();
   const [period, setPeriod] = useState<7 | 14 | 30>(7);
+  const [groupBy, setGroupBy] = useState<StatisticsGroupBy>('day');
+  const [isLoading, setIsLoading] = useState(true);
+  const [overview, setOverview] = useState<OverviewResponse | null>(null);
 
   useEffect(() => {
-    fetchAll();
-  }, [period]);
+    const fetchOverview = async () => {
+      setIsLoading(true);
+      try {
+        const data = (await getNutritionOverview(period, groupBy)) as OverviewResponse;
+        setOverview(data);
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-  const fetchAll = async () => {
-    setIsLoading(true);
-    try {
-      const [weekly, trend] = await Promise.all([
-        getWeeklyStats(),
-        getTrends(period),
-      ]);
-      setWeeklyData(weekly);
-      setTrendData(trend);
-    } catch {
-      // silent
-    } finally {
-      setIsLoading(false);
-    }
+    void fetchOverview();
+  }, [period, groupBy]);
+
+  const buckets = overview?.buckets || [];
+  const target = overview?.target || {
+    calories: user?.profile?.targetCalories || 2000,
+    protein: user?.profile?.targetProtein || 150,
+    fat: user?.profile?.targetFat || 55,
+    carbs: user?.profile?.targetCarbs || 250,
+  };
+  const summary = overview?.summary || {
+    total: { calories: 0, protein: 0, fat: 0, carbs: 0 },
+    average: { calories: 0, protein: 0, fat: 0, carbs: 0 },
+    activeDays: 0,
+    streak: 0,
+    bestBucket: null,
+    worstBucket: null,
   };
 
-  const daily: any[] = weeklyData?.daily ?? [];
-  const summary = weeklyData?.summary ?? {};
-  const avg = summary?.average ?? {};
-  const bestDay = summary?.bestDay ?? null;
+  const chartTitle = useMemo(() => {
+    if (groupBy === 'week') return 'Luong calo theo tuan';
+    if (groupBy === 'month') return 'Luong calo theo thang';
+    return 'Luong calo theo ngay';
+  }, [groupBy]);
 
-  // Streak counting from trendData
-  const trendDays: any[] = trendData?.trend ?? [];
-  const streak = (() => {
-    let count = 0;
-    for (let i = trendDays.length - 1; i >= 0; i--) {
-      if (trendDays[i].calories > 0) count++;
-      else break;
-    }
-    return count;
-  })();
-
-  const totalCalories = daily.reduce((s: number, d: any) => s + (d.calories || 0), 0);
-  const totalProtein = daily.reduce((s: number, d: any) => s + (d.protein || 0), 0);
-  const totalCarbs = daily.reduce((s: number, d: any) => s + (d.carbs || 0), 0);
-  const totalFat = daily.reduce((s: number, d: any) => s + (d.fat || 0), 0);
-  const activeDays = daily.filter((d: any) => d.calories > 0).length;
-
-  const goalCalories = user?.profile?.targetCalories ?? 2000;
+  const openBucketDetail = (bucket: OverviewBucket) => {
+    navigate(`/diary?date=${bucket.startDate}`);
+  };
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-
-      {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-end md:items-center mb-8 gap-4">
         <div>
           <h1 className="text-3xl font-black text-gray-900 tracking-tight flex items-center gap-2">
-            <BarChart2 className="text-emerald-500" /> Thống Kê Dinh Dưỡng
+            <BarChart2 className="text-emerald-500" /> Thong ke dinh duong
           </h1>
-          <p className="text-gray-500 mt-1">Phân tích lượng dinh dưỡng nạp vào theo thời gian.</p>
+          <p className="text-gray-500 mt-1">Chon khung thoi gian va cach gom nhom theo ngay, tuan, thang.</p>
         </div>
-        <div className="flex gap-2 bg-white border border-gray-100 rounded-xl p-1 shadow-sm">
-          {([7, 14, 30] as const).map(p => (
-            <button
-              key={p}
-              onClick={() => setPeriod(p)}
-              className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${period === p ? 'bg-emerald-500 text-white' : 'text-gray-500 hover:bg-gray-50'}`}
-            >
-              {p} ngày
-            </button>
-          ))}
+
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+          <div className="flex gap-2 bg-white border border-gray-100 rounded-xl p-1 shadow-sm">
+            {PERIOD_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                onClick={() => setPeriod(option.value)}
+                className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${period === option.value ? 'bg-emerald-500 text-white' : 'text-gray-500 hover:bg-gray-50'}`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex gap-2 bg-white border border-gray-100 rounded-xl p-1 shadow-sm">
+            {GROUP_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                onClick={() => setGroupBy(option.value)}
+                className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${groupBy === option.value ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-50'}`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -209,82 +308,76 @@ const StatisticsPage = () => {
         </div>
       ) : (
         <div className="space-y-8">
-
-          {/* Stat Cards Row */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard
               icon={Flame}
-              label="TB Calo / ngày"
-              value={`${Math.round(avg.calories ?? 0).toLocaleString()}`}
-              sub={`Mục tiêu: ${goalCalories} kcal`}
+              label="TB calo / ngay"
+              value={formatNumber(summary.average.calories)}
+              sub={`Muc tieu: ${formatNumber(target.calories)} kcal`}
               color="bg-amber-50 text-amber-500"
             />
             <StatCard
               icon={Target}
-              label="TB Protein / ngày"
-              value={`${Math.round(avg.protein ?? 0)}g`}
-              sub={`Mục tiêu: ${user?.profile?.targetProtein ?? 150}g`}
+              label="TB protein / ngay"
+              value={`${Math.round(summary.average.protein || 0)}g`}
+              sub={`Muc tieu: ${Math.round(target.protein || 150)}g`}
               color="bg-emerald-50 text-emerald-500"
             />
             <StatCard
               icon={Award}
-              label="Ngày Streak 🔥"
-              value={streak}
-              sub="Ngày ghi nhận liên tục"
+              label="Streak"
+              value={summary.streak}
+              sub="So ngay ghi nhan lien tiep"
               color="bg-red-50 text-red-500"
             />
             <StatCard
               icon={Calendar}
-              label="Ngày Hoạt Động"
-              value={activeDays}
-              sub={`Trong ${period} ngày qua`}
+              label="Ngay hoat dong"
+              value={summary.activeDays}
+              sub={`Trong ${period} ngay qua`}
               color="bg-blue-50 text-blue-500"
             />
           </div>
 
-          {/* Main Charts Row */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-            {/* Calorie Bar Chart */}
             <div className="lg:col-span-2 bg-white rounded-[28px] shadow-sm border border-gray-100 p-7">
               <div className="flex justify-between items-start mb-6">
                 <div>
-                  <h2 className="text-xl font-black text-gray-900">Lượng Calo Theo Tuần</h2>
-                  <p className="text-sm text-gray-500 mt-1">So sánh với mục tiêu {goalCalories.toLocaleString()} kcal</p>
+                  <h2 className="text-xl font-black text-gray-900">{chartTitle}</h2>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Khung {period} ngay, gom nhom {GROUP_OPTIONS.find((item) => item.value === groupBy)?.label.toLowerCase()}
+                  </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-3xl font-black text-gray-900">{totalCalories.toLocaleString()}</p>
-                  <p className="text-xs text-gray-400">kcal tổng tuần</p>
+                  <p className="text-3xl font-black text-gray-900">{formatNumber(summary.total.calories)}</p>
+                  <p className="text-xs text-gray-400">kcal tong cong</p>
                 </div>
               </div>
 
-              {/* Guide line */}
-              <div className="relative">
-                <MiniBarChart
-                  data={daily.map((d: any) => ({ day: d.day, calories: d.calories || 0 }))}
-                  goal={goalCalories}
-                  color="bg-emerald-500"
-                />
-                {/* Goal line text */}
-                <p className="text-[10px] text-gray-400 mt-1 text-right">— Mục tiêu {goalCalories} kcal</p>
-              </div>
+              <MiniBarChart data={buckets} goal={target.calories} groupBy={groupBy} />
 
-              {/* Best/Worst */}
-              {bestDay && (
-                <div className="mt-5 pt-5 border-t border-gray-50 flex gap-4">
+              <p className="text-[10px] text-gray-400 mt-1 text-right">Muc tieu {formatNumber(target.calories)} kcal</p>
+
+              {!!summary.bestBucket && (
+                <div className="mt-5 pt-5 border-t border-gray-50 flex flex-col sm:flex-row gap-3">
                   <div className="flex items-center gap-2 bg-emerald-50 px-3 py-2 rounded-xl">
                     <TrendingUp size={16} className="text-emerald-500" />
                     <div>
-                      <p className="text-xs text-gray-500">Ngày tốt nhất</p>
-                      <p className="text-sm font-black text-gray-900">{bestDay.day} · {bestDay.calories} kcal</p>
+                      <p className="text-xs text-gray-500">Moc cao nhat</p>
+                      <p className="text-sm font-black text-gray-900">
+                        {summary.bestBucket.label} - {formatNumber(summary.bestBucket.calories)} kcal
+                      </p>
                     </div>
                   </div>
-                  {summary.worstDay && (
+
+                  {!!summary.worstBucket && (
                     <div className="flex items-center gap-2 bg-red-50 px-3 py-2 rounded-xl">
                       <TrendingDown size={16} className="text-red-400" />
                       <div>
-                        <p className="text-xs text-gray-500">Ngày thấp nhất</p>
-                        <p className="text-sm font-black text-gray-900">{summary.worstDay.day} · {summary.worstDay.calories} kcal</p>
+                        <p className="text-xs text-gray-500">Moc thap nhat</p>
+                        <p className="text-sm font-black text-gray-900">
+                          {summary.worstBucket.label} - {formatNumber(summary.worstBucket.calories)} kcal
+                        </p>
                       </div>
                     </div>
                   )}
@@ -292,91 +385,96 @@ const StatisticsPage = () => {
               )}
             </div>
 
-            {/* Macro Breakdown */}
             <div className="bg-white rounded-[28px] shadow-sm border border-gray-100 p-7 flex flex-col justify-between">
               <div>
-                <h2 className="text-xl font-black text-gray-900 mb-1">Phân Bổ Macro</h2>
-                <p className="text-sm text-gray-500 mb-6">Trung bình mỗi ngày trong tuần</p>
+                <h2 className="text-xl font-black text-gray-900 mb-1">Ti le macro</h2>
+                <p className="text-sm text-gray-500 mb-6">Trung binh theo ngay co log</p>
                 <MacroRing
-                  protein={avg.protein ?? 0}
-                  carbs={avg.carbs ?? 0}
-                  fat={avg.fat ?? 0}
+                  protein={summary.average.protein || 0}
+                  carbs={summary.average.carbs || 0}
+                  fat={summary.average.fat || 0}
                 />
               </div>
 
               <div className="mt-6 space-y-3 pt-5 border-t border-gray-50">
                 {[
-                  { label: 'Tổng Protein', val: Math.round(totalProtein), unit: 'g', color: 'text-emerald-600' },
-                  { label: 'Tổng Carbs', val: Math.round(totalCarbs), unit: 'g', color: 'text-amber-600' },
-                  { label: 'Tổng Fat', val: Math.round(totalFat), unit: 'g', color: 'text-blue-600' },
-                ].map(item => (
+                  { label: 'Tong protein', value: summary.total.protein, unit: 'g', color: 'text-emerald-600' },
+                  { label: 'Tong carbs', value: summary.total.carbs, unit: 'g', color: 'text-amber-600' },
+                  { label: 'Tong fat', value: summary.total.fat, unit: 'g', color: 'text-blue-600' },
+                ].map((item) => (
                   <div key={item.label} className="flex justify-between items-center">
                     <span className="text-sm text-gray-500">{item.label}</span>
-                    <span className={`text-sm font-black ${item.color}`}>{item.val}{item.unit}</span>
+                    <span className={`text-sm font-black ${item.color}`}>{Math.round(item.value || 0)}{item.unit}</span>
                   </div>
                 ))}
               </div>
             </div>
           </div>
 
-          {/* Trend Table */}
           <div className="bg-white rounded-[28px] shadow-sm border border-gray-100 overflow-hidden">
             <div className="px-7 py-5 border-b border-gray-50 flex items-center justify-between">
-              <h2 className="text-xl font-black text-gray-900">Chi Tiết Từng Ngày</h2>
-              <div className="flex items-center gap-2 text-sm text-gray-500">
-                <span className="w-3 h-3 rounded bg-emerald-500 inline-block" /> Đạt mục tiêu
-                <span className="w-3 h-3 rounded bg-red-300 inline-block ml-2" /> Chưa đạt
-              </div>
+              <h2 className="text-xl font-black text-gray-900">Bang chi tiet</h2>
+              <p className="text-xs text-gray-500">{buckets.length} moc du lieu</p>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left">
                 <thead>
                   <tr className="bg-gray-50/50 border-b border-gray-50">
-                    {['Ngày', 'Calo', 'Protein', 'Carbs', 'Fat', 'So với mục tiêu'].map(col => (
-                      <th key={col} className="px-6 py-3 text-xs font-bold text-gray-400 uppercase tracking-wide">{col}</th>
+                    {['Moc', 'Khoang ngay', 'Calo', 'Protein', 'Carbs', 'Fat', 'Muc tieu'].map((column) => (
+                      <th key={column} className="px-6 py-3 text-xs font-bold text-gray-400 uppercase tracking-wide">
+                        {column}
+                      </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {daily.map((d: any, i: number) => {
-                    const pct = goalCalories > 0 ? Math.round((d.calories / goalCalories) * 100) : 0;
-                    const ok = pct >= 70 && pct <= 110;
+                  {buckets.map((bucket) => {
+                    const percent = target.calories > 0
+                      ? Math.round((bucket.calories / target.calories) * 100)
+                      : 0;
+                    const good = percent >= 70 && percent <= 110;
+
                     return (
-                      <motion.tr
-                        key={i}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ delay: i * 0.04 }}
-                        className="hover:bg-gray-50/50 transition-colors"
+                      <tr
+                        key={bucket.key}
+                        onClick={() => openBucketDetail(bucket)}
+                        className="hover:bg-gray-50/50 transition-colors cursor-pointer"
+                        title="Mo chi tiet bua an theo ngay"
                       >
-                        <td className="px-6 py-3 font-bold text-gray-900 text-sm">{d.day}</td>
-                        <td className="px-6 py-3 font-black text-gray-900">{d.calories > 0 ? d.calories.toLocaleString() : '—'}</td>
-                        <td className="px-6 py-3 text-sm text-gray-600">{d.protein > 0 ? `${Math.round(d.protein)}g` : '—'}</td>
-                        <td className="px-6 py-3 text-sm text-gray-600">{d.carbs > 0 ? `${Math.round(d.carbs)}g` : '—'}</td>
-                        <td className="px-6 py-3 text-sm text-gray-600">{d.fat > 0 ? `${Math.round(d.fat)}g` : '—'}</td>
+                        <td className="px-6 py-3 font-bold text-gray-900 text-sm">{bucket.label}</td>
+                        <td className="px-6 py-3 text-sm text-gray-500">{bucket.startDate} - {bucket.endDate}</td>
+                        <td className="px-6 py-3 font-black text-gray-900">{formatNumber(bucket.calories)}</td>
+                        <td className="px-6 py-3 text-sm text-gray-600">{Math.round(bucket.protein || 0)}g</td>
+                        <td className="px-6 py-3 text-sm text-gray-600">{Math.round(bucket.carbs || 0)}g</td>
+                        <td className="px-6 py-3 text-sm text-gray-600">{Math.round(bucket.fat || 0)}g</td>
                         <td className="px-6 py-3">
-                          {d.calories > 0 ? (
-                            <div className="flex items-center gap-2">
-                              <div className="flex-1 max-w-[80px] h-2 bg-gray-100 rounded-full overflow-hidden">
-                                <div
-                                  className={`h-full rounded-full ${ok ? 'bg-emerald-500' : 'bg-red-300'}`}
-                                  style={{ width: `${Math.min(100, pct)}%` }}
-                                />
-                              </div>
-                              <span className={`text-xs font-bold ${ok ? 'text-emerald-600' : 'text-red-400'}`}>{pct}%</span>
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 max-w-[80px] h-2 bg-gray-100 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full ${good ? 'bg-emerald-500' : 'bg-red-300'}`}
+                                style={{ width: `${Math.min(100, percent)}%` }}
+                              />
                             </div>
-                          ) : (
-                            <span className="text-xs text-gray-300">Chưa ghi</span>
-                          )}
+                            <span className={`text-xs font-bold ${good ? 'text-emerald-600' : 'text-red-400'}`}>
+                              {percent}%
+                            </span>
+                          </div>
                         </td>
-                      </motion.tr>
+                      </tr>
                     );
                   })}
+
+                  {buckets.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-10 text-center text-sm text-gray-400">
+                        Khong c? du lieu cho bo loc hien tai.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
           </div>
-
         </div>
       )}
     </div>

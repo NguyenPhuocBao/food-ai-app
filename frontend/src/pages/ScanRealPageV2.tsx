@@ -161,7 +161,7 @@ const ScanRealPageV2 = () => {
       await loadHistory();
       toast.success('Da phan tich anh thanh cong');
     } catch (error: any) {
-      toast.error(error?.response?.data?.error || 'Khong the phan tich anh');
+      toast.error(error?.response?.data?.error || 'Khong th? phan tich anh');
     } finally {
       setIsScanning(false);
     }
@@ -189,7 +189,7 @@ const ScanRealPageV2 = () => {
       toast.success('Da luu mon an vao nhat ky');
       await loadHistory();
     } catch {
-      toast.error('Khong the luu mon an vao nhat ky');
+      toast.error('Khong th? luu mon an vao nhat ky');
     } finally {
       setSavingMeal(false);
     }
@@ -373,7 +373,7 @@ const ScanRealPageV2 = () => {
                       disabled={savingMeal}
                       className="w-full py-4 text-center rounded-2xl font-bold text-lg text-white bg-gray-900 hover:bg-black transition-colors mb-3 disabled:opacity-70"
                     >
-                      {savingMeal ? 'Dang luu...' : 'Luu vao nhat ky an uong'}
+                      {savingMeal ? '?ang luu...' : 'Luu vao nhat ky An uong'}
                     </button>
                   </>
                 ) : (
@@ -396,7 +396,7 @@ const ScanRealPageV2 = () => {
                 </div>
                 <p className="font-medium text-gray-500">{isScanning ? 'Dang phan tich anh...' : 'Chua co ket qua scan'}</p>
                 <p className="text-sm mt-2">
-                  Chon anh mon an de AI nhan dien va goi y thong tin dinh duong.
+                  Chon anh mon an de AI nhan dien va gui ? thong tin dinh duong.
                 </p>
               </div>
             )}

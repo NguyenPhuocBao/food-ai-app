@@ -226,27 +226,30 @@ const generateCompositeDishes = () => {
     }
     return output;
 };
-const buildPopularFoodSeedData = (limit = 240) => {
+const buildPopularFoodSeedData = (limit = 240, offset = 0) => {
     const names = [...baseDishes, ...generateCompositeDishes()]
         .map((name) => name.trim())
         .filter(Boolean);
-    const uniqueNames = Array.from(new Set(names)).slice(0, Math.max(200, Math.min(limit, 500)));
-    return uniqueNames.map((name, index) => {
-        const nutrition = buildNutrition(index + 1);
-        const category = index % 5 === 0
-            ? 'Mon Viet'
-            : index % 5 === 1
-                ? 'Com va Bun'
-                : index % 5 === 2
-                    ? 'Mon Dam'
-                    : index % 5 === 3
-                        ? 'Mon Chay'
-                        : 'An Nhe';
+    const uniqueNames = Array.from(new Set(names));
+    const safeLimit = Math.max(50, Math.min(limit, 500));
+    const safeOffset = Math.max(0, Math.floor(offset));
+    const selectedNames = uniqueNames.slice(safeOffset, safeOffset + safeLimit);
+    return selectedNames.map((name, index) => {
+        const globalIndex = safeOffset + index;
+        const nutrition = buildNutrition(globalIndex + 1);
         return {
             name,
-            slug: `${normalizeSlug(name)}-${index + 1}`,
-            category,
-            description: `Mon pho bien #${index + 1} trong thu vien thuc don suc khoe.`,
+            slug: `${normalizeSlug(name)}-${globalIndex + 1}`,
+            category: globalIndex % 5 === 0
+                ? 'Mon Viet'
+                : globalIndex % 5 === 1
+                    ? 'Com va Bun'
+                    : globalIndex % 5 === 2
+                        ? 'Mon Dam'
+                        : globalIndex % 5 === 3
+                            ? 'Mon Chay'
+                            : 'An Nhe',
+            description: `Mon pho bien #${globalIndex + 1} trong thu vien thuc don suc khoe.`,
             imageUrl: null,
             calories: nutrition.calories,
             protein: nutrition.protein,

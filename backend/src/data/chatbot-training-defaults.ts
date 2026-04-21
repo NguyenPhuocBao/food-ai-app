@@ -138,7 +138,7 @@ const conditions = [
     key: 'hoi_chung_ruot_kich_thich',
     label: 'hoi chung ruot kich thich',
     avoid: 'theo doi nhom thuc pham de day hoi, can doi low-FODMAP neu can',
-    focus: 'thu nhat ky an uong de xac dinh mon gay trieu chung',
+    focus: 'thu nhat ky An uong de xac dinh mon gay trieu chung',
   },
   {
     key: 'thieu_mau',
@@ -218,7 +218,7 @@ const habits = [
   {
     key: 'ngu_thieu',
     question: 'Toi ngu it, co anh huong den can nang khong?',
-    advice: 'ngu 7-8 gio giup on dinh hormon doi/no va ho tro kiem soat an uong',
+    advice: 'ngu 7-8 gio giup on dinh hormon doi/no va ho tro kiem soat An uong',
   },
   {
     key: 'uong_ruou',
@@ -237,7 +237,7 @@ const habits = [
   },
   {
     key: 'khong_theo_doi',
-    question: 'Toi khong duy tri duoc nhat ky an uong, lam sao de de hon?',
+    question: 'Toi khong duy tri duoc nhat ky An uong, lam sao de de hon?',
     advice: 'ghi nhanh ngay sau bua an, bat dau tu 1-2 bua moi ngay roi nang dan',
   },
   {
@@ -262,7 +262,7 @@ const safetyAlerts = [
   {
     question: 'Chatbot co the thay bac si de ke don khong?',
     answer:
-      'Khong. Chatbot chi ho tro giao duc suc khoe va goi y dinh duong tong quat. Moi thuoc hoac dieu tri benh can do bac si quyet dinh.',
+      'Khong. Chatbot chi ho tro giao duc suc khoe va gui ? dinh duong tong quat. Moi thuoc hoac dieu tri benh can do bac si quyet dinh.',
     tags: ['an toan', 'gioi han'],
   },
   {
@@ -274,7 +274,7 @@ const safetyAlerts = [
   {
     question: 'Toi co benh nen, chatbot tu van den muc nao?',
     answer:
-      'Chatbot co the goi y nguyen tac an uong an toan, nhung van can bac si theo doi de ca nhan hoa theo xet nghiem va thuoc dang dung.',
+      'Chatbot co the gui ? nguyen tac An uong an toan, nhung van can bac si theo doi de ca nhan hoa theo xet nghiem va thuoc dang dung.',
     tags: ['benh nen', 'an toan'],
   },
 ] as const;
@@ -413,7 +413,7 @@ const customPlaybooks = [
     key: 'cho_con_bu',
     label: 'dang cho con bu',
     core: 'du nang luong chat luong, du nuoc va vi chat',
-    avoid: 'khong kieng muc qua chat neu khong co chi dinh y te',
+    avoid: 'khong kieng muc qua chat neu khong c? chi dinh y te',
   },
 ] as const;
 
@@ -421,7 +421,7 @@ const customConstraints = [
   'ngan sach thap',
   'chi nau duoc duoi 20 phut',
   'hay an ngoai',
-  'khong co tu lanh lon',
+  'khong c? tu lanh lon',
   'khong an ca',
   'khong dung sua bo',
   'hay bo bua sang',
@@ -482,7 +482,7 @@ const buildGeneratedTrainingExamples = () => {
       const carb = carbs[(items.length + playbook.key.length + constraint.length) % carbs.length];
 
       items.push({
-        question: `Toi la ${playbook.label}, dieu kien ${constraint}, hay goi y bua an thuc te`,
+        question: `Toi la ${playbook.label}, dieu kien ${constraint}, hay gui ? bua an thuc te`,
         answer:
           `Trong dieu kien ${constraint}, ban nen uu tien ${meal.label} gon nhe voi ${protein} + rau + ${carb}. Tap trung ${playbook.core} va nho ${playbook.avoid}.`,
         tags: ['custom', playbook.key, 'boi canh'],

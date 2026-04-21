@@ -68,6 +68,7 @@ model User {
   scanHistory   ScanHistory[]
   favorites     Favorite[]
   reviews       Review[]
+  reviewReplies ReviewReply[]
   notifications Notification[]
   chatSessions  ChatSession[]
   dailyNutrition DailyNutrition[]
@@ -384,8 +385,25 @@ model Review {
   
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   food        FoodItem @relation(fields: [foodId], references: [id], onDelete: Cascade)
+  replies     ReviewReply[]
   
   @@map("reviews")
+}
+
+model ReviewReply {
+  id        Int      @id @default(autoincrement())
+  reviewId  Int
+  userId    Int
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  review    Review   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([reviewId, createdAt])
+  @@index([userId])
+  @@map("review_replies")
 }
 
 // ==================== 7. RECOMMENDATION ====================

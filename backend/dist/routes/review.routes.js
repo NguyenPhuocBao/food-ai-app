@@ -9,4 +9,5 @@ router.get('/foods/:foodId', review_controller_1.getReviews);
 router.put('/:id', auth_middleware_1.authMiddleware, review_controller_1.updateReview);
 router.delete('/:id', auth_middleware_1.authMiddleware, review_controller_1.deleteReview);
 router.post('/:id/helpful', auth_middleware_1.authMiddleware, review_controller_1.markHelpful);
+router.post('/:id/replies', auth_middleware_1.authMiddleware, review_controller_1.addReviewReply);
 exports.default = router;
