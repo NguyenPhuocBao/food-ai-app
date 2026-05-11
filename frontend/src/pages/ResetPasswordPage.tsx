@@ -119,7 +119,7 @@ const ResetPasswordPage = () => {
                     type="password"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
-                    className="block w-full pl-10 pr-3 py-2.5 sm:py-3 border border-gray-200 rounded-xl bg-white/50 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all shadow-sm"
+                    className="block w-full pl-10 pr-3 py-2.5 sm:py-3 border border-gray-200 rounded-xl bg-white text-gray-900 placeholder-gray-400 dark:bg-white dark:text-gray-900 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all shadow-sm"
                     placeholder="Tối thiểu 8 ký tự"
                     required
                   />
@@ -136,7 +136,7 @@ const ResetPasswordPage = () => {
                     type="password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="block w-full pl-10 pr-3 py-2.5 sm:py-3 border border-gray-200 rounded-xl bg-white/50 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all shadow-sm"
+                    className="block w-full pl-10 pr-3 py-2.5 sm:py-3 border border-gray-200 rounded-xl bg-white text-gray-900 placeholder-gray-400 dark:bg-white dark:text-gray-900 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all shadow-sm"
                     placeholder="Nhập lại mật khẩu mới"
                     required
                   />

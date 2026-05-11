@@ -1,0 +1,16 @@
+﻿@startuml
+start
+:User chon mon + so luong;
+:POST /api/meals;
+:Backend tinh macro/calories;
+:Insert meal vao DB;
+:Cap nhat daily_nutrition;
+if (Can chinh sua?) then (co)
+  :PUT /api/meals/:id;
+endif
+if (Can xoa?) then (co)
+  :DELETE /api/meals/:id;
+endif
+:Tra ve thong ke moi nhat;
+stop
+@enduml

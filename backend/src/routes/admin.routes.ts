@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { 
   getAllUsers, getUserById, updateUserRole, deleteUser,
-  getAllFoodsAdmin, createFood, updateFood, deleteFood,
+  getAllFoodsAdmin, getFoodByIdAdmin, createFood, updateFood, deleteFood,
   getSystemStats, getAuditLogs,
   updateUserProfileByAdmin,
   resetUserPassword,
@@ -36,6 +36,7 @@ router.delete('/users/:id', authMiddleware, adminMiddleware, deleteUser);
 
 // Food management
 router.get('/foods', authMiddleware, adminMiddleware, getAllFoodsAdmin);
+router.get('/foods/:id', authMiddleware, adminMiddleware, getFoodByIdAdmin);
 router.post('/foods', authMiddleware, adminMiddleware, createFood);
 router.put('/foods/:id', authMiddleware, adminMiddleware, updateFood);
 router.delete('/foods/:id', authMiddleware, adminMiddleware, deleteFood);

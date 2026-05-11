@@ -1,11 +1,9 @@
 import { Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
 import FormData from 'form-data';
-
-const prisma = new PrismaClient();
+import prisma from '../lib/prisma';
 const AI_API_URL = process.env.AI_API_URL || 'http://localhost:8000';
 
 const normalizeText = (value: string) =>
@@ -53,6 +51,12 @@ const parseConfidence = (value: unknown) => {
   if (!Number.isFinite(parsed)) return 0;
   const percent = parsed > 1 ? parsed : parsed * 100;
   return Math.max(0, Math.min(100, percent));
+};
+
+const parsePositiveInt = (value: unknown, fallback: number, min: number, max: number) => {
+  const parsed = Number.parseInt(String(value ?? ''), 10);
+  if (!Number.isInteger(parsed)) return fallback;
+  return Math.min(max, Math.max(min, parsed));
 };
 
 const expandCandidateNames = (candidateNames: string[]) => {
@@ -268,6 +272,58 @@ export const analyzeImage = async (req: any, res: Response) => {
     });
   } catch (error: any) {
     console.error('Analyze error:', error);
+    return res.status(500).json({ error: error.message });
+  }
+};
+
+export const getScanHistory = async (req: any, res: Response) => {
+  try {
+    const hasPagingQuery =
+      req.query.page !== undefined ||
+      req.query.limit !== undefined ||
+      req.query.confirmed !== undefined;
+
+    const page = parsePositiveInt(req.query.page, 1, 1, 10_000);
+    const limit = parsePositiveInt(req.query.limit, 20, 1, 100);
+    const confirmed = String(req.query.confirmed || '').trim().toLowerCase();
+
+    const where: any = { userId: req.user.id };
+    if (confirmed === 'true') where.isConfirmed = true;
+    if (confirmed === 'false') where.isConfirmed = false;
+
+    if (!hasPagingQuery) {
+      const scans = await prisma.scanHistory.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+      });
+      return res.json({ success: true, data: scans });
+    }
+
+    const skip = (page - 1) * limit;
+
+    const [total, scans] = await prisma.$transaction([
+      prisma.scanHistory.count({ where }),
+      prisma.scanHistory.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+    ]);
+
+    return res.json({
+      success: true,
+      data: {
+        items: scans,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.max(1, Math.ceil(total / limit)),
+        },
+      },
+    });
+  } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }
 };

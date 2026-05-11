@@ -3,12 +3,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.broadcastNotification = exports.sendNotificationToMultipleUsers = exports.sendNotificationToUser = exports.sendToUsers = exports.deleteMealPlan = exports.updateMealPlan = exports.createMealPlan = exports.getUserMealPlans = exports.createRecipe = exports.updateRecipe = exports.updateManySettings = exports.getAllSettings = exports.deleteNotification = exports.getAllNotifications = exports.deleteReview = exports.getAllReviews = exports.deleteRecipe = exports.getAllRecipes = exports.updateUserProfileByAdmin = exports.resetUserPassword = exports.toggleUserBan = exports.getAuditLogs = exports.getSystemStats = exports.deleteFood = exports.updateFood = exports.createFood = exports.getAllFoodsAdmin = exports.deleteUser = exports.updateUserRole = exports.getUserById = exports.getAllUsers = void 0;
+exports.broadcastNotification = exports.sendNotificationToMultipleUsers = exports.sendNotificationToUser = exports.sendToUsers = exports.deleteMealPlan = exports.updateMealPlan = exports.createMealPlan = exports.getUserMealPlans = exports.createRecipe = exports.updateRecipe = exports.updateManySettings = exports.getAllSettings = exports.deleteNotification = exports.getAllNotifications = exports.deleteReview = exports.getAllReviews = exports.deleteRecipe = exports.getAllRecipes = exports.updateUserProfileByAdmin = exports.resetUserPassword = exports.toggleUserBan = exports.getAuditLogs = exports.getSystemStats = exports.deleteFood = exports.updateFood = exports.createFood = exports.getFoodByIdAdmin = exports.getAllFoodsAdmin = exports.deleteUser = exports.updateUserRole = exports.getUserById = exports.getAllUsers = void 0;
 const client_1 = require("@prisma/client");
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
+const crypto_1 = require("crypto");
 const active_user_service_1 = require("../services/active-user.service");
+const prisma_1 = __importDefault(require("../lib/prisma"));
 const timezone_util_1 = require("../utils/timezone.util");
-const prisma = new client_1.PrismaClient();
 const toLocalDateKey = (date) => (0, timezone_util_1.toAppDateKey)(date);
 const SUPPORT_PREFIX = 'SUPPORT_';
 const SUPPORT_STATUS_OPEN = 'SUPPORT_OPEN';
@@ -26,14 +27,14 @@ const getAllUsers = async (req, res) => {
                 { name: { contains: search, mode: 'insensitive' } },
             ];
         }
-        const users = await prisma.user.findMany({
+        const users = await prisma_1.default.user.findMany({
             where,
             skip: (Number(page) - 1) * Number(limit),
             take: Number(limit),
             include: { profile: true, _count: { select: { meals: true, scanHistory: true } } },
             orderBy: { createdAt: 'desc' },
         });
-        const total = await prisma.user.count({ where });
+        const total = await prisma_1.default.user.count({ where });
         const usersWithActivity = users.map((user) => ({
             ...user,
             isOnline: user.isActive && activeUserSet.has(user.id),
@@ -57,7 +58,7 @@ const getUserById = async (req, res) => {
     try {
         const { id } = req.params;
         const parsedId = parseInt(id);
-        const user = await prisma.user.findUnique({
+        const user = await prisma_1.default.user.findUnique({
             where: { id: parsedId },
             include: {
                 profile: true,
@@ -94,11 +95,11 @@ const updateUserRole = async (req, res) => {
         if (!Object.values(client_1.Role).includes(role)) {
             return res.status(400).json({ error: 'Invalid role' });
         }
-        const user = await prisma.user.update({
+        const user = await prisma_1.default.user.update({
             where: { id: parseInt(id) },
             data: { role: role },
         });
-        await prisma.auditLog.create({
+        await prisma_1.default.auditLog.create({
             data: {
                 userId: req.user.id,
                 action: 'UPDATE_ROLE',
@@ -117,11 +118,11 @@ exports.updateUserRole = updateUserRole;
 const deleteUser = async (req, res) => {
     try {
         const { id } = req.params;
-        const user = await prisma.user.findUnique({ where: { id: parseInt(id) } });
+        const user = await prisma_1.default.user.findUnique({ where: { id: parseInt(id) } });
         if (!user)
             return res.status(404).json({ error: 'User not found' });
-        await prisma.user.delete({ where: { id: parseInt(id) } });
-        await prisma.auditLog.create({
+        await prisma_1.default.user.delete({ where: { id: parseInt(id) } });
+        await prisma_1.default.auditLog.create({
             data: {
                 userId: req.user.id,
                 action: 'DELETE_USER',
@@ -144,14 +145,14 @@ const getAllFoodsAdmin = async (req, res) => {
         const where = {};
         if (search)
             where.name = { contains: search, mode: 'insensitive' };
-        const foods = await prisma.foodItem.findMany({
+        const foods = await prisma_1.default.foodItem.findMany({
             where,
             skip: (Number(page) - 1) * Number(limit),
             take: Number(limit),
             include: { recipe: true, _count: { select: { meals: true, favorites: true, reviews: true } } },
             orderBy: { createdAt: 'desc' },
         });
-        const total = await prisma.foodItem.count({ where });
+        const total = await prisma_1.default.foodItem.count({ where });
         res.json({
             success: true,
             data: foods,
@@ -163,13 +164,69 @@ const getAllFoodsAdmin = async (req, res) => {
     }
 };
 exports.getAllFoodsAdmin = getAllFoodsAdmin;
+const getFoodByIdAdmin = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const parsedId = parseInt(id, 10);
+        if (Number.isNaN(parsedId)) {
+            return res.status(400).json({ error: 'Invalid food id' });
+        }
+        const food = await prisma_1.default.foodItem.findUnique({
+            where: { id: parsedId },
+            include: {
+                recipe: {
+                    include: {
+                        ingredients: true,
+                        steps: true,
+                        tools: true,
+                    },
+                },
+                reviews: {
+                    include: {
+                        user: {
+                            select: {
+                                id: true,
+                                name: true,
+                                role: true,
+                                profile: { select: { avatar: true } },
+                            },
+                        },
+                        replies: {
+                            include: {
+                                user: {
+                                    select: {
+                                        id: true,
+                                        name: true,
+                                        role: true,
+                                        profile: { select: { avatar: true } },
+                                    },
+                                },
+                            },
+                            orderBy: { createdAt: 'asc' },
+                        },
+                    },
+                    orderBy: { createdAt: 'desc' },
+                    take: 20,
+                },
+                favorites: true,
+            },
+        });
+        if (!food)
+            return res.status(404).json({ error: 'Food not found' });
+        return res.json({ success: true, data: food });
+    }
+    catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+};
+exports.getFoodByIdAdmin = getFoodByIdAdmin;
 const createFood = async (req, res) => {
     try {
         const { name, category, description, calories, protein, fat, carbs, isVegetarian, isVegan, isGlutenFree } = req.body;
         if (!name || !category || !calories)
             return res.status(400).json({ error: 'Missing required fields' });
         const slug = name.toLowerCase().replace(/ /g, '-').replace(/[đĐ]/g, 'd');
-        const food = await prisma.foodItem.create({
+        const food = await prisma_1.default.foodItem.create({
             data: {
                 name,
                 slug,
@@ -184,7 +241,7 @@ const createFood = async (req, res) => {
                 isGlutenFree: isGlutenFree || false,
             },
         });
-        await prisma.auditLog.create({
+        await prisma_1.default.auditLog.create({
             data: {
                 userId: req.user.id,
                 action: 'CREATE_FOOD',
@@ -204,11 +261,11 @@ const updateFood = async (req, res) => {
     try {
         const { id } = req.params;
         const { name, category, description, calories, protein, fat, carbs, isVegetarian, isVegan, isGlutenFree } = req.body;
-        const oldFood = await prisma.foodItem.findUnique({ where: { id: parseInt(id) } });
+        const oldFood = await prisma_1.default.foodItem.findUnique({ where: { id: parseInt(id) } });
         if (!oldFood)
             return res.status(404).json({ error: 'Food not found' });
         const slug = name ? name.toLowerCase().replace(/ /g, '-').replace(/[đĐ]/g, 'd') : undefined;
-        const food = await prisma.foodItem.update({
+        const food = await prisma_1.default.foodItem.update({
             where: { id: parseInt(id) },
             data: {
                 name,
@@ -224,7 +281,7 @@ const updateFood = async (req, res) => {
                 isGlutenFree,
             },
         });
-        await prisma.auditLog.create({
+        await prisma_1.default.auditLog.create({
             data: {
                 userId: req.user.id,
                 action: 'UPDATE_FOOD',
@@ -244,11 +301,11 @@ exports.updateFood = updateFood;
 const deleteFood = async (req, res) => {
     try {
         const { id } = req.params;
-        const food = await prisma.foodItem.findUnique({ where: { id: parseInt(id) } });
+        const food = await prisma_1.default.foodItem.findUnique({ where: { id: parseInt(id) } });
         if (!food)
             return res.status(404).json({ error: 'Food not found' });
-        await prisma.foodItem.delete({ where: { id: parseInt(id) } });
-        await prisma.auditLog.create({
+        await prisma_1.default.foodItem.delete({ where: { id: parseInt(id) } });
+        await prisma_1.default.auditLog.create({
             data: {
                 userId: req.user.id,
                 action: 'DELETE_FOOD',
@@ -273,26 +330,26 @@ const getSystemStats = async (req, res) => {
         const activeUserIds = await (0, active_user_service_1.getActiveUserIds)();
         const activeUserSet = new Set(activeUserIds);
         const [totalUsers, newUsersThisWeek, totalFoods, totalRecipes, totalMeals, mealsToday, totalScans, scansToday, confirmedScans, totalReviews, totalFavorites, totalMealPlans, activeMealPlans, topCategories, popularFoods, recentUsers, recentMeals, recentScans, recentFavorites, recentUserSignups, activeUsers, supportSessionStatusCounts, supportSessionsToday, supportPendingOver24h, supportMessagesTotal, supportSessionsForFirstResponse,] = await Promise.all([
-            prisma.user.count(),
-            prisma.user.count({ where: { createdAt: { gte: startOfWindow } } }),
-            prisma.foodItem.count(),
-            prisma.recipe.count(),
-            prisma.meal.count(),
-            prisma.meal.count({ where: { eatenAt: { gte: startOfToday } } }),
-            prisma.scanHistory.count(),
-            prisma.scanHistory.count({ where: { createdAt: { gte: startOfToday } } }),
-            prisma.scanHistory.count({ where: { isConfirmed: true } }),
-            prisma.review.count(),
-            prisma.favorite.count(),
-            prisma.mealPlan.count(),
-            prisma.mealPlan.count({ where: { isActive: true } }),
-            prisma.foodItem.groupBy({
+            prisma_1.default.user.count(),
+            prisma_1.default.user.count({ where: { createdAt: { gte: startOfWindow } } }),
+            prisma_1.default.foodItem.count(),
+            prisma_1.default.recipe.count(),
+            prisma_1.default.meal.count(),
+            prisma_1.default.meal.count({ where: { eatenAt: { gte: startOfToday } } }),
+            prisma_1.default.scanHistory.count(),
+            prisma_1.default.scanHistory.count({ where: { createdAt: { gte: startOfToday } } }),
+            prisma_1.default.scanHistory.count({ where: { isConfirmed: true } }),
+            prisma_1.default.review.count(),
+            prisma_1.default.favorite.count(),
+            prisma_1.default.mealPlan.count(),
+            prisma_1.default.mealPlan.count({ where: { isActive: true } }),
+            prisma_1.default.foodItem.groupBy({
                 by: ['category'],
                 _count: { category: true },
                 orderBy: { _count: { category: 'desc' } },
                 take: 6,
             }),
-            prisma.foodItem.findMany({
+            prisma_1.default.foodItem.findMany({
                 orderBy: [{ popularity: 'desc' }, { updatedAt: 'desc' }],
                 take: 6,
                 include: {
@@ -300,7 +357,7 @@ const getSystemStats = async (req, res) => {
                     _count: { select: { favorites: true, reviews: true, meals: true } },
                 },
             }),
-            prisma.user.findMany({
+            prisma_1.default.user.findMany({
                 take: 5,
                 orderBy: { createdAt: 'desc' },
                 include: {
@@ -308,57 +365,57 @@ const getSystemStats = async (req, res) => {
                     _count: { select: { meals: true, scanHistory: true, favorites: true, mealPlans: true } },
                 },
             }),
-            prisma.meal.findMany({
+            prisma_1.default.meal.findMany({
                 where: { eatenAt: { gte: startOfWindow } },
                 select: { eatenAt: true, calories: true },
             }),
-            prisma.scanHistory.findMany({
+            prisma_1.default.scanHistory.findMany({
                 where: { createdAt: { gte: startOfWindow } },
                 select: { createdAt: true, isConfirmed: true },
             }),
-            prisma.favorite.findMany({
+            prisma_1.default.favorite.findMany({
                 where: { createdAt: { gte: startOfWindow } },
                 select: { createdAt: true },
             }),
-            prisma.user.findMany({
+            prisma_1.default.user.findMany({
                 where: { createdAt: { gte: startOfWindow } },
                 select: { createdAt: true },
             }),
             activeUserIds.length > 0
-                ? prisma.user.count({
+                ? prisma_1.default.user.count({
                     where: {
                         id: { in: activeUserIds },
                         isActive: true,
                     },
                 })
                 : Promise.resolve(0),
-            prisma.chatSession.groupBy({
+            prisma_1.default.chatSession.groupBy({
                 by: ['status'],
                 where: {
                     status: { startsWith: SUPPORT_PREFIX },
                 },
                 _count: { status: true },
             }),
-            prisma.chatSession.count({
+            prisma_1.default.chatSession.count({
                 where: {
                     status: { startsWith: SUPPORT_PREFIX },
                     createdAt: { gte: startOfToday },
                 },
             }),
-            prisma.chatSession.count({
+            prisma_1.default.chatSession.count({
                 where: {
                     status: SUPPORT_STATUS_PENDING,
                     updatedAt: { lte: supportPendingThreshold },
                 },
             }),
-            prisma.chatMessage.count({
+            prisma_1.default.chatMessage.count({
                 where: {
                     session: {
                         status: { startsWith: SUPPORT_PREFIX },
                     },
                 },
             }),
-            prisma.chatSession.findMany({
+            prisma_1.default.chatSession.findMany({
                 where: {
                     status: { startsWith: SUPPORT_PREFIX },
                     createdAt: { gte: supportFirstResponseWindowStart },
@@ -533,14 +590,14 @@ const getAuditLogs = async (req, res) => {
                 ...(Number.isInteger(numericKeyword) ? [{ entityId: numericKeyword }] : []),
             ];
         }
-        const logs = await prisma.auditLog.findMany({
+        const logs = await prisma_1.default.auditLog.findMany({
             where,
             skip: (Number(page) - 1) * Number(limit),
             take: Number(limit),
             include: { user: { select: { name: true, email: true } } },
             orderBy: { createdAt: 'desc' },
         });
-        const total = await prisma.auditLog.count({ where });
+        const total = await prisma_1.default.auditLog.count({ where });
         res.json({
             success: true,
             data: logs,
@@ -555,14 +612,14 @@ exports.getAuditLogs = getAuditLogs;
 const toggleUserBan = async (req, res) => {
     try {
         const { id } = req.params;
-        const user = await prisma.user.findUnique({ where: { id: parseInt(id) } });
+        const user = await prisma_1.default.user.findUnique({ where: { id: parseInt(id) } });
         if (!user)
             return res.status(404).json({ error: 'User not found' });
-        const updated = await prisma.user.update({
+        const updated = await prisma_1.default.user.update({
             where: { id: parseInt(id) },
             data: { isActive: !user.isActive }
         });
-        await prisma.auditLog.create({
+        await prisma_1.default.auditLog.create({
             data: {
                 userId: req.user.id,
                 action: 'TOGGLE_BAN',
@@ -579,14 +636,19 @@ const toggleUserBan = async (req, res) => {
 };
 exports.toggleUserBan = toggleUserBan;
 // Reset user password về mật khẩu mặc định (ví dụ "123456")
+const generateTemporaryPassword = () => (0, crypto_1.randomBytes)(9).toString('base64url');
 const resetUserPassword = async (req, res) => {
     try {
         const { id } = req.params;
-        const defaultPassword = '123456';
-        const hashedPassword = await bcryptjs_1.default.hash(defaultPassword, 10);
+        const requestedPassword = typeof req.body?.newPassword === 'string' ? req.body.newPassword.trim() : '';
+        const temporaryPassword = requestedPassword || generateTemporaryPassword();
+        if (temporaryPassword.length < 8) {
+            return res.status(400).json({ error: 'newPassword must be at least 8 characters' });
+        }
+        const hashedPassword = await bcryptjs_1.default.hash(temporaryPassword, 10);
         const now = new Date();
         const parsedUserId = parseInt(id);
-        const user = await prisma.$transaction(async (tx) => {
+        const user = await prisma_1.default.$transaction(async (tx) => {
             const updatedUser = await tx.user.update({
                 where: { id: parsedUserId },
                 data: { password: hashedPassword, passwordChangedAt: now }
@@ -596,15 +658,24 @@ const resetUserPassword = async (req, res) => {
             });
             return updatedUser;
         });
-        await prisma.auditLog.create({
+        await prisma_1.default.auditLog.create({
             data: {
                 userId: req.user.id,
                 action: 'RESET_PASSWORD',
                 entity: 'User',
-                entityId: user.id
+                entityId: user.id,
+                newData: {
+                    resetMode: requestedPassword ? 'custom' : 'generated_temp_password',
+                },
             }
         });
-        res.json({ success: true, message: 'Password reset to 123456' });
+        res.json({
+            success: true,
+            message: 'Password reset successfully',
+            data: {
+                temporaryPassword: requestedPassword ? undefined : temporaryPassword,
+            },
+        });
     }
     catch (error) {
         res.status(500).json({ error: error.message });
@@ -616,7 +687,7 @@ const updateUserProfileByAdmin = async (req, res) => {
     try {
         const { id } = req.params;
         const { height, weight, targetCalories, targetProtein, targetFat, targetCarbs, allergies } = req.body;
-        const profile = await prisma.userProfile.update({
+        const profile = await prisma_1.default.userProfile.update({
             where: { userId: parseInt(id) },
             data: {
                 height: height !== undefined ? parseFloat(height) : undefined,
@@ -628,7 +699,7 @@ const updateUserProfileByAdmin = async (req, res) => {
                 allergies: allergies || undefined
             }
         });
-        await prisma.auditLog.create({
+        await prisma_1.default.auditLog.create({
             data: {
                 userId: req.user.id,
                 action: 'UPDATE_PROFILE',
@@ -651,14 +722,14 @@ const getAllRecipes = async (req, res) => {
         const where = {};
         if (search)
             where.title = { contains: search, mode: 'insensitive' };
-        const recipes = await prisma.recipe.findMany({
+        const recipes = await prisma_1.default.recipe.findMany({
             where,
             skip: (Number(page) - 1) * Number(limit),
             take: Number(limit),
             include: { food: true },
             orderBy: { createdAt: 'desc' }
         });
-        const total = await prisma.recipe.count({ where });
+        const total = await prisma_1.default.recipe.count({ where });
         res.json({
             success: true,
             data: recipes,
@@ -674,7 +745,7 @@ exports.getAllRecipes = getAllRecipes;
 const deleteRecipe = async (req, res) => {
     try {
         const { id } = req.params;
-        await prisma.recipe.delete({ where: { id: parseInt(id) } });
+        await prisma_1.default.recipe.delete({ where: { id: parseInt(id) } });
         res.json({ success: true, message: 'Recipe deleted' });
     }
     catch (error) {
@@ -704,14 +775,14 @@ const getAllReviews = async (req, res) => {
                 ...(Number.isInteger(numericId) ? [{ id: numericId }] : []),
             ];
         }
-        const reviews = await prisma.review.findMany({
+        const reviews = await prisma_1.default.review.findMany({
             where,
             skip: (Number(page) - 1) * Number(limit),
             take: Number(limit),
             include: { user: { select: { name: true, email: true } }, food: { select: { name: true } } },
             orderBy: { createdAt: 'desc' }
         });
-        const total = await prisma.review.count({ where });
+        const total = await prisma_1.default.review.count({ where });
         res.json({
             success: true,
             data: reviews,
@@ -727,7 +798,7 @@ exports.getAllReviews = getAllReviews;
 const deleteReview = async (req, res) => {
     try {
         const { id } = req.params;
-        await prisma.review.delete({ where: { id: parseInt(id) } });
+        await prisma_1.default.review.delete({ where: { id: parseInt(id) } });
         res.json({ success: true, message: 'Review deleted' });
     }
     catch (error) {
@@ -738,13 +809,13 @@ exports.deleteReview = deleteReview;
 const getAllNotifications = async (req, res) => {
     try {
         const { page = 1, limit = 20 } = req.query;
-        const notifications = await prisma.notification.findMany({
+        const notifications = await prisma_1.default.notification.findMany({
             skip: (Number(page) - 1) * Number(limit),
             take: Number(limit),
             include: { user: { select: { name: true, email: true } } },
             orderBy: { createdAt: 'desc' }
         });
-        const total = await prisma.notification.count();
+        const total = await prisma_1.default.notification.count();
         res.json({
             success: true,
             data: notifications,
@@ -760,7 +831,7 @@ exports.getAllNotifications = getAllNotifications;
 const deleteNotification = async (req, res) => {
     try {
         const { id } = req.params;
-        await prisma.notification.delete({ where: { id: parseInt(id) } });
+        await prisma_1.default.notification.delete({ where: { id: parseInt(id) } });
         res.json({ success: true, message: 'Notification deleted' });
     }
     catch (error) {
@@ -771,7 +842,7 @@ exports.deleteNotification = deleteNotification;
 // ==================== SETTINGS MANAGEMENT ====================
 const getAllSettings = async (req, res) => {
     try {
-        const settings = await prisma.systemSetting.findMany();
+        const settings = await prisma_1.default.systemSetting.findMany();
         const result = settings.reduce((acc, s) => ({ ...acc, [s.key]: s.value }), {});
         res.json({ success: true, data: result });
     }
@@ -783,12 +854,12 @@ exports.getAllSettings = getAllSettings;
 const updateManySettings = async (req, res) => {
     try {
         const updates = req.body; // { key1: value1, key2: value2 }
-        const operations = Object.entries(updates).map(([key, value]) => prisma.systemSetting.upsert({
+        const operations = Object.entries(updates).map(([key, value]) => prisma_1.default.systemSetting.upsert({
             where: { key },
             update: { value: String(value) },
             create: { key, value: String(value), group: 'general' }
         }));
-        await prisma.$transaction(operations);
+        await prisma_1.default.$transaction(operations);
         res.json({ success: true, message: 'Settings updated' });
     }
     catch (error) {
@@ -801,7 +872,7 @@ const updateRecipe = async (req, res) => {
         const { id } = req.params;
         const data = req.body;
         const { ingredients, steps, tools, ...rest } = data;
-        await prisma.recipe.update({
+        await prisma_1.default.recipe.update({
             where: { id: parseInt(id) },
             data: {
                 ...rest,
@@ -822,7 +893,7 @@ const createRecipe = async (req, res) => {
     try {
         const { foodId, ...data } = req.body;
         const { ingredients, steps, tools } = data;
-        const recipe = await prisma.recipe.create({
+        const recipe = await prisma_1.default.recipe.create({
             data: {
                 foodId,
                 title: data.title,
@@ -850,7 +921,7 @@ exports.createRecipe = createRecipe;
 const getUserMealPlans = async (req, res) => {
     try {
         const { userId } = req.params;
-        const plans = await prisma.mealPlan.findMany({
+        const plans = await prisma_1.default.mealPlan.findMany({
             where: { userId: parseInt(userId) },
             include: {
                 details: {
@@ -869,7 +940,7 @@ exports.getUserMealPlans = getUserMealPlans;
 const createMealPlan = async (req, res) => {
     try {
         const { userId, name, startDate, endDate, details } = req.body;
-        const plan = await prisma.mealPlan.create({
+        const plan = await prisma_1.default.mealPlan.create({
             data: {
                 userId: parseInt(userId),
                 name,
@@ -898,7 +969,7 @@ const updateMealPlan = async (req, res) => {
     try {
         const { id } = req.params;
         const { name, startDate, endDate, isActive, details } = req.body;
-        await prisma.mealPlan.update({
+        await prisma_1.default.mealPlan.update({
             where: { id: parseInt(id) },
             data: {
                 name,
@@ -926,7 +997,7 @@ exports.updateMealPlan = updateMealPlan;
 const deleteMealPlan = async (req, res) => {
     try {
         const { id } = req.params;
-        await prisma.mealPlan.delete({ where: { id: parseInt(id) } });
+        await prisma_1.default.mealPlan.delete({ where: { id: parseInt(id) } });
         res.json({ success: true, message: 'Đã xóa' });
     }
     catch (error) {
@@ -949,7 +1020,7 @@ const sendToUsers = async (req, res) => {
             message,
             type: type || 'INFO',
         }));
-        await prisma.notification.createMany({ data: notifications });
+        await prisma_1.default.notification.createMany({ data: notifications });
         res.json({ success: true, message: `Sent to ${userIds.length} users` });
     }
     catch (error) {
@@ -964,11 +1035,11 @@ const sendNotificationToUser = async (req, res) => {
         const { title, message, type = 'INFO' } = req.body;
         if (!title || !message)
             return res.status(400).json({ error: 'Title and message required' });
-        const notification = await prisma.notification.create({
+        const notification = await prisma_1.default.notification.create({
             data: { userId: parseInt(userId), title, message, type },
         });
         // Ghi audit log
-        await prisma.auditLog.create({
+        await prisma_1.default.auditLog.create({
             data: {
                 userId: req.user.id,
                 action: 'SEND_NOTIFICATION',
@@ -994,9 +1065,9 @@ const sendNotificationToMultipleUsers = async (req, res) => {
         const notifications = userIds.map((userId) => ({
             userId, title, message, type,
         }));
-        await prisma.notification.createMany({ data: notifications });
+        await prisma_1.default.notification.createMany({ data: notifications });
         // Ghi audit log (lưu danh sách userIds)
-        await prisma.auditLog.create({
+        await prisma_1.default.auditLog.create({
             data: {
                 userId: req.user.id,
                 action: 'SEND_NOTIFICATION_MULTIPLE',
@@ -1016,11 +1087,11 @@ exports.sendNotificationToMultipleUsers = sendNotificationToMultipleUsers;
 const broadcastNotification = async (req, res) => {
     try {
         const { title, message, type = 'INFO' } = req.body;
-        const users = await prisma.user.findMany({ select: { id: true } });
+        const users = await prisma_1.default.user.findMany({ select: { id: true } });
         const notifications = users.map(user => ({ userId: user.id, title, message, type }));
-        await prisma.notification.createMany({ data: notifications });
+        await prisma_1.default.notification.createMany({ data: notifications });
         // Ghi audit log
-        await prisma.auditLog.create({
+        await prisma_1.default.auditLog.create({
             data: {
                 userId: req.user.id,
                 action: 'BROADCAST_NOTIFICATION',

@@ -1,16 +1,19 @@
 import { Router } from 'express';
-import { analyzeImage, confirmScanFood } from '../controllers/analyze-image.controller';
+import { analyzeImage, confirmScanFood, getScanHistory } from '../controllers/analyze-image.controller';
 import { uploadMiddleware } from '../middlewares/upload.middleware';
 import { authMiddleware } from '../middlewares/auth.middleware';
-import { prisma } from '../lib/prisma';
+import { createRateLimit } from '../middlewares/rate-limit.middleware';
 
 const router = Router();
-
-router.post('/', authMiddleware, uploadMiddleware.single('image'), analyzeImage);
-router.post('/:scanId/confirm', authMiddleware, confirmScanFood);
-router.get('/history', authMiddleware, async (req: any, res) => {
-  const scans = await prisma.scanHistory.findMany({ where: { userId: req.user.id }, orderBy: { createdAt: 'desc' } });
-  res.json({ success: true, data: scans });
+const analyzeUploadLimit = createRateLimit({
+  keyPrefix: 'analyze_upload',
+  windowMs: 60 * 1000,
+  max: 20,
+  message: 'Too many scan uploads. Please wait a moment and retry.',
 });
+
+router.post('/', authMiddleware, analyzeUploadLimit, uploadMiddleware.single('image'), analyzeImage);
+router.post('/:scanId/confirm', authMiddleware, confirmScanFood);
+router.get('/history', authMiddleware, getScanHistory);
 
 export default router;

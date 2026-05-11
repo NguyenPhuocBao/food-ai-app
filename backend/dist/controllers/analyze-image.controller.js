@@ -3,13 +3,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.confirmScanFood = exports.analyzeImage = void 0;
-const client_1 = require("@prisma/client");
+exports.confirmScanFood = exports.getScanHistory = exports.analyzeImage = void 0;
 const axios_1 = __importDefault(require("axios"));
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const form_data_1 = __importDefault(require("form-data"));
-const prisma = new client_1.PrismaClient();
+const prisma_1 = __importDefault(require("../lib/prisma"));
 const AI_API_URL = process.env.AI_API_URL || 'http://localhost:8000';
 const normalizeText = (value) => value
     .normalize('NFD')
@@ -52,6 +51,12 @@ const parseConfidence = (value) => {
         return 0;
     const percent = parsed > 1 ? parsed : parsed * 100;
     return Math.max(0, Math.min(100, percent));
+};
+const parsePositiveInt = (value, fallback, min, max) => {
+    const parsed = Number.parseInt(String(value ?? ''), 10);
+    if (!Number.isInteger(parsed))
+        return fallback;
+    return Math.min(max, Math.max(min, parsed));
 };
 const expandCandidateNames = (candidateNames) => {
     const expanded = [...candidateNames];
@@ -116,7 +121,7 @@ const scoreFood = (food, normalizedCandidates) => {
     return bestScore;
 };
 const findSuggestedFoods = async (candidateNames) => {
-    const foods = await prisma.foodItem.findMany({
+    const foods = await prisma_1.default.foodItem.findMany({
         select: {
             id: true,
             name: true,
@@ -219,7 +224,7 @@ const analyzeImage = async (req, res) => {
                 suggestedFoodIds: suggestedFoods.map((food) => food.id),
             },
         };
-        const scanHistory = await prisma.scanHistory.create({
+        const scanHistory = await prisma_1.default.scanHistory.create({
             data: {
                 userId: req.user.id,
                 imageUrl,
@@ -247,6 +252,54 @@ const analyzeImage = async (req, res) => {
     }
 };
 exports.analyzeImage = analyzeImage;
+const getScanHistory = async (req, res) => {
+    try {
+        const hasPagingQuery = req.query.page !== undefined ||
+            req.query.limit !== undefined ||
+            req.query.confirmed !== undefined;
+        const page = parsePositiveInt(req.query.page, 1, 1, 10000);
+        const limit = parsePositiveInt(req.query.limit, 20, 1, 100);
+        const confirmed = String(req.query.confirmed || '').trim().toLowerCase();
+        const where = { userId: req.user.id };
+        if (confirmed === 'true')
+            where.isConfirmed = true;
+        if (confirmed === 'false')
+            where.isConfirmed = false;
+        if (!hasPagingQuery) {
+            const scans = await prisma_1.default.scanHistory.findMany({
+                where,
+                orderBy: { createdAt: 'desc' },
+            });
+            return res.json({ success: true, data: scans });
+        }
+        const skip = (page - 1) * limit;
+        const [total, scans] = await prisma_1.default.$transaction([
+            prisma_1.default.scanHistory.count({ where }),
+            prisma_1.default.scanHistory.findMany({
+                where,
+                orderBy: { createdAt: 'desc' },
+                skip,
+                take: limit,
+            }),
+        ]);
+        return res.json({
+            success: true,
+            data: {
+                items: scans,
+                pagination: {
+                    page,
+                    limit,
+                    total,
+                    totalPages: Math.max(1, Math.ceil(total / limit)),
+                },
+            },
+        });
+    }
+    catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+};
+exports.getScanHistory = getScanHistory;
 const confirmScanFood = async (req, res) => {
     try {
         const scanId = Number(req.params.scanId);
@@ -254,11 +307,11 @@ const confirmScanFood = async (req, res) => {
         if (!Number.isFinite(scanId) || !Number.isFinite(foodId)) {
             return res.status(400).json({ error: 'scanId and foodId are required' });
         }
-        const scan = await prisma.scanHistory.findUnique({ where: { id: scanId } });
+        const scan = await prisma_1.default.scanHistory.findUnique({ where: { id: scanId } });
         if (!scan || scan.userId !== req.user.id) {
             return res.status(404).json({ error: 'Scan not found' });
         }
-        const food = await prisma.foodItem.findUnique({
+        const food = await prisma_1.default.foodItem.findUnique({
             where: { id: foodId },
             select: {
                 id: true,
@@ -283,7 +336,7 @@ const confirmScanFood = async (req, res) => {
                 confirmedAt: new Date().toISOString(),
             },
         };
-        await prisma.scanHistory.update({
+        await prisma_1.default.scanHistory.update({
             where: { id: scanId },
             data: {
                 isConfirmed: true,

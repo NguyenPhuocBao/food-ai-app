@@ -1,7 +1,5 @@
-import { PrismaClient } from '@prisma/client';
 import { toAppDayStart } from '../utils/timezone.util';
-
-const prisma = new PrismaClient();
+import prisma from '../lib/prisma';
 
 export const normalizeToDayStart = (value: Date | string) => {
   return toAppDayStart(value);

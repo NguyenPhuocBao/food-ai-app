@@ -27,21 +27,30 @@ const health_routes_1 = __importDefault(require("./routes/health.routes"));
 const audit_middleware_1 = require("./middlewares/audit.middleware");
 const path_1 = __importDefault(require("path"));
 const prisma_1 = __importDefault(require("./lib/prisma"));
+const env_1 = require("./config/env");
 const app = (0, express_1.default)();
-const parseAllowedOrigins = () => {
-    const raw = String(process.env.CORS_ORIGIN || 'http://localhost:5173');
-    return raw
-        .split(',')
-        .map((value) => value.trim())
-        .filter(Boolean);
-};
-const allowedOrigins = parseAllowedOrigins();
+const runtimeEnv = (0, env_1.getRuntimeEnv)();
 const isOriginAllowed = (origin) => {
     if (!origin)
         return true;
-    if (allowedOrigins.includes('*'))
+    if (runtimeEnv.corsOrigins.includes('*'))
         return true;
-    return allowedOrigins.includes(origin);
+    return runtimeEnv.corsOrigins.includes(origin);
+};
+const getHealthPayload = (status, db) => ({
+    status,
+    checks: { db },
+    timestamp: new Date(),
+    uptime: process.uptime(),
+});
+const isDatabaseAvailable = async () => {
+    try {
+        await prisma_1.default.$queryRaw `SELECT 1`;
+        return true;
+    }
+    catch {
+        return false;
+    }
 };
 // Middleware
 app.use((0, helmet_1.default)());
@@ -81,26 +90,29 @@ app.use('/api/recommendations', recommendation_routes_1.default);
 app.use('/api/weekly-reports', weekly_report_routes_1.default);
 app.use('/api/admin/settings', settings_routes_1.default);
 app.use('/api/health', health_routes_1.default);
-app.use(error_middleware_1.errorHandler);
-// Health check
-app.get('/health', async (req, res) => {
-    try {
-        await prisma_1.default.$queryRaw `SELECT 1`;
-        res.json({
-            status: 'OK',
-            checks: { db: 'UP' },
-            timestamp: new Date(),
-            uptime: process.uptime(),
-        });
+// Liveness check (process is alive, DB not required).
+app.get('/health/live', (_req, res) => {
+    res.json({
+        status: 'OK',
+        timestamp: new Date(),
+        uptime: process.uptime(),
+    });
+});
+// Readiness check (process + DB).
+app.get('/health/ready', async (_req, res) => {
+    const isReady = await isDatabaseAvailable();
+    if (!isReady) {
+        return res.status(503).json(getHealthPayload('DEGRADED', 'DOWN'));
     }
-    catch {
-        res.status(503).json({
-            status: 'DEGRADED',
-            checks: { db: 'DOWN' },
-            timestamp: new Date(),
-            uptime: process.uptime(),
-        });
+    return res.json(getHealthPayload('OK', 'UP'));
+});
+// Backward-compatible health check.
+app.get('/health', async (_req, res) => {
+    const hasDatabase = await isDatabaseAvailable();
+    if (!hasDatabase) {
+        return res.status(503).json(getHealthPayload('DEGRADED', 'DOWN'));
     }
+    return res.json(getHealthPayload('OK', 'UP'));
 });
 // Root
 app.get('/', (req, res) => {
@@ -125,4 +137,5 @@ app.get('/', (req, res) => {
         }
     });
 });
+app.use(error_middleware_1.errorHandler);
 exports.default = app;

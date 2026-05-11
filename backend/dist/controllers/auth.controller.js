@@ -4,33 +4,50 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.changePassword = exports.resetPassword = exports.forgotPassword = exports.updateProfile = exports.getMe = exports.refreshToken = exports.logout = exports.login = exports.register = void 0;
-const client_1 = require("@prisma/client");
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const crypto_1 = require("crypto");
 const active_user_service_1 = require("../services/active-user.service");
 const email_service_1 = require("../services/email.service");
-const prisma = new client_1.PrismaClient();
-const JWT_SECRET = process.env.JWT_SECRET || 'food-ai-secret-key-2024';
+const jwt_util_1 = require("../utils/jwt.util");
+const prisma_1 = __importDefault(require("../lib/prisma"));
+const env_1 = require("../config/env");
+const auth_validation_1 = require("../validations/auth.validation");
 const resetPasswordExpiresMinutes = Number(process.env.RESET_PASSWORD_TOKEN_EXPIRES_MINUTES || 15);
 const RESET_PASSWORD_EXPIRES_MINUTES = Number.isFinite(resetPasswordExpiresMinutes) && resetPasswordExpiresMinutes > 0
     ? resetPasswordExpiresMinutes
     : 15;
-const FRONTEND_URL = (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/+$/, '');
+const FRONTEND_URL = (0, env_1.getRuntimeEnv)().frontendUrl.replace(/\/+$/, '');
 const GENERIC_FORGOT_PASSWORD_MESSAGE = 'If the email exists, reset instructions have been sent.';
 const hashResetToken = (token) => (0, crypto_1.createHash)('sha256').update(token).digest('hex');
+const signAccessToken = (payload) => jsonwebtoken_1.default.sign(payload, (0, jwt_util_1.resolveJwtSecret)(), { expiresIn: '7d' });
+const getValidationMessage = (error) => {
+    if (typeof error === 'object' && error && 'issues' in error) {
+        const firstIssue = error.issues?.[0];
+        return firstIssue?.message || 'Invalid request payload';
+    }
+    return 'Invalid request payload';
+};
 const register = async (req, res) => {
     try {
-        const { email, password, name } = req.body;
-        if (!email || !password || !name) {
-            return res.status(400).json({ error: 'Missing required fields' });
+        let email = '';
+        let password = '';
+        let name = '';
+        try {
+            const payload = auth_validation_1.registerSchema.parse(req.body);
+            email = payload.email;
+            password = payload.password;
+            name = payload.name;
         }
-        const existingUser = await prisma.user.findUnique({ where: { email } });
+        catch (validationError) {
+            return res.status(400).json({ error: getValidationMessage(validationError) });
+        }
+        const existingUser = await prisma_1.default.user.findUnique({ where: { email } });
         if (existingUser) {
             return res.status(400).json({ error: 'Email already exists' });
         }
         const hashedPassword = await bcryptjs_1.default.hash(password, 10);
-        const user = await prisma.user.create({
+        const user = await prisma_1.default.user.create({
             data: {
                 email,
                 password: hashedPassword,
@@ -38,10 +55,10 @@ const register = async (req, res) => {
                 profile: { create: {} }
             }
         });
-        const token = jsonwebtoken_1.default.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+        const token = signAccessToken({ id: user.id, email: user.email, role: user.role });
         await (0, active_user_service_1.markUserActive)(user.id);
         // Tạo audit log
-        await prisma.auditLog.create({
+        await prisma_1.default.auditLog.create({
             data: {
                 userId: user.id,
                 action: 'REGISTER',
@@ -60,11 +77,17 @@ const register = async (req, res) => {
 exports.register = register;
 const login = async (req, res) => {
     try {
-        const { email, password } = req.body;
-        if (!email || !password) {
-            return res.status(400).json({ error: 'Missing email or password' });
+        let email = '';
+        let password = '';
+        try {
+            const payload = auth_validation_1.loginSchema.parse(req.body);
+            email = payload.email;
+            password = payload.password;
         }
-        const user = await prisma.user.findUnique({
+        catch (validationError) {
+            return res.status(400).json({ error: getValidationMessage(validationError) });
+        }
+        const user = await prisma_1.default.user.findUnique({
             where: { email },
             include: { profile: true }
         });
@@ -75,9 +98,9 @@ const login = async (req, res) => {
         if (!isValidPassword) {
             return res.status(401).json({ error: 'Invalid credentials' });
         }
-        const token = jsonwebtoken_1.default.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+        const token = signAccessToken({ id: user.id, email: user.email, role: user.role });
         await (0, active_user_service_1.markUserActive)(user.id);
-        await prisma.auditLog.create({
+        await prisma_1.default.auditLog.create({
             data: {
                 userId: user.id,
                 action: 'LOGIN',
@@ -97,7 +120,7 @@ exports.login = login;
 const logout = async (req, res) => {
     try {
         await (0, active_user_service_1.markUserInactive)(req.user.id);
-        await prisma.auditLog.create({
+        await prisma_1.default.auditLog.create({
             data: {
                 userId: req.user.id,
                 action: 'LOGOUT',
@@ -114,7 +137,7 @@ const logout = async (req, res) => {
 exports.logout = logout;
 const refreshToken = async (req, res) => {
     try {
-        const token = jsonwebtoken_1.default.sign({ id: req.user.id, email: req.user.email }, JWT_SECRET, { expiresIn: '7d' });
+        const token = signAccessToken({ id: req.user.id, email: req.user.email, role: req.user.role });
         await (0, active_user_service_1.markUserActive)(req.user.id);
         res.json({ success: true, token });
     }
@@ -125,7 +148,7 @@ const refreshToken = async (req, res) => {
 exports.refreshToken = refreshToken;
 const getMe = async (req, res) => {
     try {
-        const user = await prisma.user.findUnique({
+        const user = await prisma_1.default.user.findUnique({
             where: { id: req.user.id },
             include: { profile: true, goals: { where: { isActive: true } } }
         });
@@ -148,7 +171,7 @@ const updateProfile = async (req, res) => {
         const parsedTargetCarbs = targetCarbs !== undefined && targetCarbs !== null && targetCarbs !== '' ? parseFloat(targetCarbs) : undefined;
         const parsedTargetWeight = targetWeight !== undefined && targetWeight !== null && targetWeight !== '' ? parseFloat(targetWeight) : undefined;
         const parsedDateOfBirth = dateOfBirth ? new Date(dateOfBirth) : undefined;
-        const user = await prisma.$transaction(async (tx) => {
+        const user = await prisma_1.default.$transaction(async (tx) => {
             if (fullName && typeof fullName === 'string' && fullName.trim()) {
                 await tx.user.update({
                     where: { id: userId },
@@ -278,12 +301,16 @@ const updateProfile = async (req, res) => {
 exports.updateProfile = updateProfile;
 const forgotPassword = async (req, res) => {
     try {
-        const emailInput = typeof req.body?.email === 'string' ? req.body.email.trim() : '';
-        if (!emailInput) {
-            return res.status(400).json({ error: 'Email is required' });
+        let emailInput = '';
+        try {
+            const payload = auth_validation_1.forgotPasswordSchema.parse(req.body);
+            emailInput = payload.email;
+        }
+        catch (validationError) {
+            return res.status(400).json({ error: getValidationMessage(validationError) });
         }
         const email = emailInput;
-        const user = await prisma.user.findUnique({
+        const user = await prisma_1.default.user.findUnique({
             where: { email },
             select: { id: true, email: true, name: true, isActive: true },
         });
@@ -293,11 +320,11 @@ const forgotPassword = async (req, res) => {
         const rawToken = (0, crypto_1.randomBytes)(32).toString('hex');
         const tokenHash = hashResetToken(rawToken);
         const expiresAt = new Date(Date.now() + RESET_PASSWORD_EXPIRES_MINUTES * 60 * 1000);
-        await prisma.$transaction([
-            prisma.passwordResetToken.deleteMany({
+        await prisma_1.default.$transaction([
+            prisma_1.default.passwordResetToken.deleteMany({
                 where: { userId: user.id, usedAt: null },
             }),
-            prisma.passwordResetToken.create({
+            prisma_1.default.passwordResetToken.create({
                 data: {
                     userId: user.id,
                     tokenHash,
@@ -306,7 +333,7 @@ const forgotPassword = async (req, res) => {
                     requestedUserAgent: req.get('user-agent') || undefined,
                 },
             }),
-            prisma.auditLog.create({
+            prisma_1.default.auditLog.create({
                 data: {
                     userId: user.id,
                     action: 'FORGOT_PASSWORD_REQUEST',
@@ -336,16 +363,18 @@ const forgotPassword = async (req, res) => {
 exports.forgotPassword = forgotPassword;
 const resetPassword = async (req, res) => {
     try {
-        const token = typeof req.body?.token === 'string' ? req.body.token.trim() : '';
-        const newPassword = typeof req.body?.newPassword === 'string' ? req.body.newPassword : '';
-        if (!token || !newPassword) {
-            return res.status(400).json({ error: 'Missing token or newPassword' });
+        let token = '';
+        let newPassword = '';
+        try {
+            const payload = auth_validation_1.resetPasswordSchema.parse(req.body);
+            token = payload.token;
+            newPassword = payload.newPassword;
         }
-        if (newPassword.length < 8) {
-            return res.status(400).json({ error: 'New password must be at least 8 characters' });
+        catch (validationError) {
+            return res.status(400).json({ error: getValidationMessage(validationError) });
         }
         const tokenHash = hashResetToken(token);
-        const resetToken = await prisma.passwordResetToken.findUnique({
+        const resetToken = await prisma_1.default.passwordResetToken.findUnique({
             where: { tokenHash },
             select: {
                 id: true,
@@ -359,15 +388,15 @@ const resetPassword = async (req, res) => {
         }
         const now = new Date();
         const hashedPassword = await bcryptjs_1.default.hash(newPassword, 10);
-        await prisma.$transaction([
-            prisma.user.update({
+        await prisma_1.default.$transaction([
+            prisma_1.default.user.update({
                 where: { id: resetToken.userId },
                 data: {
                     password: hashedPassword,
                     passwordChangedAt: now,
                 },
             }),
-            prisma.passwordResetToken.update({
+            prisma_1.default.passwordResetToken.update({
                 where: { id: resetToken.id },
                 data: {
                     usedAt: now,
@@ -375,14 +404,14 @@ const resetPassword = async (req, res) => {
                     usedUserAgent: req.get('user-agent') || undefined,
                 },
             }),
-            prisma.passwordResetToken.deleteMany({
+            prisma_1.default.passwordResetToken.deleteMany({
                 where: {
                     userId: resetToken.userId,
                     usedAt: null,
                     id: { not: resetToken.id },
                 },
             }),
-            prisma.auditLog.create({
+            prisma_1.default.auditLog.create({
                 data: {
                     userId: resetToken.userId,
                     action: 'RESET_PASSWORD',
@@ -403,7 +432,7 @@ exports.resetPassword = resetPassword;
 const changePassword = async (req, res) => {
     try {
         const { currentPassword, newPassword } = req.body;
-        const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+        const user = await prisma_1.default.user.findUnique({ where: { id: req.user.id } });
         if (!user)
             return res.status(404).json({ error: 'User not found' });
         const isValid = await bcryptjs_1.default.compare(currentPassword, user.password);
@@ -414,15 +443,15 @@ const changePassword = async (req, res) => {
         }
         const now = new Date();
         const hashedPassword = await bcryptjs_1.default.hash(newPassword, 10);
-        await prisma.$transaction([
-            prisma.user.update({
+        await prisma_1.default.$transaction([
+            prisma_1.default.user.update({
                 where: { id: req.user.id },
                 data: { password: hashedPassword, passwordChangedAt: now },
             }),
-            prisma.passwordResetToken.deleteMany({
+            prisma_1.default.passwordResetToken.deleteMany({
                 where: { userId: req.user.id, usedAt: null },
             }),
-            prisma.auditLog.create({
+            prisma_1.default.auditLog.create({
                 data: {
                     userId: req.user.id,
                     action: 'CHANGE_PASSWORD',

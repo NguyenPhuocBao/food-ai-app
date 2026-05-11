@@ -13,6 +13,7 @@ router.put('/users/:id/role', auth_middleware_1.authMiddleware, auth_middleware_
 router.delete('/users/:id', auth_middleware_1.authMiddleware, auth_middleware_1.adminMiddleware, admin_controller_1.deleteUser);
 // Food management
 router.get('/foods', auth_middleware_1.authMiddleware, auth_middleware_1.adminMiddleware, admin_controller_1.getAllFoodsAdmin);
+router.get('/foods/:id', auth_middleware_1.authMiddleware, auth_middleware_1.adminMiddleware, admin_controller_1.getFoodByIdAdmin);
 router.post('/foods', auth_middleware_1.authMiddleware, auth_middleware_1.adminMiddleware, admin_controller_1.createFood);
 router.put('/foods/:id', auth_middleware_1.authMiddleware, auth_middleware_1.adminMiddleware, admin_controller_1.updateFood);
 router.delete('/foods/:id', auth_middleware_1.authMiddleware, auth_middleware_1.adminMiddleware, admin_controller_1.deleteFood);

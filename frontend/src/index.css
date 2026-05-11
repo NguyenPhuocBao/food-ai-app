@@ -16,13 +16,37 @@
   .dark input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']),
   .dark select,
   .dark textarea {
-    @apply text-slate-100 placeholder:text-slate-500;
+    @apply placeholder:text-slate-500;
+  }
+
+  .dark input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file'])[class*='bg-white'],
+  .dark select[class*='bg-white'],
+  .dark textarea[class*='bg-white'],
+  .dark input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file'])[class*='bg-gray-50'],
+  .dark select[class*='bg-gray-50'],
+  .dark textarea[class*='bg-gray-50'],
+  .dark input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file'])[class*='bg-gray-100'],
+  .dark select[class*='bg-gray-100'],
+  .dark textarea[class*='bg-gray-100'] {
+    @apply text-gray-900 placeholder:text-gray-400;
+  }
+
+  .dark input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file'])[class*='bg-slate-'],
+  .dark select[class*='bg-slate-'],
+  .dark textarea[class*='bg-slate-'],
+  .dark input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file'])[class*='bg-gray-8'],
+  .dark select[class*='bg-gray-8'],
+  .dark textarea[class*='bg-gray-8'],
+  .dark input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file'])[class*='bg-gray-9'],
+  .dark select[class*='bg-gray-9'],
+  .dark textarea[class*='bg-gray-9'] {
+    @apply text-slate-100 placeholder:text-slate-400;
   }
 
   .dark input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):not([class*='bg-']),
   .dark select:not([class*='bg-']),
   .dark textarea:not([class*='bg-']) {
-    @apply bg-slate-900 border-slate-700;
+    @apply bg-slate-900 border-slate-700 text-slate-100 placeholder:text-slate-400;
   }
 
   .admin-shell input:not([type='checkbox']):not([type='radio']):not([type='range']),

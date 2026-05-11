@@ -1,10 +1,8 @@
 import { Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import OpenAI from 'openai';
 import { toAppDateKey, toAppDayRange } from '../utils/timezone.util';
 import { DEFAULT_CHATBOT_TRAINING_EXAMPLES } from '../data/chatbot-training-defaults';
-
-const prisma = new PrismaClient();
+import prisma from '../lib/prisma';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,

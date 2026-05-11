@@ -4,11 +4,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.quickChat = exports.sendMessage = exports.deleteSession = exports.getSession = exports.getSessions = exports.createSession = exports.benchmarkTrainingData = exports.bootstrapDefaultTrainingData = exports.updateTrainingData = exports.getTrainingData = exports.healthCheck = void 0;
-const client_1 = require("@prisma/client");
 const openai_1 = __importDefault(require("openai"));
 const timezone_util_1 = require("../utils/timezone.util");
 const chatbot_training_defaults_1 = require("../data/chatbot-training-defaults");
-const prisma = new client_1.PrismaClient();
+const prisma_1 = __importDefault(require("../lib/prisma"));
 const openai = new openai_1.default({
     apiKey: process.env.OPENAI_API_KEY,
 });
@@ -213,7 +212,7 @@ const normalizeTrainingExamples = (raw) => {
 };
 const getDefaultTrainingExamples = () => normalizeTrainingExamples(chatbot_training_defaults_1.DEFAULT_CHATBOT_TRAINING_EXAMPLES);
 const loadTrainingExamples = async () => {
-    const setting = await prisma.systemSetting.findUnique({
+    const setting = await prisma_1.default.systemSetting.findUnique({
         where: { key: CHAT_TRAINING_SETTINGS_KEY },
         select: { value: true },
     });
@@ -391,7 +390,7 @@ const buildRuleBasedRetrievalAnswer = (question, goalLabel, allergies) => {
 const generateWithRetrieval = async (userId, question) => {
     const [trainingConfig, user] = await Promise.all([
         loadTrainingExamples(),
-        prisma.user.findUnique({
+        prisma_1.default.user.findUnique({
             where: { id: userId },
             include: {
                 profile: { select: { allergies: true } },
@@ -581,7 +580,7 @@ const generateAssistantReply = async (systemPrompt, turns, userId, question) => 
     throw lastError || new Error('No available AI provider');
 };
 const getSystemPrompt = async (userId, userQuestion) => {
-    const user = await prisma.user.findUnique({
+    const user = await prisma_1.default.user.findUnique({
         where: { id: userId },
         include: { profile: true, goals: { where: { isActive: true } } },
     });
@@ -593,10 +592,10 @@ const getSystemPrompt = async (userId, userQuestion) => {
     const todayKey = (0, timezone_util_1.toAppDateKey)(now);
     const { start, endExclusive } = (0, timezone_util_1.toAppDayRange)(now);
     const [dailyNutrition, recentMeals, trainingConfig] = await Promise.all([
-        prisma.dailyNutrition.findUnique({
+        prisma_1.default.dailyNutrition.findUnique({
             where: { userId_date: { userId, date: start } },
         }),
-        prisma.meal.findMany({
+        prisma_1.default.meal.findMany({
             where: { userId, eatenAt: { gte: start, lt: endExclusive } },
             include: { food: { select: { name: true } } },
             orderBy: { eatenAt: 'desc' },
@@ -717,7 +716,7 @@ exports.getTrainingData = getTrainingData;
 const updateTrainingData = async (req, res) => {
     try {
         const normalizedExamples = normalizeTrainingExamples(req.body?.examples);
-        await prisma.systemSetting.upsert({
+        await prisma_1.default.systemSetting.upsert({
             where: { key: CHAT_TRAINING_SETTINGS_KEY },
             update: {
                 value: JSON.stringify(normalizedExamples),
@@ -729,7 +728,7 @@ const updateTrainingData = async (req, res) => {
                 group: 'ai',
             },
         });
-        await prisma.auditLog.create({
+        await prisma_1.default.auditLog.create({
             data: {
                 userId: req.user?.id,
                 action: 'UPDATE_CHATBOT_TRAINING',
@@ -759,7 +758,7 @@ exports.updateTrainingData = updateTrainingData;
 const bootstrapDefaultTrainingData = async (req, res) => {
     try {
         const defaults = getDefaultTrainingExamples();
-        await prisma.systemSetting.upsert({
+        await prisma_1.default.systemSetting.upsert({
             where: { key: CHAT_TRAINING_SETTINGS_KEY },
             update: {
                 value: JSON.stringify(defaults),
@@ -771,7 +770,7 @@ const bootstrapDefaultTrainingData = async (req, res) => {
                 group: 'ai',
             },
         });
-        await prisma.auditLog.create({
+        await prisma_1.default.auditLog.create({
             data: {
                 userId: req.user?.id,
                 action: 'BOOTSTRAP_CHATBOT_TRAINING_DEFAULTS',
@@ -867,7 +866,7 @@ const createSession = async (req, res) => {
         const userId = req.user.id;
         const rawTitle = typeof req.body?.title === 'string' ? req.body.title.trim() : '';
         const title = rawTitle || `Cuoc tro chuyen ${new Date().toLocaleDateString()}`;
-        const session = await prisma.chatSession.create({
+        const session = await prisma_1.default.chatSession.create({
             data: { userId, title, status: 'AI_ACTIVE' },
         });
         res.json({ success: true, data: session });
@@ -890,7 +889,7 @@ const getSessions = async (req, res) => {
                 userId: req.user.id,
                 status: { not: { startsWith: 'SUPPORT_' } },
             };
-        const sessions = await prisma.chatSession.findMany({
+        const sessions = await prisma_1.default.chatSession.findMany({
             where,
             include: {
                 _count: { select: { messages: true } },
@@ -923,7 +922,7 @@ const getSession = async (req, res) => {
                 userId: req.user.id,
                 status: { not: { startsWith: 'SUPPORT_' } },
             };
-        const session = await prisma.chatSession.findFirst({
+        const session = await prisma_1.default.chatSession.findFirst({
             where,
             include: {
                 messages: { orderBy: { createdAt: 'asc' } },
@@ -945,14 +944,14 @@ const deleteSession = async (req, res) => {
         if (!sessionId)
             return res.status(400).json({ error: 'Invalid session id' });
         const isAdmin = req.user.role === 'ADMIN';
-        const session = await prisma.chatSession.findFirst({
+        const session = await prisma_1.default.chatSession.findFirst({
             where: isAdmin
                 ? { id: sessionId, status: { not: { startsWith: 'SUPPORT_' } } }
                 : { id: sessionId, userId: req.user.id, status: { not: { startsWith: 'SUPPORT_' } } },
         });
         if (!session)
             return res.status(404).json({ error: 'Session not found' });
-        await prisma.chatSession.delete({ where: { id: sessionId } });
+        await prisma_1.default.chatSession.delete({ where: { id: sessionId } });
         res.json({ success: true, message: 'Session deleted' });
     }
     catch (error) {
@@ -977,12 +976,12 @@ const sendMessage = async (req, res) => {
                 error: 'No AI provider configured. Set CHAT_AI_PROVIDER=\"retrieval\" or XAI_API_KEY/GROQ_API_KEY or GEMINI_API_KEY or OPENAI_API_KEY.',
             });
         }
-        const session = await prisma.chatSession.findFirst({
+        const session = await prisma_1.default.chatSession.findFirst({
             where: { id: sessionId, userId, status: { not: { startsWith: 'SUPPORT_' } } },
         });
         if (!session)
             return res.status(404).json({ error: 'Session not found' });
-        const userMessage = await prisma.chatMessage.create({
+        const userMessage = await prisma_1.default.chatMessage.create({
             data: {
                 sessionId: session.id,
                 role: 'USER',
@@ -990,7 +989,7 @@ const sendMessage = async (req, res) => {
                 entities: attachments.length > 0 ? { attachments } : undefined,
             },
         });
-        const historyMessages = await prisma.chatMessage.findMany({
+        const historyMessages = await prisma_1.default.chatMessage.findMany({
             where: { sessionId: session.id },
             orderBy: { createdAt: 'desc' },
             take: MAX_HISTORY_MESSAGES,
@@ -1047,12 +1046,12 @@ const sendMessage = async (req, res) => {
                 });
             }
         }
-        const assistantMessage = await prisma.chatMessage.create({
+        const assistantMessage = await prisma_1.default.chatMessage.create({
             data: { sessionId: session.id, role: 'ASSISTANT', content: responseContent },
         });
         const shouldUpdateTitle = session.title.startsWith('Cuoc tro chuyen');
         const nextTitle = shouldUpdateTitle ? content.slice(0, 60) : session.title;
-        await prisma.chatSession.update({
+        await prisma_1.default.chatSession.update({
             where: { id: session.id },
             data: { updatedAt: new Date(), title: nextTitle || session.title },
         });

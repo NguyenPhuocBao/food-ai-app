@@ -87,8 +87,8 @@ const ScanRealPageV2 = () => {
   const loadHistory = async () => {
     setLoadingHistory(true);
     try {
-      const scans = await getScanHistory();
-      setHistory(scans);
+      const { items } = await getScanHistory({ page: 1, limit: 5 });
+      setHistory(items);
     } catch {
       setHistory([]);
     } finally {

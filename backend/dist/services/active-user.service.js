@@ -1,8 +1,10 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getActiveProvider = exports.getActiveWindowMinutes = exports.getActiveUserCount = exports.getActiveUserIds = exports.markUserInactive = exports.markUserActive = void 0;
-const client_1 = require("@prisma/client");
-const prisma = new client_1.PrismaClient();
+const prisma_1 = __importDefault(require("../lib/prisma"));
 const DEFAULT_ACTIVE_WINDOW_MINUTES = 5;
 const DEFAULT_PROVIDER = 'db';
 const DB_SETTING_KEY_PREFIX = 'active_user:';
@@ -34,7 +36,7 @@ const pruneExpiredUsers = (now = Date.now()) => {
     }
 };
 const persistUserActivityToDb = async (userId, seenAt) => {
-    await prisma.systemSetting.upsert({
+    await prisma_1.default.systemSetting.upsert({
         where: { key: getDbKey(userId) },
         update: {
             value: String(seenAt),
@@ -48,12 +50,12 @@ const persistUserActivityToDb = async (userId, seenAt) => {
     });
 };
 const removeUserActivityFromDb = async (userId) => {
-    await prisma.systemSetting.deleteMany({
+    await prisma_1.default.systemSetting.deleteMany({
         where: { key: getDbKey(userId), group: DB_SETTING_GROUP },
     });
 };
 const getActiveUserIdsFromDb = async (now = Date.now()) => {
-    const rows = await prisma.systemSetting.findMany({
+    const rows = await prisma_1.default.systemSetting.findMany({
         where: {
             group: DB_SETTING_GROUP,
             key: { startsWith: DB_SETTING_KEY_PREFIX },
@@ -81,7 +83,7 @@ const getActiveUserIdsFromDb = async (now = Date.now()) => {
         }
     });
     if (expiredKeys.length > 0) {
-        await prisma.systemSetting.deleteMany({
+        await prisma_1.default.systemSetting.deleteMany({
             where: {
                 group: DB_SETTING_GROUP,
                 key: { in: expiredKeys },

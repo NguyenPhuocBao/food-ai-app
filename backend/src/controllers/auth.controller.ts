@@ -1,29 +1,51 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { createHash, randomBytes } from 'crypto';
 import { markUserActive, markUserInactive } from '../services/active-user.service';
 import { sendPasswordResetEmail } from '../services/email.service';
+import { resolveJwtSecret } from '../utils/jwt.util';
+import prisma from '../lib/prisma';
+import { getRuntimeEnv } from '../config/env';
+import {
+  forgotPasswordSchema,
+  loginSchema,
+  registerSchema,
+  resetPasswordSchema,
+} from '../validations/auth.validation';
 
-const prisma = new PrismaClient();
-const JWT_SECRET = process.env.JWT_SECRET || 'food-ai-secret-key-2024';
 const resetPasswordExpiresMinutes = Number(process.env.RESET_PASSWORD_TOKEN_EXPIRES_MINUTES || 15);
 const RESET_PASSWORD_EXPIRES_MINUTES =
   Number.isFinite(resetPasswordExpiresMinutes) && resetPasswordExpiresMinutes > 0
     ? resetPasswordExpiresMinutes
     : 15;
-const FRONTEND_URL = (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/+$/, '');
+const FRONTEND_URL = getRuntimeEnv().frontendUrl.replace(/\/+$/, '');
 const GENERIC_FORGOT_PASSWORD_MESSAGE = 'If the email exists, reset instructions have been sent.';
 
 const hashResetToken = (token: string) => createHash('sha256').update(token).digest('hex');
+const signAccessToken = (payload: { id: number; email: string; role: string }) =>
+  jwt.sign(payload, resolveJwtSecret(), { expiresIn: '7d' });
+
+const getValidationMessage = (error: unknown) => {
+  if (typeof error === 'object' && error && 'issues' in error) {
+    const firstIssue = (error as { issues?: Array<{ message?: string }> }).issues?.[0];
+    return firstIssue?.message || 'Invalid request payload';
+  }
+  return 'Invalid request payload';
+};
 
 export const register = async (req: Request, res: Response) => {
   try {
-    const { email, password, name } = req.body;
-    
-    if (!email || !password || !name) {
-      return res.status(400).json({ error: 'Missing required fields' });
+    let email = '';
+    let password = '';
+    let name = '';
+    try {
+      const payload = registerSchema.parse(req.body);
+      email = payload.email;
+      password = payload.password;
+      name = payload.name;
+    } catch (validationError) {
+      return res.status(400).json({ error: getValidationMessage(validationError) });
     }
     
     const existingUser = await prisma.user.findUnique({ where: { email } });
@@ -42,11 +64,7 @@ export const register = async (req: Request, res: Response) => {
       }
     });
     
-    const token = jwt.sign(
-  { id: user.id, email: user.email, role: user.role },
-  JWT_SECRET,
-  { expiresIn: '7d' }
-);
+    const token = signAccessToken({ id: user.id, email: user.email, role: user.role });
     await markUserActive(user.id);
     
     // Tạo audit log
@@ -69,10 +87,14 @@ export const register = async (req: Request, res: Response) => {
 
 export const login = async (req: Request, res: Response) => {
   try {
-    const { email, password } = req.body;
-    
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Missing email or password' });
+    let email = '';
+    let password = '';
+    try {
+      const payload = loginSchema.parse(req.body);
+      email = payload.email;
+      password = payload.password;
+    } catch (validationError) {
+      return res.status(400).json({ error: getValidationMessage(validationError) });
     }
     
     const user = await prisma.user.findUnique({ 
@@ -89,11 +111,7 @@ export const login = async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
     
-    const token = jwt.sign(
-  { id: user.id, email: user.email, role: user.role },
-  JWT_SECRET,
-  { expiresIn: '7d' }
-);
+    const token = signAccessToken({ id: user.id, email: user.email, role: user.role });
     await markUserActive(user.id);
     
     await prisma.auditLog.create({
@@ -132,7 +150,7 @@ export const logout = async (req: any, res: Response) => {
 
 export const refreshToken = async (req: any, res: Response) => {
   try {
-    const token = jwt.sign({ id: req.user.id, email: req.user.email }, JWT_SECRET, { expiresIn: '7d' });
+    const token = signAccessToken({ id: req.user.id, email: req.user.email, role: req.user.role });
     await markUserActive(req.user.id);
     res.json({ success: true, token });
   } catch (error: any) {
@@ -318,9 +336,12 @@ export const updateProfile = async (req: any, res: Response) => {
 
 export const forgotPassword = async (req: Request, res: Response) => {
   try {
-    const emailInput = typeof req.body?.email === 'string' ? req.body.email.trim() : '';
-    if (!emailInput) {
-      return res.status(400).json({ error: 'Email is required' });
+    let emailInput = '';
+    try {
+      const payload = forgotPasswordSchema.parse(req.body);
+      emailInput = payload.email;
+    } catch (validationError) {
+      return res.status(400).json({ error: getValidationMessage(validationError) });
     }
 
     const email = emailInput;
@@ -382,14 +403,14 @@ export const forgotPassword = async (req: Request, res: Response) => {
 
 export const resetPassword = async (req: Request, res: Response) => {
   try {
-    const token = typeof req.body?.token === 'string' ? req.body.token.trim() : '';
-    const newPassword = typeof req.body?.newPassword === 'string' ? req.body.newPassword : '';
-
-    if (!token || !newPassword) {
-      return res.status(400).json({ error: 'Missing token or newPassword' });
-    }
-    if (newPassword.length < 8) {
-      return res.status(400).json({ error: 'New password must be at least 8 characters' });
+    let token = '';
+    let newPassword = '';
+    try {
+      const payload = resetPasswordSchema.parse(req.body);
+      token = payload.token;
+      newPassword = payload.newPassword;
+    } catch (validationError) {
+      return res.status(400).json({ error: getValidationMessage(validationError) });
     }
 
     const tokenHash = hashResetToken(token);

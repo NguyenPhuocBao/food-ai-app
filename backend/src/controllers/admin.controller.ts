@@ -1,18 +1,18 @@
 import { Request, Response } from 'express';
-import { PrismaClient, Role } from '@prisma/client';
+import { Role } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { randomBytes } from 'crypto';
 import {
   getActiveUserIds,
   getActiveProvider,
   getActiveWindowMinutes,
 } from '../services/active-user.service';
+import prisma from '../lib/prisma';
 import {
   shiftAppDays,
   toAppDateKey,
   toAppDayStart,
 } from '../utils/timezone.util';
-
-const prisma = new PrismaClient();
 
 const toLocalDateKey = (date: Date) => toAppDateKey(date);
 const SUPPORT_PREFIX = 'SUPPORT_';
@@ -159,6 +159,62 @@ export const getAllFoodsAdmin = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
+  }
+};
+
+export const getFoodByIdAdmin = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const parsedId = parseInt(id, 10);
+    if (Number.isNaN(parsedId)) {
+      return res.status(400).json({ error: 'Invalid food id' });
+    }
+
+    const food = await prisma.foodItem.findUnique({
+      where: { id: parsedId },
+      include: {
+        recipe: {
+          include: {
+            ingredients: true,
+            steps: true,
+            tools: true,
+          },
+        },
+        reviews: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                role: true,
+                profile: { select: { avatar: true } },
+              },
+            },
+            replies: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    name: true,
+                    role: true,
+                    profile: { select: { avatar: true } },
+                  },
+                },
+              },
+              orderBy: { createdAt: 'asc' },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+        },
+        favorites: true,
+      },
+    });
+
+    if (!food) return res.status(404).json({ error: 'Food not found' });
+    return res.json({ success: true, data: food });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
   }
 };
 
@@ -620,11 +676,18 @@ export const toggleUserBan = async (req: Request, res: Response) => {
 };
 
 // Reset user password về mật khẩu mặc định (ví dụ "123456")
+const generateTemporaryPassword = () => randomBytes(9).toString('base64url');
+
 export const resetUserPassword = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const defaultPassword = '123456';
-    const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+    const requestedPassword = typeof req.body?.newPassword === 'string' ? req.body.newPassword.trim() : '';
+    const temporaryPassword = requestedPassword || generateTemporaryPassword();
+    if (temporaryPassword.length < 8) {
+      return res.status(400).json({ error: 'newPassword must be at least 8 characters' });
+    }
+
+    const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
     const now = new Date();
     
     const parsedUserId = parseInt(id);
@@ -646,11 +709,20 @@ export const resetUserPassword = async (req: Request, res: Response) => {
         userId: (req as any).user.id,
         action: 'RESET_PASSWORD',
         entity: 'User',
-        entityId: user.id
+        entityId: user.id,
+        newData: {
+          resetMode: requestedPassword ? 'custom' : 'generated_temp_password',
+        },
       }
     });
     
-    res.json({ success: true, message: 'Password reset to 123456' });
+    res.json({
+      success: true,
+      message: 'Password reset successfully',
+      data: {
+        temporaryPassword: requestedPassword ? undefined : temporaryPassword,
+      },
+    });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

@@ -1,10 +1,12 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PERSONALIZATION_KEYS = exports.getTodayMealWindow = exports.resolvePersonalTargets = exports.getHydrationSummaryForRange = exports.addHydrationLog = exports.getHydrationRecord = exports.updatePersonalRoutine = exports.getPersonalRoutine = void 0;
-const client_1 = require("@prisma/client");
 const timezone_util_1 = require("../utils/timezone.util");
 const health_engine_service_1 = require("./health-engine.service");
-const prisma = new client_1.PrismaClient();
+const prisma_1 = __importDefault(require("../lib/prisma"));
 const ROUTINE_GROUP = 'personalization';
 const ROUTINE_KEY_PREFIX = 'routine';
 const HYDRATION_GROUP = 'hydration';
@@ -73,7 +75,7 @@ const normalizeRoutine = (input) => {
     };
 };
 const getPersonalRoutine = async (userId) => {
-    const setting = await prisma.systemSetting.findUnique({
+    const setting = await prisma_1.default.systemSetting.findUnique({
         where: { key: getRoutineKey(userId) },
         select: { value: true },
     });
@@ -83,7 +85,7 @@ exports.getPersonalRoutine = getPersonalRoutine;
 const updatePersonalRoutine = async (userId, payload) => {
     const current = await (0, exports.getPersonalRoutine)(userId);
     const nextValue = normalizeRoutine({ ...current, ...payload });
-    await prisma.systemSetting.upsert({
+    await prisma_1.default.systemSetting.upsert({
         where: { key: getRoutineKey(userId) },
         update: {
             value: JSON.stringify(nextValue),
@@ -101,7 +103,7 @@ const updatePersonalRoutine = async (userId, payload) => {
 exports.updatePersonalRoutine = updatePersonalRoutine;
 const getHydrationRecord = async (userId, date = new Date()) => {
     const dateKey = (0, timezone_util_1.toAppDateKey)(date);
-    const setting = await prisma.systemSetting.findUnique({ where: { key: getHydrationKey(userId, dateKey) } });
+    const setting = await prisma_1.default.systemSetting.findUnique({ where: { key: getHydrationKey(userId, dateKey) } });
     const parsed = safeJsonParse(setting?.value, {
         dateKey,
         totalMl: 0,
@@ -131,7 +133,7 @@ const addHydrationLog = async (userId, amountMl, loggedAt = new Date()) => {
         totalMl: current.totalMl + normalizedAmount,
         logs,
     };
-    await prisma.systemSetting.upsert({
+    await prisma_1.default.systemSetting.upsert({
         where: { key },
         update: {
             value: JSON.stringify(nextValue),
@@ -154,7 +156,7 @@ const getHydrationSummaryForRange = async (userId, startDate, endExclusive) => {
         keys.push(getHydrationKey(userId, (0, timezone_util_1.toAppDateKey)(cursor)));
         cursor = (0, timezone_util_1.shiftAppDays)(cursor, 1);
     }
-    const rows = await prisma.systemSetting.findMany({
+    const rows = await prisma_1.default.systemSetting.findMany({
         where: { key: { in: keys }, group: HYDRATION_GROUP },
         select: { key: true, value: true },
     });
@@ -176,8 +178,8 @@ const getHydrationSummaryForRange = async (userId, startDate, endExclusive) => {
 exports.getHydrationSummaryForRange = getHydrationSummaryForRange;
 const resolvePersonalTargets = async (userId) => {
     const [profile, goal, routine] = await Promise.all([
-        prisma.userProfile.findUnique({ where: { userId } }),
-        prisma.userGoal.findFirst({ where: { userId, isActive: true }, orderBy: { startDate: 'desc' } }),
+        prisma_1.default.userProfile.findUnique({ where: { userId } }),
+        prisma_1.default.userGoal.findFirst({ where: { userId, isActive: true }, orderBy: { startDate: 'desc' } }),
         (0, exports.getPersonalRoutine)(userId),
     ]);
     const activity = profile?.activityLevel || 'MODERATE';
@@ -205,7 +207,7 @@ exports.resolvePersonalTargets = resolvePersonalTargets;
 const getTodayMealWindow = async (userId, date = new Date()) => {
     const routine = await (0, exports.getPersonalRoutine)(userId);
     const { start, endExclusive } = (0, timezone_util_1.toAppDayRange)(date);
-    const meals = await prisma.meal.findMany({
+    const meals = await prisma_1.default.meal.findMany({
         where: {
             userId,
             eatenAt: { gte: start, lt: endExclusive },

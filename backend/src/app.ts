@@ -22,22 +22,31 @@ import healthRoutes from './routes/health.routes';
 import { auditMutationMiddleware } from './middlewares/audit.middleware';
 import path from 'path';
 import prisma from './lib/prisma';
+import { getRuntimeEnv } from './config/env';
 
 const app = express();
+const runtimeEnv = getRuntimeEnv();
 
-const parseAllowedOrigins = () => {
-  const raw = String(process.env.CORS_ORIGIN || 'http://localhost:5173');
-  return raw
-    .split(',')
-    .map((value) => value.trim())
-    .filter(Boolean);
-};
-
-const allowedOrigins = parseAllowedOrigins();
 const isOriginAllowed = (origin?: string) => {
   if (!origin) return true;
-  if (allowedOrigins.includes('*')) return true;
-  return allowedOrigins.includes(origin);
+  if (runtimeEnv.corsOrigins.includes('*')) return true;
+  return runtimeEnv.corsOrigins.includes(origin);
+};
+
+const getHealthPayload = (status: 'OK' | 'DEGRADED', db: 'UP' | 'DOWN') => ({
+  status,
+  checks: { db },
+  timestamp: new Date(),
+  uptime: process.uptime(),
+});
+
+const isDatabaseAvailable = async () => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    return true;
+  } catch {
+    return false;
+  }
 };
 
 // Middleware
@@ -81,26 +90,31 @@ app.use('/api/weekly-reports', weeklyReportRoutes);
 app.use('/api/admin/settings', settingsRoutes);
 app.use('/api/health', healthRoutes);
 
-app.use(errorHandler);
+// Liveness check (process is alive, DB not required).
+app.get('/health/live', (_req, res) => {
+  res.json({
+    status: 'OK',
+    timestamp: new Date(),
+    uptime: process.uptime(),
+  });
+});
 
-// Health check
-app.get('/health', async (req, res) => {
-  try {
-    await prisma.$queryRaw`SELECT 1`;
-    res.json({
-      status: 'OK',
-      checks: { db: 'UP' },
-      timestamp: new Date(),
-      uptime: process.uptime(),
-    });
-  } catch {
-    res.status(503).json({
-      status: 'DEGRADED',
-      checks: { db: 'DOWN' },
-      timestamp: new Date(),
-      uptime: process.uptime(),
-    });
+// Readiness check (process + DB).
+app.get('/health/ready', async (_req, res) => {
+  const isReady = await isDatabaseAvailable();
+  if (!isReady) {
+    return res.status(503).json(getHealthPayload('DEGRADED', 'DOWN'));
   }
+  return res.json(getHealthPayload('OK', 'UP'));
+});
+
+// Backward-compatible health check.
+app.get('/health', async (_req, res) => {
+  const hasDatabase = await isDatabaseAvailable();
+  if (!hasDatabase) {
+    return res.status(503).json(getHealthPayload('DEGRADED', 'DOWN'));
+  }
+  return res.json(getHealthPayload('OK', 'UP'));
 });
 
 // Root
@@ -128,5 +142,7 @@ app.get('/', (req, res) => {
 
   });
 });
+
+app.use(errorHandler);
 
 export default app;

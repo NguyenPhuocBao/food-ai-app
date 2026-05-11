@@ -35,7 +35,7 @@ const AdminFoodDetail = () => {
 
   const fetchFood = async () => {
     try {
-      const res = await api.get(`/foods/${id}`);
+      const res = await api.get(`/admin/foods/${id}`);
       setFood(res.data.data);
       setEditForm({
         name: res.data.data.name,

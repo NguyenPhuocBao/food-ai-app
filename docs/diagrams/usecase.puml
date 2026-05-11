@@ -1,0 +1,50 @@
+@startuml
+left to right direction
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam actorStyle awesome
+
+actor User
+actor Admin
+actor "AI System" as AI
+
+rectangle "Food AI System" {
+  usecase "Dang ky" as UC_Register
+  usecase "Dang nhap" as UC_Login
+  usecase "Quen mat khau" as UC_ForgotPassword
+
+  usecase "Scan mon an" as UC_ScanFood
+  usecase "Xem thu vien mon an" as UC_FoodLibrary
+  usecase "Quan ly meal log" as UC_MealLog
+  usecase "Quan ly meal plan" as UC_MealPlan
+
+  usecase "Chatbot AI" as UC_Chatbot
+  usecase "Review mon an" as UC_ReviewFood
+  usecase "Yeu thich mon an" as UC_FavoriteFood
+
+  usecase "Quan tri nguoi dung" as UC_AdminUsers
+  usecase "Quan tri mon an" as UC_AdminFoods
+}
+
+User --> UC_Register
+User --> UC_Login
+User --> UC_ForgotPassword
+User --> UC_ScanFood
+User --> UC_FoodLibrary
+User --> UC_MealLog
+User --> UC_MealPlan
+User --> UC_Chatbot
+User --> UC_ReviewFood
+User --> UC_FavoriteFood
+
+Admin --> UC_AdminUsers
+Admin --> UC_AdminFoods
+
+AI --> UC_ScanFood
+AI --> UC_Chatbot
+
+UC_ScanFood ..> UC_FoodLibrary : <<include>>
+UC_MealLog ..> UC_FoodLibrary : <<include>>
+UC_MealPlan ..> UC_FoodLibrary : <<include>>
+
+@enduml

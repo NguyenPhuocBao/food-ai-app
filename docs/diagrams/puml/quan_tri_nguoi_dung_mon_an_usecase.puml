@@ -1,0 +1,20 @@
+﻿@startuml
+left to right direction
+actor Admin
+rectangle "Food AI - Quan tri nguoi dung va mon an" {
+  usecase "Xem danh sach nguoi dung" as UC1
+  usecase "Cap nhat role/ban user" as UC2
+  usecase "Reset mat khau user" as UC3
+  usecase "Xem danh sach mon an" as UC4
+  usecase "Tao/Sua/Xoa mon an" as UC5
+  usecase "Xem audit logs" as UC6
+}
+Admin --> UC1
+Admin --> UC2
+Admin --> UC3
+Admin --> UC4
+Admin --> UC5
+Admin --> UC6
+UC2 ..> UC1 : <<include>>
+UC5 ..> UC4 : <<include>>
+@enduml

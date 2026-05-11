@@ -1,0 +1,28 @@
+﻿@startuml
+node "User Device" {
+  artifact "Web Browser" as Browser
+}
+node "Web Server" {
+  artifact "Frontend Static" as FE
+}
+node "App Server" {
+  artifact "Node.js Express API" as BE
+}
+node "AI Server" {
+  artifact "Food Classifier API" as AI
+}
+node "Database Server" {
+  database "PostgreSQL" as DB
+}
+cloud "External Services" {
+  artifact "LLM APIs" as LLM
+  artifact "SMTP Provider" as SMTP
+}
+
+Browser --> FE
+FE --> BE
+BE --> DB
+BE --> AI
+BE --> LLM
+BE --> SMTP
+@enduml

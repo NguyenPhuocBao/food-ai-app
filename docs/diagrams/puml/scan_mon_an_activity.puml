@@ -1,0 +1,15 @@
+﻿@startuml
+start
+:User tai anh;
+:Backend nhan file;
+:Gui anh sang AI service;
+if (AI ok?) then (co)
+  :Nhan foodName + confidence;
+else (khong)
+  :Fallback tim mon trong DB;
+endif
+:Tra suggestions cho frontend;
+:User xac nhan mon;
+:Luu scan history + meal log;
+stop
+@enduml

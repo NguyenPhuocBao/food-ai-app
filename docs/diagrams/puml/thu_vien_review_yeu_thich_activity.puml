@@ -1,0 +1,16 @@
+﻿@startuml
+start
+:Tai danh sach food;
+:Nhap tu khoa tim kiem;
+if (Co ket qua?) then (co)
+  :Hien thi danh sach;
+else (khong)
+  :Goi y mon pho bien;
+endif
+:Mo chi tiet mon;
+if (Muon review/yeu thich?) then (co)
+  :Gui review hoac them favorite;
+endif
+:Cap nhat giao dien;
+stop
+@enduml

@@ -1,6 +1,4 @@
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import prisma from '../lib/prisma';
 
 const DEFAULT_ACTIVE_WINDOW_MINUTES = 5;
 const DEFAULT_PROVIDER = 'db';

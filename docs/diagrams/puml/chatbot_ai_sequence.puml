@@ -1,0 +1,16 @@
+﻿@startuml
+actor User
+participant Frontend
+participant "Chat API" as API
+participant "LLM Provider" as LLM
+database PostgreSQL
+
+User -> Frontend: Gui cau hoi
+Frontend -> API: POST /api/chat/sessions/:id/messages
+API -> PostgreSQL: save user message
+API -> LLM: completion request
+LLM --> API: assistant answer
+API -> PostgreSQL: save assistant message
+API --> Frontend: response + metadata
+Frontend --> User: Hien thi cau tra loi
+@enduml

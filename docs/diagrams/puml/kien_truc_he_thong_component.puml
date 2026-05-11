@@ -1,0 +1,18 @@
+﻿@startuml
+skinparam componentStyle rectangle
+
+actor User
+component "Frontend React" as FE
+component "Backend API" as BE
+component "AI Classifier Service" as AI
+component "LLM Provider" as LLM
+database "PostgreSQL + Prisma" as DB
+component "SMTP Service" as SMTP
+
+User --> FE
+FE --> BE
+BE --> DB
+BE --> AI
+BE --> LLM
+BE --> SMTP
+@enduml

@@ -1,0 +1,14 @@
+﻿@startuml
+start
+:User mo man hinh meal plan;
+if (Tao tu dong?) then (co)
+  :POST /api/meal-plans/auto-generate;
+else (khong)
+  :POST /api/meal-plans;
+endif
+:Them foods vao cac bua;
+:Kich hoat meal plan;
+:Ap dung vao ngay hien tai;
+:Xem shopping list + danh dau da mua;
+stop
+@enduml

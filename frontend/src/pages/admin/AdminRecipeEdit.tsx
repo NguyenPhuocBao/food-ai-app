@@ -30,7 +30,7 @@ const AdminRecipeEdit = () => {
 
   const fetchRecipe = async () => {
     try {
-      const res = await api.get(`/foods/${foodId}`);
+      const res = await api.get(`/admin/foods/${foodId}`);
       const food = res.data.data;
       if (food.recipe) {
         setRecipe(food.recipe);

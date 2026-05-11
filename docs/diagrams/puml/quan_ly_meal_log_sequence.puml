@@ -1,0 +1,16 @@
+﻿@startuml
+actor User
+participant Frontend
+participant "Meal API" as API
+database PostgreSQL
+participant "Statistics API" as StatAPI
+
+User -> Frontend: Them bua an
+Frontend -> API: POST /api/meals
+API -> PostgreSQL: insert meal
+API -> PostgreSQL: upsert daily_nutrition
+API --> Frontend: meal created
+Frontend -> StatAPI: GET /api/statistics/daily
+StatAPI -> PostgreSQL: query nutrition
+StatAPI --> Frontend: daily stats
+@enduml

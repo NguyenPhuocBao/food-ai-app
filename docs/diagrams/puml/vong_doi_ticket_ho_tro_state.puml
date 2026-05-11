@@ -1,0 +1,10 @@
+﻿@startuml
+[*] --> SUPPORT_OPEN
+SUPPORT_OPEN --> SUPPORT_PENDING : User gui yeu cau
+SUPPORT_PENDING --> SUPPORT_OPEN : Admin phan hoi
+SUPPORT_OPEN --> SUPPORT_CLOSED : Admin dong ticket
+SUPPORT_PENDING --> SUPPORT_CLOSED : Admin dong ticket
+SUPPORT_CLOSED --> SUPPORT_OPEN : User/Admin mo lai
+SUPPORT_OPEN --> [*] : Giai quyet xong
+SUPPORT_CLOSED --> [*] : Luu tru
+@enduml

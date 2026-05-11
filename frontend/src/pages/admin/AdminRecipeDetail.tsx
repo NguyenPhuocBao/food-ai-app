@@ -14,7 +14,7 @@ const AdminRecipeDetail = () => {
   useEffect(() => {
     const fetchFood = async () => {
       try {
-        const res = await api.get(`/foods/${foodId}`);
+        const res = await api.get(`/admin/foods/${foodId}`);
         setFood(res.data.data);
       } catch (error) {
         console.error(error);

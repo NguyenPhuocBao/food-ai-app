@@ -1,0 +1,17 @@
+﻿@startuml
+start
+:Nhap email/password hoac thong tin dang ky;
+if (Dang ky?) then (co)
+  :Validate input;
+  :Tao tai khoan + profile mac dinh;
+else (khong)
+  :Kiem tra thong tin dang nhap;
+endif
+if (Quen mat khau?) then (co)
+  :Tao reset token;
+  :Gui email dat lai mat khau;
+endif
+:Phat JWT token;
+:Tra ket qua ve frontend;
+stop
+@enduml

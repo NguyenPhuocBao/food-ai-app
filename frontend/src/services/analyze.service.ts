@@ -30,6 +30,18 @@ export interface ScanHistoryItem {
   createdAt: string;
 }
 
+export interface ScanHistoryPagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface ScanHistoryResponse {
+  items: ScanHistoryItem[];
+  pagination: ScanHistoryPagination | null;
+}
+
 export const analyzeFoodImage = async (file: File): Promise<ScanAnalyzeResult> => {
   const formData = new FormData();
   formData.append('image', file);
@@ -43,9 +55,25 @@ export const analyzeFoodImage = async (file: File): Promise<ScanAnalyzeResult> =
   return response.data.data;
 };
 
-export const getScanHistory = async (): Promise<ScanHistoryItem[]> => {
-  const response = await api.get('/analyze/history');
-  return response.data.data;
+export const getScanHistory = async (params?: {
+  page?: number;
+  limit?: number;
+  confirmed?: boolean;
+}): Promise<ScanHistoryResponse> => {
+  const response = await api.get('/analyze/history', { params });
+  const payload = response.data?.data;
+
+  if (Array.isArray(payload)) {
+    return {
+      items: payload,
+      pagination: null,
+    };
+  }
+
+  return {
+    items: Array.isArray(payload?.items) ? payload.items : [],
+    pagination: payload?.pagination || null,
+  };
 };
 
 export const confirmScanFood = async (scanId: number, foodId: number): Promise<ScanFoodSuggestion> => {

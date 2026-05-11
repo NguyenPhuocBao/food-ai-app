@@ -1,0 +1,14 @@
+﻿@startuml
+start
+:Tao/chon chat session;
+:Nhap noi dung cau hoi;
+if (Co file dinh kem?) then (co)
+  :Upload files;
+endif
+:Gui request den chatbot API;
+:Backend goi LLM provider;
+:Nhan cau tra loi;
+:Luu message vao DB;
+:Hien thi ket qua cho user;
+stop
+@enduml

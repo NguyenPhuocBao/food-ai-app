@@ -1,0 +1,365 @@
+@startuml
+hide circle
+skinparam linetype ortho
+skinparam ranksep 30
+skinparam nodesep 20
+title ERD - Food AI Database (Prisma)
+
+entity "users" as users {
+  * id : Int <<PK>>
+  --
+  * email : String <<UQ>>
+  * password : String
+  * name : String
+  * role : Role
+  * isActive : Boolean
+  passwordChangedAt : DateTime?
+  * createdAt : DateTime
+  * updatedAt : DateTime
+}
+
+entity "user_profiles" as user_profiles {
+  * id : Int <<PK>>
+  --
+  * userId : Int <<FK,UQ>>
+  fullName : String?
+  avatar : String?
+  gender : String?
+  dateOfBirth : DateTime?
+  height : Float?
+  weight : Float?
+  * activityLevel : ActivityLevel
+  * targetCalories : Int
+  * targetProtein : Float
+  * targetFat : Float
+  * targetCarbs : Float
+  * createdAt : DateTime
+  * updatedAt : DateTime
+}
+
+entity "user_health_metrics" as user_health_metrics {
+  * id : Int <<PK>>
+  --
+  * userId : Int <<FK>>
+  weight : Float?
+  height : Float?
+  bodyFat : Float?
+  bloodPressure : String?
+  * recordedAt : DateTime
+}
+
+entity "user_goals" as user_goals {
+  * id : Int <<PK>>
+  --
+  * userId : Int <<FK>>
+  * goalType : GoalType
+  targetWeight : Float?
+  * targetCalories : Int
+  * targetProtein : Float
+  * targetFat : Float
+  * targetCarbs : Float
+  * startDate : DateTime
+  endDate : DateTime?
+  * isActive : Boolean
+}
+
+entity "password_reset_tokens" as password_reset_tokens {
+  * id : Int <<PK>>
+  --
+  * userId : Int <<FK>>
+  * tokenHash : String <<UQ>>
+  * expiresAt : DateTime
+  usedAt : DateTime?
+  requestedIp : String?
+  requestedUserAgent : String?
+  usedIp : String?
+  usedUserAgent : String?
+  * createdAt : DateTime
+}
+
+entity "food_items" as food_items {
+  * id : Int <<PK>>
+  --
+  * name : String <<UQ>>
+  * slug : String <<UQ>>
+  * category : String
+  description : String?
+  imageUrl : String?
+  * calories : Int
+  * protein : Float
+  * fat : Float
+  * carbs : Float
+  fiber : Float?
+  sugar : Float?
+  * popularity : Int
+  * isVegetarian : Boolean
+  * isVegan : Boolean
+  * isGlutenFree : Boolean
+  * createdAt : DateTime
+  * updatedAt : DateTime
+}
+
+entity "recipes" as recipes {
+  * id : Int <<PK>>
+  --
+  * foodId : Int <<FK,UQ>>
+  * title : String
+  summary : String?
+  * prepTime : Int
+  * cookTime : Int
+  * totalTime : Int
+  * servings : Int
+  * difficulty : Difficulty
+  tips : String?
+  nutritionNotes : String?
+  videoUrl : String?
+  * viewCount : Int
+  * cookCount : Int
+  * createdAt : DateTime
+  * updatedAt : DateTime
+}
+
+entity "recipe_ingredients" as recipe_ingredients {
+  * id : Int <<PK>>
+  --
+  * recipeId : Int <<FK>>
+  * name : String
+  * amount : Float
+  * unit : String
+  notes : String?
+  alternative : String?
+  * isOptional : Boolean
+  * order : Int
+}
+
+entity "recipe_steps" as recipe_steps {
+  * id : Int <<PK>>
+  --
+  * recipeId : Int <<FK>>
+  * stepNumber : Int
+  * description : String
+  timer : Int?
+  imageUrl : String?
+  tips : String?
+  * order : Int
+}
+
+entity "recipe_tools" as recipe_tools {
+  * id : Int <<PK>>
+  --
+  * recipeId : Int <<FK>>
+  * name : String
+  * isRequired : Boolean
+}
+
+entity "meals" as meals {
+  * id : Int <<PK>>
+  --
+  * userId : Int <<FK>>
+  * foodId : Int <<FK>>
+  * mealType : MealType
+  * eatenAt : DateTime
+  * quantity : Float
+  * calories : Int
+  * protein : Float
+  * fat : Float
+  * carbs : Float
+  imageUrl : String?
+  notes : String?
+  * isFromAI : Boolean
+  * createdAt : DateTime
+}
+
+entity "meal_plans" as meal_plans {
+  * id : Int <<PK>>
+  --
+  * userId : Int <<FK>>
+  * name : String
+  * startDate : DateTime
+  * endDate : DateTime
+  * isActive : Boolean
+  * createdAt : DateTime
+}
+
+entity "meal_plan_details" as meal_plan_details {
+  * id : Int <<PK>>
+  --
+  * mealPlanId : Int <<FK>>
+  * foodId : Int <<FK>>
+  * mealType : MealType
+  * dayOfWeek : Int
+  * quantity : Float
+}
+
+entity "scan_history" as scan_history {
+  * id : Int <<PK>>
+  --
+  * userId : Int <<FK>>
+  imageUrl : String?
+  * result : Json
+  * confidence : Float
+  * isConfirmed : Boolean
+  * createdAt : DateTime
+}
+
+entity "daily_nutrition" as daily_nutrition {
+  * id : Int <<PK>>
+  --
+  * userId : Int <<FK>>
+  * date : DateTime
+  * totalCalories : Int
+  * totalProtein : Float
+  * totalFat : Float
+  * totalCarbs : Float
+  * totalMeals : Int
+  * createdAt : DateTime
+  * updatedAt : DateTime
+}
+
+entity "weekly_reports" as weekly_reports {
+  * id : Int <<PK>>
+  --
+  * userId : Int <<FK>>
+  * weekStart : DateTime
+  * weekEnd : DateTime
+  * avgCalories : Float
+  * avgProtein : Float
+  * avgFat : Float
+  * avgCarbs : Float
+  * reportData : Json
+  * createdAt : DateTime
+}
+
+entity "favorites" as favorites {
+  * id : Int <<PK>>
+  --
+  * userId : Int <<FK>>
+  * foodId : Int <<FK>>
+  * createdAt : DateTime
+}
+
+entity "reviews" as reviews {
+  * id : Int <<PK>>
+  --
+  * userId : Int <<FK>>
+  * foodId : Int <<FK>>
+  * rating : Int
+  comment : String?
+  * helpfulCount : Int
+  * createdAt : DateTime
+  * updatedAt : DateTime
+}
+
+entity "review_replies" as review_replies {
+  * id : Int <<PK>>
+  --
+  * reviewId : Int <<FK>>
+  * userId : Int <<FK>>
+  * content : String
+  * createdAt : DateTime
+  * updatedAt : DateTime
+}
+
+entity "recommendations" as recommendations {
+  * id : Int <<PK>>
+  --
+  * userId : Int <<FK>>
+  * foodId : Int <<FK>>
+  * reason : String
+  * score : Float
+  * isViewed : Boolean
+  isAccepted : Boolean?
+  * createdAt : DateTime
+}
+
+entity "chat_sessions" as chat_sessions {
+  * id : Int <<PK>>
+  --
+  * userId : Int <<FK>>
+  * title : String
+  * status : String
+  * createdAt : DateTime
+  * updatedAt : DateTime
+}
+
+entity "chat_messages" as chat_messages {
+  * id : Int <<PK>>
+  --
+  * sessionId : Int <<FK>>
+  * role : String
+  * content : Text
+  intent : String?
+  entities : Json?
+  * createdAt : DateTime
+}
+
+entity "notifications" as notifications {
+  * id : Int <<PK>>
+  --
+  * userId : Int <<FK>>
+  * title : String
+  * message : String
+  * type : NotificationType
+  * isRead : Boolean
+  data : Json?
+  * createdAt : DateTime
+}
+
+entity "audit_logs" as audit_logs {
+  * id : Int <<PK>>
+  --
+  userId : Int? <<FK>>
+  * action : String
+  * entity : String
+  entityId : Int?
+  oldData : Json?
+  newData : Json?
+  ipAddress : String?
+  userAgent : String?
+  * createdAt : DateTime
+}
+
+entity "system_settings" as system_settings {
+  * id : Int <<PK>>
+  --
+  * key : String <<UQ>>
+  * value : Text
+  * group : String
+  * createdAt : DateTime
+  * updatedAt : DateTime
+}
+
+users ||--o| user_profiles
+users ||--o{ user_health_metrics
+users ||--o{ user_goals
+users ||--o{ password_reset_tokens
+users ||--o{ meals
+users ||--o{ scan_history
+users ||--o{ daily_nutrition
+users ||--o{ weekly_reports
+users ||--o{ meal_plans
+users ||--o{ favorites
+users ||--o{ reviews
+users ||--o{ review_replies
+users ||--o{ recommendations
+users ||--o{ chat_sessions
+users ||--o{ notifications
+users |o--o{ audit_logs
+
+food_items ||--o| recipes
+food_items ||--o{ meals
+food_items ||--o{ meal_plan_details
+food_items ||--o{ favorites
+food_items ||--o{ reviews
+food_items ||--o{ recommendations
+
+recipes ||--o{ recipe_ingredients
+recipes ||--o{ recipe_steps
+recipes ||--o{ recipe_tools
+
+meal_plans ||--o{ meal_plan_details
+
+reviews ||--o{ review_replies
+chat_sessions ||--o{ chat_messages
+
+@enduml

@@ -1,8 +1,7 @@
-import { GoalType, PrismaClient } from '@prisma/client';
+import { GoalType } from '@prisma/client';
 import { toAppDateKey, toAppDayRange, shiftAppDays } from '../utils/timezone.util';
 import { normalizeGoalCalories } from './health-engine.service';
-
-const prisma = new PrismaClient();
+import prisma from '../lib/prisma';
 
 const ROUTINE_GROUP = 'personalization';
 const ROUTINE_KEY_PREFIX = 'routine';

@@ -1,0 +1,17 @@
+﻿@startuml
+actor User
+participant Frontend
+participant "Analyze API" as API
+participant "AI Service" as AI
+database PostgreSQL
+
+User -> Frontend: Chon anh mon an
+Frontend -> API: POST /api/analyze
+API -> AI: /predict(image)
+AI --> API: prediction
+API -> PostgreSQL: save scan_history
+API --> Frontend: food + suggestions
+Frontend -> API: POST /api/analyze/:scanId/confirm
+API -> PostgreSQL: update confirmed + create meal
+API --> Frontend: success
+@enduml

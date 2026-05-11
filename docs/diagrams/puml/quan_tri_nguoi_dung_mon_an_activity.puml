@@ -1,0 +1,15 @@
+﻿@startuml
+start
+:Admin dang nhap;
+:Mo trang quan tri;
+:Lay danh sach users va foods;
+if (Thao tac user?) then (co)
+  :Cap nhat role/ban/reset password;
+endif
+if (Thao tac food?) then (co)
+  :Tao hoac sua hoac xoa mon an;
+endif
+:Ghi audit log;
+:Hien thi ket qua cap nhat;
+stop
+@enduml

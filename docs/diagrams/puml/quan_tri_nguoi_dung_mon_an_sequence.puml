@@ -1,0 +1,18 @@
+﻿@startuml
+actor Admin
+participant Frontend
+participant "Admin API" as API
+database PostgreSQL
+participant "Audit Middleware" as Audit
+
+Admin -> Frontend: Cap nhat user role
+Frontend -> API: PUT /api/admin/users/:id/role
+API -> PostgreSQL: update users
+API -> Audit: log action
+Audit -> PostgreSQL: insert audit_logs
+API --> Frontend: success
+Admin -> Frontend: Tao mon an moi
+Frontend -> API: POST /api/admin/foods
+API -> PostgreSQL: insert food_items
+API --> Frontend: created
+@enduml

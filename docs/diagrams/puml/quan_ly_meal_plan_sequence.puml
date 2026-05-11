@@ -1,0 +1,17 @@
+﻿@startuml
+actor User
+participant Frontend
+participant "MealPlan API" as API
+database PostgreSQL
+participant "Recommendation API" as Reco
+
+User -> Frontend: Tao meal plan tu dong
+Frontend -> API: POST /api/meal-plans/auto-generate
+API -> Reco: lay de xuat mon an
+Reco --> API: recommended foods
+API -> PostgreSQL: create meal_plan + details
+API --> Frontend: meal plan data
+User -> Frontend: Kich hoat plan
+Frontend -> API: PATCH /api/meal-plans/:id/activate
+API -> PostgreSQL: update active plan
+@enduml

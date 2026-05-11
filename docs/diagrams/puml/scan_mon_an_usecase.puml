@@ -1,0 +1,21 @@
+﻿@startuml
+left to right direction
+actor User
+actor "AI System" as AI
+rectangle "Food AI - Scan mon an" {
+  usecase "Tai anh mon an" as UC1
+  usecase "Nhan dien mon an" as UC2
+  usecase "Xem goi y mon an" as UC3
+  usecase "Xac nhan ket qua scan" as UC4
+  usecase "Luu vao meal log" as UC5
+  usecase "Xem lich su scan" as UC6
+}
+User --> UC1
+User --> UC3
+User --> UC4
+User --> UC5
+User --> UC6
+AI --> UC2
+UC1 ..> UC2 : <<include>>
+UC2 ..> UC3 : <<include>>
+@enduml

@@ -1,0 +1,16 @@
+﻿@startuml
+actor User
+participant Frontend
+participant "Auth API" as API
+database PostgreSQL
+participant SMTP
+
+User -> Frontend: Nhap thong tin dang nhap
+Frontend -> API: POST /api/auth/login
+API -> PostgreSQL: findUserByEmail
+PostgreSQL --> API: user record
+API -> API: bcrypt.compare + jwt.sign
+API -> PostgreSQL: write audit log
+API --> Frontend: token + profile
+Frontend --> User: Dang nhap thanh cong
+@enduml

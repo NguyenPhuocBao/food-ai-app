@@ -1,0 +1,55 @@
+﻿@startuml
+class User {
+  +id: Int
+  +email: String
+  +password: String
+  +name: String
+  +role: Role
+}
+
+class FoodItem {
+  +id: Int
+  +name: String
+  +category: String
+  +calories: Int
+  +protein: Float
+  +fat: Float
+  +carbs: Float
+}
+
+class Meal {
+  +id: Int
+  +mealType: MealType
+  +eatenAt: DateTime
+  +quantity: Float
+  +calories: Int
+}
+
+class MealPlan {
+  +id: Int
+  +name: String
+  +startDate: DateTime
+  +endDate: DateTime
+  +isActive: Boolean
+}
+
+class Review {
+  +id: Int
+  +rating: Int
+  +comment: String
+  +helpfulCount: Int
+}
+
+class ChatSession {
+  +id: Int
+  +title: String
+  +status: String
+}
+
+User "1" -- "0..*" Meal
+FoodItem "1" -- "0..*" Meal
+User "1" -- "0..*" MealPlan
+User "1" -- "0..*" Review
+FoodItem "1" -- "0..*" Review
+User "1" -- "0..*" ChatSession
+@enduml

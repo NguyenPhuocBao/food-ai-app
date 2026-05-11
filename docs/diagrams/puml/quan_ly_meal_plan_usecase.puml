@@ -1,0 +1,19 @@
+﻿@startuml
+left to right direction
+actor User
+rectangle "Food AI - Quan ly meal plan" {
+  usecase "Tao meal plan" as UC1
+  usecase "Auto generate meal plan" as UC2
+  usecase "Them chi tiet meal plan" as UC3
+  usecase "Kich hoat meal plan" as UC4
+  usecase "Ap dung meal plan hom nay" as UC5
+  usecase "Xem shopping list" as UC6
+}
+User --> UC1
+User --> UC2
+User --> UC3
+User --> UC4
+User --> UC5
+User --> UC6
+UC2 ..> UC3 : <<include>>
+@enduml

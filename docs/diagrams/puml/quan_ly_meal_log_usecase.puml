@@ -1,0 +1,19 @@
+﻿@startuml
+left to right direction
+actor User
+rectangle "Food AI - Quan ly meal log" {
+  usecase "Them bua an" as UC1
+  usecase "Sua bua an" as UC2
+  usecase "Xoa bua an" as UC3
+  usecase "Xem meal theo ngay" as UC4
+  usecase "Xem lich su meal" as UC5
+  usecase "Xem thong ke dinh duong" as UC6
+}
+User --> UC1
+User --> UC2
+User --> UC3
+User --> UC4
+User --> UC5
+User --> UC6
+UC1 ..> UC6 : <<include>>
+@enduml

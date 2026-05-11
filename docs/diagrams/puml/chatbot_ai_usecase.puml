@@ -1,0 +1,20 @@
+﻿@startuml
+left to right direction
+actor User
+actor "AI System" as AI
+rectangle "Food AI - Chatbot AI" {
+  usecase "Tao chat session" as UC1
+  usecase "Gui tin nhan" as UC2
+  usecase "Nhan phan hoi AI" as UC3
+  usecase "Tai file dinh kem" as UC4
+  usecase "Xem lich su chat" as UC5
+  usecase "Xoa chat session" as UC6
+}
+User --> UC1
+User --> UC2
+User --> UC4
+User --> UC5
+User --> UC6
+AI --> UC3
+UC2 ..> UC3 : <<include>>
+@enduml
