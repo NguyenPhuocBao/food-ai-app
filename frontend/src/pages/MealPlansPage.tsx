@@ -1,5 +1,5 @@
 ﻿import { useEffect, useState } from 'react';
-import { CalendarDays, Check, Loader2, Plus, ShoppingBasket, Sparkles, Trash2 } from 'lucide-react';
+import { CalendarDays, Eye, Loader2, Plus, Sparkles, Trash2, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getFoods } from '../services/food.service';
 import {
@@ -9,22 +9,32 @@ import {
   deleteMealPlan,
   generateAutoMealPlan,
   getMealPlanInsights,
-  getMealPlanShoppingList,
   getMealPlans,
-  resetMealPlanShoppingListChecks,
   setActiveMealPlan,
-  toggleMealPlanShoppingItem,
   type MealPlan,
   type MealPlanInsights,
-  type MealPlanShoppingList,
 } from '../services/mealplan.service';
 import type { FoodItem } from '../types';
 
 const DAY_LABELS = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
+type MealTypeKey = 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK';
+
+const MEAL_LABELS: Record<MealTypeKey, string> = {
+  BREAKFAST: 'Sáng',
+  LUNCH: 'Trưa',
+  DINNER: 'Tối',
+  SNACK: 'Phụ',
+};
+const MEAL_COLORS: Record<MealTypeKey, string> = {
+  BREAKFAST: 'bg-amber-50 text-amber-700 border-amber-100',
+  LUNCH: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+  DINNER: 'bg-sky-50 text-sky-700 border-sky-100',
+  SNACK: 'bg-rose-50 text-rose-700 border-rose-100',
+};
 
 type DraftDetail = {
   foodId: number;
-  mealType: 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK';
+  mealType: MealTypeKey;
   dayOfWeek: number;
   quantity: number;
 };
@@ -55,9 +65,7 @@ const MealPlansPage = () => {
   const [details, setDetails] = useState<DraftDetail[]>([
     { foodId: 0, mealType: 'BREAKFAST', dayOfWeek: 1, quantity: 1 },
   ]);
-  const [shoppingPlanId, setShoppingPlanId] = useState<number | null>(null);
-  const [shoppingList, setShoppingList] = useState<MealPlanShoppingList | null>(null);
-  const [shoppingLoading, setShoppingLoading] = useState(false);
+  const [previewPlan, setPreviewPlan] = useState<MealPlan | null>(null);
   const [insightsByPlanId, setInsightsByPlanId] = useState<Record<number, MealPlanInsights>>({});
 
   const loadData = async () => {
@@ -226,73 +234,13 @@ const MealPlansPage = () => {
   const handleDelete = async (planId: number) => {
     try {
       await deleteMealPlan(planId);
-      if (shoppingPlanId === planId) {
-        setShoppingPlanId(null);
-        setShoppingList(null);
+      if (previewPlan?.id === planId) {
+        setPreviewPlan(null);
       }
       toast.success('Đã xóa meal plan');
       await loadData();
     } catch {
       toast.error('Không thể xóa meal plan');
-    }
-  };
-
-  const handleOpenShoppingList = async (planId: number) => {
-    if (shoppingPlanId === planId) {
-      setShoppingPlanId(null);
-      setShoppingList(null);
-      return;
-    }
-
-    setShoppingLoading(true);
-    try {
-      const result = await getMealPlanShoppingList(planId);
-      setShoppingPlanId(planId);
-      setShoppingList(result);
-    } catch {
-      toast.error('Không thể tải shopping list');
-    } finally {
-      setShoppingLoading(false);
-    }
-  };
-
-  const handleToggleShoppingItem = async (planId: number, itemKey: string, checked: boolean) => {
-    try {
-      await toggleMealPlanShoppingItem(planId, itemKey, checked);
-      setShoppingList((current) => {
-        if (!current || current.mealPlanId !== planId) return current;
-        const items = current.items.map((item) =>
-          item.itemKey === itemKey ? { ...item, checked } : item
-        );
-        const checkedItems = items.filter((item) => item.checked).length;
-
-        return {
-          ...current,
-          items,
-          checkedItems,
-          completionRate: items.length ? Number(((checkedItems / items.length) * 100).toFixed(1)) : 0,
-        };
-      });
-    } catch {
-      toast.error('Không thể cập nhật trạng thái item');
-    }
-  };
-
-  const handleResetShoppingChecks = async (planId: number) => {
-    try {
-      await resetMealPlanShoppingListChecks(planId);
-      setShoppingList((current) => {
-        if (!current || current.mealPlanId !== planId) return current;
-        return {
-          ...current,
-          checkedItems: 0,
-          completionRate: 0,
-          items: current.items.map((item) => ({ ...item, checked: false })),
-        };
-      });
-      toast.success('Đã reset danh sách mua sắm');
-    } catch {
-      toast.error('Không thể reset shopping list');
     }
   };
 
@@ -602,13 +550,11 @@ const MealPlansPage = () => {
                     </div>
                     <div className="flex gap-3">
                       <button
-                        onClick={() => handleOpenShoppingList(plan.id)}
-                        className={`rounded-2xl px-4 py-2 text-sm font-bold inline-flex items-center gap-2 ${
-                          shoppingPlanId === plan.id ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-700'
-                        }`}
+                        onClick={() => setPreviewPlan(plan)}
+                        className="rounded-2xl bg-blue-50 px-4 py-2 text-sm font-bold text-blue-700 inline-flex items-center gap-2 hover:bg-blue-100"
                       >
-                        <ShoppingBasket size={16} />
-                        Mua sắm
+                        <Eye size={16} />
+                        Preview
                       </button>
                       {plan.isActive && (
                         <button
@@ -653,62 +599,6 @@ const MealPlansPage = () => {
                       </div>
                     ))}
                   </div>
-
-                  {shoppingPlanId === plan.id && (
-                    <div className="px-6 pb-6">
-                      <div className="rounded-[24px] border border-blue-100 bg-blue-50/60 p-5">
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-                          <div>
-                            <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-600">Shopping List</p>
-                            <p className="text-sm text-blue-800 mt-1">
-                              {shoppingList?.checkedItems ?? 0}/{shoppingList?.totalItems ?? 0} item đã check
-                              {typeof shoppingList?.completionRate === 'number' ? ` (${shoppingList.completionRate}%)` : ''}
-                            </p>
-                          </div>
-                          <button
-                            onClick={() => handleResetShoppingChecks(plan.id)}
-                            className="rounded-xl px-3 py-2 text-xs font-bold bg-white text-blue-700 border border-blue-200"
-                          >
-                            Reset checklist
-                          </button>
-                        </div>
-
-                        {shoppingLoading ? (
-                          <div className="py-6 flex items-center justify-center">
-                            <Loader2 size={20} className="animate-spin text-blue-600" />
-                          </div>
-                        ) : !shoppingList?.items.length ? (
-                          <p className="text-sm text-blue-800">Chưa có nguyên liệu để tổng hợp cho plan này.</p>
-                        ) : (
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            {shoppingList.items.map((item) => (
-                              <button
-                                key={item.itemKey}
-                                onClick={() => handleToggleShoppingItem(plan.id, item.itemKey, !item.checked)}
-                                className={`w-full text-left rounded-2xl border px-4 py-3 flex items-center gap-3 ${
-                                  item.checked ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-blue-100'
-                                }`}
-                              >
-                                <span
-                                  className={`w-5 h-5 rounded-md border inline-flex items-center justify-center shrink-0 ${
-                                    item.checked ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-gray-300'
-                                  }`}
-                                >
-                                  {item.checked && <Check size={13} />}
-                                </span>
-                                <span className="min-w-0">
-                                  <span className="block text-sm font-bold text-gray-900">{item.name}</span>
-                                  <span className="block text-xs text-gray-600 mt-0.5">
-                                    {item.amount} {item.unit} • {item.recipeCount} công thức
-                                  </span>
-                                </span>
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
                 </div>
               ))}
 
@@ -722,6 +612,115 @@ const MealPlansPage = () => {
           )}
         </div>
       </section>
+
+      {previewPlan && (
+        <div className="fixed inset-0 z-50 bg-gray-950/60 px-4 py-6 backdrop-blur-sm">
+          <div className="mx-auto flex h-full max-w-7xl flex-col overflow-hidden rounded-[32px] bg-white shadow-2xl">
+            <div className="flex flex-col gap-4 border-b border-gray-100 p-5 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-600">Weekly Preview</p>
+                <h2 className="mt-1 text-2xl font-black text-gray-900">{previewPlan.name}</h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  {new Date(previewPlan.startDate).toLocaleDateString('vi-VN')} đến {new Date(previewPlan.endDate).toLocaleDateString('vi-VN')}
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="grid grid-cols-3 gap-2 text-center text-xs font-bold">
+                  <div className="rounded-2xl bg-gray-50 px-4 py-2">
+                    <p className="text-gray-400">Món</p>
+                    <p className="text-lg text-gray-900">{previewPlan.details.length}</p>
+                  </div>
+                  <div className="rounded-2xl bg-amber-50 px-4 py-2">
+                    <p className="text-amber-500">Kcal</p>
+                    <p className="text-lg text-amber-800">
+                      {Math.round(previewPlan.details.reduce((sum, detail) => sum + detail.food.calories * detail.quantity, 0))}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl bg-emerald-50 px-4 py-2">
+                    <p className="text-emerald-500">Protein</p>
+                    <p className="text-lg text-emerald-800">
+                      {Math.round(previewPlan.details.reduce((sum, detail) => sum + detail.food.protein * detail.quantity, 0))}g
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setPreviewPlan(null)}
+                  className="rounded-2xl bg-gray-100 p-3 text-gray-600 hover:bg-gray-200"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-auto bg-[linear-gradient(135deg,_#f8fafc,_#ecfeff)] p-5">
+              <div className="min-w-[1040px] overflow-hidden rounded-[28px] border border-gray-100 bg-white shadow-sm">
+                <table className="w-full table-fixed border-collapse">
+                  <thead>
+                    <tr className="bg-gray-900 text-white">
+                      <th className="w-28 px-4 py-4 text-left text-sm font-black">Bữa</th>
+                      {DAY_LABELS.map((dayLabel, dayIndex) => {
+                        const dayDetails = previewPlan.details.filter((detail) => detail.dayOfWeek === dayIndex);
+                        const dayCalories = dayDetails.reduce((sum, detail) => sum + detail.food.calories * detail.quantity, 0);
+
+                        return (
+                          <th key={dayLabel} className="px-3 py-4 text-left align-top">
+                            <p className="text-sm font-black">{dayLabel}</p>
+                            <p className="mt-1 text-xs font-semibold text-gray-300">{Math.round(dayCalories)} kcal</p>
+                          </th>
+                        );
+                      })}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(Object.keys(MEAL_LABELS) as MealTypeKey[]).map((mealType) => (
+                      <tr key={mealType} className="border-t border-gray-100">
+                        <td className="bg-gray-50 px-4 py-4 align-top">
+                          <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-black ${MEAL_COLORS[mealType]}`}>
+                            {MEAL_LABELS[mealType]}
+                          </span>
+                        </td>
+                        {DAY_LABELS.map((dayLabel, dayIndex) => {
+                          const mealDetails = previewPlan.details.filter(
+                            (detail) => detail.dayOfWeek === dayIndex && detail.mealType === mealType
+                          );
+
+                          return (
+                            <td key={`${dayLabel}-${mealType}`} className="h-32 border-l border-gray-100 p-3 align-top">
+                              {mealDetails.length === 0 ? (
+                                <div className="flex h-full min-h-[92px] items-center justify-center rounded-2xl border border-dashed border-gray-200 text-xs font-semibold text-gray-400">
+                                  Trống
+                                </div>
+                              ) : (
+                                <div className="space-y-2">
+                                  {mealDetails.map((detail) => (
+                                    <div key={detail.id} className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
+                                      <p className="line-clamp-2 text-sm font-black text-gray-900">{detail.food.name}</p>
+                                      <div className="mt-2 flex flex-wrap gap-1 text-[11px] font-bold">
+                                        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-gray-600">{detail.quantity}x</span>
+                                        <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700">
+                                          {Math.round(detail.food.calories * detail.quantity)} kcal
+                                        </span>
+                                        <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700">
+                                          {Math.round(detail.food.protein * detail.quantity)}g P
+                                        </span>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

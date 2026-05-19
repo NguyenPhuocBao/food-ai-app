@@ -1,12 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Link } from 'react-router-dom';
-import { Flame, Droplets, Target, ChevronRight, MessageSquare, Send, Sparkles, Loader2, Calendar, UtensilsCrossed, BookOpen, CalendarDays, ShieldCheck, GlassWater } from 'lucide-react';
+import { Flame, Droplets, Target, ChevronRight, MessageSquare, Send, Sparkles, Loader2, Calendar, UtensilsCrossed, BookOpen, CalendarDays, ShieldCheck, GlassWater, Bot, User } from 'lucide-react';
 import { motion } from 'framer-motion';
+import toast from 'react-hot-toast';
 import { getDailyStats } from '../services/statistics.service';
 import { getActiveMealPlan, type MealPlan } from '../services/mealplan.service';
 import { getMealHistory } from '../services/meal.service';
 import { getHydrationToday, getPersonalization, getWeeklyActions, logHydration } from '../services/health.service';
+import {
+  createSession,
+  getSession,
+  getSessions,
+  sendMessage,
+  type ChatMessage,
+  type ChatSession,
+} from '../services/chatbot.service';
 
 interface DailyStatsData {
   nutrition: {
@@ -41,6 +50,11 @@ const HomePage = () => {
   const [personalization, setPersonalization] = useState<any>(null);
   const [hydration, setHydration] = useState<any>({ totalMl: 0, goalMl: 2200, percent: 0 });
   const [loggingWater, setLoggingWater] = useState(false);
+  const [homeChatSession, setHomeChatSession] = useState<(ChatSession & { messages: ChatMessage[] }) | null>(null);
+  const [homeChatMessage, setHomeChatMessage] = useState('');
+  const [homeChatSending, setHomeChatSending] = useState(false);
+  const [homeChatLoading, setHomeChatLoading] = useState(true);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -73,7 +87,27 @@ const HomePage = () => {
       setPersonalization(personal);
       setHydration(hydrationData || { totalMl: 0, goalMl: 2200, percent: 0 });
     });
+
+    const loadHomeChat = async () => {
+      try {
+        const sessions = await getSessions();
+        if (sessions.length > 0) {
+          const latest = await getSession(sessions[0].id);
+          setHomeChatSession(latest);
+        }
+      } catch {
+        setHomeChatSession(null);
+      } finally {
+        setHomeChatLoading(false);
+      }
+    };
+
+    void loadHomeChat();
   }, []);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [homeChatSession?.messages, homeChatSending]);
 
   const handleLogWater = async (amountMl: number) => {
     setLoggingWater(true);
@@ -82,6 +116,48 @@ const HomePage = () => {
       setHydration(updated);
     } finally {
       setLoggingWater(false);
+    }
+  };
+
+  const handleHomeChatSend = async (content?: string) => {
+    const text = (content || homeChatMessage).trim();
+    if (!text || homeChatSending) return;
+
+    setHomeChatSending(true);
+    const draft = homeChatMessage;
+    setHomeChatMessage('');
+
+    try {
+      let sessionId = homeChatSession?.id;
+
+      if (!sessionId) {
+        const created = await createSession(text.slice(0, 50));
+        const fullSession = await getSession(created.id);
+        setHomeChatSession(fullSession);
+        sessionId = created.id;
+      }
+
+      const optimistic: ChatMessage = {
+        id: Date.now(),
+        sessionId,
+        role: 'USER',
+        content: text,
+        entities: null,
+        createdAt: new Date().toISOString(),
+      };
+
+      setHomeChatSession((prev) => (
+        prev ? { ...prev, messages: [...prev.messages, optimistic] } : prev
+      ));
+
+      await sendMessage(sessionId, text);
+      const synced = await getSession(sessionId);
+      setHomeChatSession(synced);
+    } catch {
+      toast.error('Không thể gửi tin nhắn AI');
+      if (!content) setHomeChatMessage(draft);
+    } finally {
+      setHomeChatSending(false);
     }
   };
 
@@ -394,36 +470,108 @@ const HomePage = () => {
               </div>
            </div>
 
-           {/* Chat Body Mock */}
+           {/* Chat Body */}
            <div className="flex-1 p-5 overflow-y-auto bg-gray-50 space-y-4">
-              <div className="bg-white border border-gray-100 p-4 rounded-2xl rounded-tl-sm text-sm text-gray-700 shadow-sm">
-                Chào {user?.name?.split(' ').pop() || 'bạn'}! Hôm nay bạn đã nạp được{' '}
-                <span className="font-bold text-emerald-600">{caloriesConsumed} kcal</span>
-                {caloriesGoal > 0 && ` trên tổng mục tiêu ${caloriesGoal} kcal`}. Bạn muốn lên thực đơn cho bữa tối hay phân tích thêm không?
-              </div>
-              
-              <div className="flex flex-wrap gap-2 mt-4 justify-end">
-                <button className="bg-white border border-gray-200 text-gray-600 text-xs px-3 py-2 rounded-xl shadow-sm hover:border-emerald-500 hover:text-emerald-600 transition-colors">
-                  Kiểm tra Calo
-                </button>
-                <button className="bg-white border border-gray-200 text-gray-600 text-xs px-3 py-2 rounded-xl shadow-sm hover:border-emerald-500 hover:text-emerald-600 transition-colors">
-                  Gợi ý bữa phụ
-                </button>
-              </div>
+              {homeChatLoading ? (
+                <div className="flex items-center justify-center py-10 text-emerald-600">
+                  <Loader2 size={22} className="animate-spin" />
+                </div>
+              ) : !homeChatSession || homeChatSession.messages.length === 0 ? (
+                <>
+                  <div className="flex gap-3">
+                    <div className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0">
+                      <Bot size={16} />
+                    </div>
+                    <div className="bg-white border border-gray-100 p-4 rounded-2xl rounded-tl-sm text-sm text-gray-700 shadow-sm">
+                      Chào {user?.name?.split(' ').pop() || 'bạn'}! Hôm nay bạn đã nạp được{' '}
+                      <span className="font-bold text-emerald-600">{caloriesConsumed} kcal</span>
+                      {caloriesGoal > 0 && ` trên tổng mục tiêu ${caloriesGoal} kcal`}. Bạn muốn tôi phân tích bữa tiếp theo hay kiểm tra tiến độ hôm nay?
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 justify-end">
+                    {['Kiểm tra calo hôm nay', 'Gợi ý bữa phụ phù hợp', 'Tôi nên ăn gì tối nay?'].map((text) => (
+                      <button
+                        key={text}
+                        type="button"
+                        onClick={() => void handleHomeChatSend(text)}
+                        disabled={homeChatSending}
+                        className="bg-white border border-gray-200 text-gray-600 text-xs px-3 py-2 rounded-xl shadow-sm hover:border-emerald-500 hover:text-emerald-600 transition-colors disabled:opacity-60"
+                      >
+                        {text}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                homeChatSession.messages.slice(-8).map((message) => (
+                  <div key={message.id} className={`flex gap-3 ${message.role === 'USER' ? 'justify-end' : ''}`}>
+                    {message.role !== 'USER' && (
+                      <div className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0">
+                        <Bot size={16} />
+                      </div>
+                    )}
+                    <div
+                      className={`max-w-[82%] p-3 text-sm leading-relaxed shadow-sm whitespace-pre-wrap ${
+                        message.role === 'USER'
+                          ? 'bg-emerald-600 text-white rounded-2xl rounded-tr-sm'
+                          : 'bg-white border border-gray-100 text-gray-700 rounded-2xl rounded-tl-sm'
+                      }`}
+                    >
+                      {message.content}
+                    </div>
+                    {message.role === 'USER' && (
+                      <div className="w-8 h-8 rounded-full bg-amber-400 text-white flex items-center justify-center shrink-0">
+                        <User size={15} />
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+
+              {homeChatSending && (
+                <div className="flex gap-3">
+                  <div className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0">
+                    <Bot size={16} />
+                  </div>
+                  <div className="bg-white border border-gray-100 rounded-2xl rounded-tl-sm shadow-sm px-4 py-3 flex items-center gap-1">
+                    <span className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce" />
+                    <span className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <span className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                  </div>
+                </div>
+              )}
+              <div ref={chatEndRef} />
            </div>
 
            {/* Chat Input */}
            <div className="p-4 bg-white border-t border-gray-100 shrink-0">
-             <div className="flex items-center gap-2 bg-gray-100 px-4 py-2.5 rounded-full">
+             <form
+               onSubmit={(event) => {
+                 event.preventDefault();
+                 void handleHomeChatSend();
+               }}
+               className="flex items-center gap-2 bg-gray-100 px-4 py-2.5 rounded-full"
+             >
                <input 
                  type="text" 
+                 value={homeChatMessage}
+                 onChange={(event) => setHomeChatMessage(event.target.value)}
                  placeholder="Hỏi FoodAI..." 
                  className="flex-1 bg-transparent border-0 focus:ring-0 text-sm p-0 text-gray-900"
+                 disabled={homeChatSending}
                />
-               <button className="text-emerald-500 hover:text-emerald-600">
-                 <Send size={18} />
+               <button
+                 type="submit"
+                 disabled={!homeChatMessage.trim() || homeChatSending}
+                 className="text-emerald-500 hover:text-emerald-600 disabled:text-gray-300"
+               >
+                 {homeChatSending ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
                </button>
-             </div>
+             </form>
+             <Link to="/chat-ai" className="mt-3 block text-center text-xs font-bold text-emerald-600 hover:text-emerald-700">
+               Mở AI Coach đầy đủ
+             </Link>
            </div>
         </div>
 

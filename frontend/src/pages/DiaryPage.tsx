@@ -5,6 +5,7 @@ import { getMealsByDate, addMeal, deleteMeal } from '../services/meal.service';
 import { getDailyStats } from '../services/statistics.service';
 import { searchFoods } from '../services/food.service';
 import { getDailyHealth, logHydration } from '../services/health.service';
+import { getRecommendations } from '../services/recommendation.service';
 import type { Meal, FoodItem } from '../types';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -44,6 +45,7 @@ const AddMealModal = ({
 }) => {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<FoodItem[]>([]);
+  const [recommendedFoods, setRecommendedFoods] = useState<FoodItem[]>([]);
   const [searching, setSearching] = useState(false);
   const [selected, setSelected] = useState<FoodItem | null>(null);
   const [quantity, setQuantity] = useState(1);
@@ -66,6 +68,22 @@ const AddMealModal = ({
     const timeout = setTimeout(() => doSearch(query), 400);
     return () => clearTimeout(timeout);
   }, [query, doSearch]);
+
+  useEffect(() => {
+    const loadRecommendedFoods = async () => {
+      try {
+        const recommendations = await getRecommendations('new');
+        const deduped = Array.from(
+          new Map(recommendations.map((item) => [item.food.id, item.food])).values()
+        ).slice(0, 6);
+        setRecommendedFoods(deduped);
+      } catch {
+        setRecommendedFoods([]);
+      }
+    };
+
+    void loadRecommendedFoods();
+  }, []);
 
   const handleAdd = async () => {
     if (!selected) return;
@@ -116,6 +134,29 @@ const AddMealModal = ({
             {searching && <Loader2 size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 animate-spin" />}
           </div>
         </div>
+
+        {recommendedFoods.length > 0 && (
+          <div className="px-4 py-3 border-b border-gray-50">
+            <p className="mb-2 text-xs font-black uppercase tracking-[0.16em] text-emerald-600">Món được đề xuất</p>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {recommendedFoods.map((food) => (
+                <button
+                  key={food.id}
+                  onClick={() => {
+                    setSelected(food);
+                    setQuery(food.name);
+                  }}
+                  className={`min-w-[150px] rounded-2xl border px-3 py-2 text-left transition-colors ${
+                    selected?.id === food.id ? 'border-emerald-400 bg-emerald-50' : 'border-gray-100 bg-gray-50 hover:bg-emerald-50'
+                  }`}
+                >
+                  <p className="truncate text-sm font-black text-gray-900">{food.name}</p>
+                  <p className="mt-1 text-xs font-semibold text-gray-500">{food.category} · {food.calories} kcal</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Results */}
         <div className="max-h-64 overflow-y-auto divide-y divide-gray-50">

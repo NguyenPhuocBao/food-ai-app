@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Check, Loader2, RefreshCcw, Sparkles, ThumbsDown, ThumbsUp } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { AlertTriangle, Check, Loader2, PlusCircle, RefreshCcw, Sparkles, ThumbsDown, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import type { Recommendation } from '../types';
@@ -10,6 +10,13 @@ import {
   respondRecommendation,
 } from '../services/recommendation.service';
 import { getAssetUrl } from '../services/api';
+
+const MEAL_TYPE_OPTIONS = [
+  { value: 'BREAKFAST', label: 'Bữa sáng' },
+  { value: 'LUNCH', label: 'Bữa trưa' },
+  { value: 'DINNER', label: 'Bữa tối' },
+  { value: 'SNACK', label: 'Bữa phụ' },
+];
 
 const STATUS_TABS: Array<{ label: string; value: 'all' | 'new' | 'accepted' | 'rejected' }> = [
   { label: 'Tất cả', value: 'all' },
@@ -23,6 +30,27 @@ const RecommendationsPage = () => {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [items, setItems] = useState<Recommendation[]>([]);
+  const [addTarget, setAddTarget] = useState<Recommendation | null>(null);
+  const [selectedMealType, setSelectedMealType] = useState('LUNCH');
+  const [selectedQuantity, setSelectedQuantity] = useState(1);
+  const [adding, setAdding] = useState(false);
+  const [pendingWarning, setPendingWarning] = useState<Awaited<ReturnType<typeof respondRecommendation>> | null>(null);
+  const hasGeneratedOnMount = useRef(false);
+
+  const inferMealType = (reason: string) => {
+    const text = reason.toLowerCase();
+    if (text.includes('bua sang')) return 'BREAKFAST';
+    if (text.includes('bua trua')) return 'LUNCH';
+    if (text.includes('bua toi')) return 'DINNER';
+    if (text.includes('bua phu') || text.includes('an nhe')) return 'SNACK';
+    return 'LUNCH';
+  };
+
+  const inferQuantity = (reason: string) => {
+    const match = reason.match(/khau phan\s+([0-9]+(?:\.[0-9]+)?)x/i);
+    const value = match ? Number(match[1]) : 1;
+    return Number.isFinite(value) && value > 0 ? value : 1;
+  };
 
   const loadData = async (nextStatus = status) => {
     setLoading(true);
@@ -40,12 +68,34 @@ const RecommendationsPage = () => {
     loadData(status);
   }, [status]);
 
+  useEffect(() => {
+    if (hasGeneratedOnMount.current) return;
+    hasGeneratedOnMount.current = true;
+
+    const generateFreshBatch = async () => {
+      setLoading(true);
+      try {
+        await generateRecommendations(7);
+        setStatus('new');
+        const data = await getRecommendations('new');
+        setItems(data);
+      } catch {
+        await loadData(status);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void generateFreshBatch();
+  }, []);
+
   const handleGenerate = async () => {
     setGenerating(true);
     try {
-      await generateRecommendations(10);
-      toast.success('Đã tạo gợi ý mới');
-      await loadData(status);
+      await generateRecommendations(7);
+      toast.success('Đã tạo gợi ý theo khẩu phần thực tế');
+      setStatus('new');
+      await loadData('new');
     } catch {
       toast.error('Không tạo được gợi ý');
     } finally {
@@ -71,11 +121,77 @@ const RecommendationsPage = () => {
     )));
 
     try {
-      await respondRecommendation(id, accepted);
-      toast.success(accepted ? 'Đã chấp nhận gợi ý' : 'Đã bỏ qua gợi ý');
+      const result = await respondRecommendation(id, accepted);
+      if (accepted) {
+        if (result.warning?.type === 'OVER_DAILY_TARGET') {
+          toast.error(`${result.warning.message} Món vẫn đã được thêm vào nhật ký.`);
+        } else if (result.warning?.type === 'NEAR_DAILY_TARGET') {
+          toast(`${result.warning.message} Món đã được thêm vào nhật ký.`);
+        } else {
+          toast.success('Đã thêm món gợi ý vào nhật ký hôm nay');
+        }
+      } else {
+        toast.success('Đã bỏ qua gợi ý');
+      }
     } catch {
       toast.error('Không cập nhật được trạng thái');
       await loadData(status);
+    }
+  };
+
+  const openAddDialog = (item: Recommendation) => {
+    setAddTarget(item);
+    setSelectedMealType(inferMealType(item.reason));
+    setSelectedQuantity(inferQuantity(item.reason));
+    setPendingWarning(null);
+  };
+
+  const closeAddDialog = () => {
+    if (adding) return;
+    setAddTarget(null);
+    setPendingWarning(null);
+  };
+
+  const confirmAdd = async (skipPreview = false) => {
+    if (!addTarget) return;
+    setAdding(true);
+    try {
+      const previewResult = await respondRecommendation(addTarget.id, true, {
+        mealType: selectedMealType,
+        quantity: selectedQuantity,
+        dryRun: !skipPreview,
+      });
+
+      if (!skipPreview && previewResult.warning) {
+        setPendingWarning(previewResult);
+        return;
+      }
+
+      const result = skipPreview
+        ? previewResult
+        : await respondRecommendation(addTarget.id, true, {
+            mealType: selectedMealType,
+            quantity: selectedQuantity,
+            dryRun: false,
+          });
+
+      setItems((prev) => prev.map((entry) => (
+        entry.id === addTarget.id ? { ...entry, isAccepted: true, isViewed: true } : entry
+      )));
+
+      if (result.warning?.type === 'OVER_DAILY_TARGET') {
+        toast.error(`${result.warning.message} Đã thêm vào nhật ký${result.mealPlanDetail ? ' và meal plan.' : '.'}`);
+      } else if (result.warning?.type === 'NEAR_DAILY_TARGET') {
+        toast(`${result.warning.message} Đã thêm vào nhật ký${result.mealPlanDetail ? ' và meal plan.' : '.'}`);
+      } else {
+        toast.success(result.mealPlanDetail ? 'Đã thêm món vào nhật ký và meal plan hôm nay' : 'Đã thêm món vào nhật ký hôm nay');
+      }
+      setAddTarget(null);
+      setPendingWarning(null);
+    } catch {
+      toast.error('Không thêm được món vào nhật ký');
+    } finally {
+      setAdding(false);
     }
   };
 
@@ -86,7 +202,9 @@ const RecommendationsPage = () => {
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.22em] text-emerald-100">Recommendations</p>
             <h1 className="mt-2 text-3xl font-black">Gợi ý món ăn theo mục tiêu của bạn</h1>
-            <p className="mt-2 text-sm text-emerald-100">Dữ liệu được tạo từ lịch sử ăn uống, mục tiêu và sở thích hiện tại.</p>
+            <p className="mt-2 text-sm text-emerald-100">
+              Mỗi lần tạo chỉ ưu tiên các bữa cần thiết trong ngày, có kiểm tra calo, khẩu phần, cân nặng, chiều cao và dị ứng.
+            </p>
           </div>
           <button
             onClick={handleGenerate}
@@ -131,7 +249,9 @@ const RecommendationsPage = () => {
       ) : items.length === 0 ? (
         <div className="rounded-3xl border border-dashed border-gray-300 bg-white p-12 text-center dark:border-slate-700 dark:bg-slate-900">
           <p className="text-lg font-semibold text-gray-800 dark:text-slate-200">Chưa có gợi ý nào</p>
-          <p className="mt-2 text-sm text-gray-500 dark:text-slate-400">Nhấn "Tạo gợi ý mới" để hệ thống gợi ý món ăn từ bảng recommendations.</p>
+          <p className="mt-2 text-sm text-gray-500 dark:text-slate-400">
+            Nhấn "Tạo gợi ý mới" để hệ thống chọn món theo ngân sách calo từng bữa.
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -203,11 +323,11 @@ const RecommendationsPage = () => {
 
                   <div className="grid grid-cols-2 gap-2">
                     <button
-                      onClick={() => handleRespond(item.id, true)}
+                      onClick={() => openAddDialog(item)}
                       className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-3 py-2 text-sm font-bold text-white hover:bg-emerald-600"
                     >
-                      <ThumbsUp size={14} />
-                      Chọn
+                      <PlusCircle size={14} />
+                      Add
                     </button>
                     <button
                       onClick={() => handleRespond(item.id, false)}
@@ -221,6 +341,95 @@ const RecommendationsPage = () => {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {addTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/55 px-4">
+          <div className="w-full max-w-lg rounded-[28px] bg-white p-6 shadow-2xl dark:bg-slate-900">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-bold uppercase tracking-[0.18em] text-emerald-500">Thêm vào nhật ký</p>
+                <h2 className="mt-2 text-2xl font-black text-gray-900 dark:text-slate-100">{addTarget.food.name}</h2>
+                <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
+                  Chọn đúng bữa ăn và khẩu phần trước khi lưu vào hôm nay.
+                </p>
+              </div>
+              <button
+                onClick={closeAddDialog}
+                className="rounded-full bg-gray-100 p-2 text-gray-500 hover:bg-gray-200 dark:bg-slate-800 dark:text-slate-300"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+              <label className="space-y-2">
+                <span className="text-sm font-bold text-gray-700 dark:text-slate-200">Bữa ăn</span>
+                <select
+                  value={selectedMealType}
+                  onChange={(event) => setSelectedMealType(event.target.value)}
+                  className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-800 outline-none focus:border-emerald-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                >
+                  {MEAL_TYPE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="space-y-2">
+                <span className="text-sm font-bold text-gray-700 dark:text-slate-200">Khẩu phần</span>
+                <input
+                  type="number"
+                  min="0.25"
+                  max="3"
+                  step="0.25"
+                  value={selectedQuantity}
+                  onChange={(event) => setSelectedQuantity(Number(event.target.value))}
+                  className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-800 outline-none focus:border-emerald-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                />
+              </label>
+            </div>
+
+            <div className="mt-4 rounded-2xl bg-gray-50 p-4 text-sm text-gray-600 dark:bg-slate-800 dark:text-slate-300">
+              Ước tính thêm khoảng <span className="font-black text-gray-900 dark:text-slate-100">{Math.round(addTarget.food.calories * selectedQuantity)} kcal</span> vào nhật ký hôm nay.
+            </div>
+
+            {pendingWarning?.warning && (
+              <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
+                <div className="flex gap-3">
+                  <AlertTriangle className="mt-0.5 shrink-0" size={18} />
+                  <div>
+                    <p className="font-black">Cảnh báo calo</p>
+                    <p className="mt-1">{pendingWarning.warning.message}</p>
+                    {pendingWarning.preview && (
+                      <p className="mt-2 text-xs">
+                        Hiện tại {Math.round(pendingWarning.preview.currentCalories)} kcal, thêm {Math.round(pendingWarning.preview.addedCalories)} kcal, dự kiến {Math.round(pendingWarning.preview.projectedCalories)}/{Math.round(pendingWarning.preview.dailyCalorieTarget)} kcal.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              <button
+                onClick={closeAddDialog}
+                disabled={adding}
+                className="rounded-2xl bg-gray-100 px-4 py-3 text-sm font-bold text-gray-700 hover:bg-gray-200 disabled:opacity-60 dark:bg-slate-800 dark:text-slate-200"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={() => confirmAdd(Boolean(pendingWarning?.warning))}
+                disabled={adding || !selectedQuantity || selectedQuantity <= 0}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-600 disabled:opacity-60"
+              >
+                {adding ? <Loader2 size={16} className="animate-spin" /> : <PlusCircle size={16} />}
+                {pendingWarning?.warning ? 'Vẫn thêm' : 'Add vào nhật ký'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

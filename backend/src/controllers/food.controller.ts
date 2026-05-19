@@ -149,6 +149,61 @@ const toPublicCategoryLabel = (category: string, userId: number) => {
   return category;
 };
 
+const FOOD_TAG_KEYWORDS = {
+  grilled: ['nuong', 'grilled', 'bbq'],
+  vegetarian: ['chay', 'vegetarian', 'vegan', 'dau hu', 'tofu'],
+  weightLoss: ['giam can', 'weight loss', 'low calorie', 'healthy', 'eat clean', 'salad', 'luoc', 'hap'],
+  weightGain: ['tang can', 'weight gain', 'high calorie', 'bulk'],
+  staple: ['com', 'rice', 'bun', 'pho', 'mien', 'mi ', 'my ', 'noodle', 'xoi', 'banh mi', 'khoai', 'oat'],
+  dessert: ['trang mieng', 'trai cay', 'hoa qua', 'fruit', 'chuoi', 'tao', 'cam', 'xoai', 'yogurt', 'sua chua'],
+  drinkSoup: ['do nuoc', 'nuoc', 'canh', 'soup', 'broth', 'juice', 'smoothie', 'tra', 'tea', 'coffee', 'cafe'],
+  oily: ['chien', 'ran', 'xao', 'fried', 'deep fry'],
+};
+
+const hasTagKeyword = (text: string, keywords: string[]) => keywords.some((keyword) => text.includes(keyword));
+
+const buildFoodClassification = (food: {
+  name?: string | null;
+  category?: string | null;
+  description?: string | null;
+  calories?: number | null;
+  protein?: number | null;
+  isVegetarian?: boolean | null;
+  isVegan?: boolean | null;
+}) => {
+  const text = normalizeSearchText(`${food.name || ''} ${food.category || ''} ${food.description || ''}`);
+  const calories = Number(food.calories || 0);
+  const protein = Number(food.protein || 0);
+  const smartTags = new Set<string>();
+  const mealRoles = new Set<string>();
+
+  if (hasTagKeyword(text, FOOD_TAG_KEYWORDS.grilled)) smartTags.add('mon nuong');
+  if (food.isVegetarian || food.isVegan || hasTagKeyword(text, FOOD_TAG_KEYWORDS.vegetarian)) smartTags.add('do chay');
+  if (hasTagKeyword(text, FOOD_TAG_KEYWORDS.weightLoss) || (calories > 0 && calories <= 350)) smartTags.add('giam can');
+  if (hasTagKeyword(text, FOOD_TAG_KEYWORDS.weightGain) || calories >= 550) smartTags.add('tang can');
+  if (hasTagKeyword(text, FOOD_TAG_KEYWORDS.staple)) {
+    smartTags.add('tinh bot');
+    mealRoles.add('staple');
+  }
+  if (hasTagKeyword(text, FOOD_TAG_KEYWORDS.dessert)) {
+    smartTags.add('trang mieng');
+    mealRoles.add('dessert');
+  }
+  if (hasTagKeyword(text, FOOD_TAG_KEYWORDS.drinkSoup)) {
+    smartTags.add('do nuoc/canh');
+    mealRoles.add('soup_or_drink');
+  }
+  if (hasTagKeyword(text, FOOD_TAG_KEYWORDS.oily)) smartTags.add('nhieu dau mo');
+  if (protein >= 12) mealRoles.add('main_protein');
+  if (hasTagKeyword(text, ['rau', 'salad', 'vegetable', 'cu qua'])) mealRoles.add('vegetable_side');
+  if (!mealRoles.size) mealRoles.add('main_or_side');
+
+  return {
+    smartTags: Array.from(smartTags),
+    mealRoles: Array.from(mealRoles),
+  };
+};
+
 export const getAllFoods = async (req: any, res: Response) => {
   try {
     const {
@@ -238,6 +293,7 @@ export const getAllFoods = async (req: any, res: Response) => {
       ...food,
       category: toPublicCategoryLabel(food.category, req.user.id),
       isCustom: isOwnedCustomCategory(food.category, req.user.id),
+      ...buildFoodClassification(food),
     }));
 
     res.json({
@@ -400,6 +456,7 @@ export const searchFoods = async (req: any, res: Response) => {
         ...food,
         category: toPublicCategoryLabel(food.category, req.user.id),
         isCustom: isOwnedCustomCategory(food.category, req.user.id),
+        ...buildFoodClassification(food),
       })),
       count: foods.length,
     });
