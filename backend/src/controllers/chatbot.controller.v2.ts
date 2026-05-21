@@ -4,18 +4,12 @@ import { toAppDateKey, toAppDayRange } from '../utils/timezone.util';
 import { DEFAULT_CHATBOT_TRAINING_EXAMPLES } from '../data/chatbot-training-defaults';
 import prisma from '../lib/prisma';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
 const GROK_API_KEY = process.env.XAI_API_KEY || process.env.GROQ_API_KEY;
 const grokBaseURL = (process.env.XAI_BASE_URL || process.env.GROQ_BASE_URL || 'https://api.x.ai/v1').replace(/\/+$/, '');
 const isGroqCompatibleEndpoint = grokBaseURL.toLowerCase().includes('groq.com');
 const GROK_PROVIDER_LABEL = isGroqCompatibleEndpoint ? 'Groq (OpenAI-compatible)' : 'xAI Grok';
-const grokClient = new OpenAI({
-  apiKey: GROK_API_KEY,
-  baseURL: grokBaseURL,
-});
+let openaiClient: OpenAI | null = null;
+let grokClient: OpenAI | null = null;
 
 const rawProviderMode = (process.env.CHAT_AI_PROVIDER || 'auto').toLowerCase();
 const CHAT_AI_PROVIDER =
@@ -174,6 +168,21 @@ const isRetrievalOnlyMode = CHAT_AI_PROVIDER === 'retrieval';
 const hasGrok = () => Boolean(GROK_API_KEY);
 const hasGemini = () => Boolean(process.env.GEMINI_API_KEY);
 const hasOpenAI = () => Boolean(process.env.OPENAI_API_KEY);
+
+const getOpenAIClient = () => {
+  if (!process.env.OPENAI_API_KEY) throw new Error('OPENAI_API_KEY is not configured');
+  openaiClient ??= new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  return openaiClient;
+};
+
+const getGrokClient = () => {
+  if (!GROK_API_KEY) throw new Error('XAI_API_KEY or GROQ_API_KEY is not configured');
+  grokClient ??= new OpenAI({
+    apiKey: GROK_API_KEY,
+    baseURL: grokBaseURL,
+  });
+  return grokClient;
+};
 
 const hasAnyChatProvider = () => isRetrievalOnlyMode || hasGrok() || hasGemini() || hasOpenAI();
 
@@ -604,7 +613,7 @@ const generateWithOpenAI = async (systemPrompt: string, turns: ChatTurn[]) => {
     })),
   ];
 
-  const completion = await openai.chat.completions.create({
+  const completion = await getOpenAIClient().chat.completions.create({
     model: CHAT_MODEL,
     messages,
     temperature: 0.7,
@@ -626,7 +635,7 @@ const generateWithGrok = async (systemPrompt: string, turns: ChatTurn[]) => {
     })),
   ];
 
-  const completion = await grokClient.chat.completions.create({
+  const completion = await getGrokClient().chat.completions.create({
     model: GROK_MODEL,
     messages,
     temperature: 0.7,
