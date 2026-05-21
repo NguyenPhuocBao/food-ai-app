@@ -4,7 +4,33 @@ import fs from 'fs';
 import path from 'path';
 import FormData from 'form-data';
 import prisma from '../lib/prisma';
-const AI_API_URL = process.env.AI_API_URL || 'http://localhost:8000';
+const AI_API_URL = String(process.env.AI_API_URL || '').trim();
+const AI_SCAN_MODE = String(process.env.AI_SCAN_MODE || 'auto').trim().toLowerCase();
+const LOCAL_AI_API_URL = 'http://localhost:8000';
+
+const resolveAiScanConfig = () => {
+  if (AI_SCAN_MODE === 'disabled') {
+    return {
+      enabled: false,
+      url: null,
+      reason: 'AI scan is disabled for this deployment. Run the local AI service to demo image recognition.',
+    };
+  }
+
+  if (AI_API_URL) {
+    return { enabled: true, url: AI_API_URL, reason: null };
+  }
+
+  if (process.env.NODE_ENV === 'production') {
+    return {
+      enabled: false,
+      url: null,
+      reason: 'AI_API_URL is not configured in production. Image recognition is available only in local demo mode.',
+    };
+  }
+
+  return { enabled: true, url: LOCAL_AI_API_URL, reason: null };
+};
 
 const normalizeText = (value: string) =>
   value
@@ -211,19 +237,25 @@ export const analyzeImage = async (req: any, res: Response) => {
 
     let prediction: any = null;
     let aiError: string | null = null;
+    const aiConfig = resolveAiScanConfig();
 
-    try {
-      const formData = new FormData();
-      formData.append('file', fs.createReadStream(imagePath));
+    if (!aiConfig.enabled || !aiConfig.url) {
+      aiError = aiConfig.reason;
+      prediction = { status: 'fallback', mode: 'local_demo_required', message: aiError };
+    } else {
+      try {
+        const formData = new FormData();
+        formData.append('file', fs.createReadStream(imagePath));
 
-      const aiResponse = await axios.post(`${AI_API_URL}/predict`, formData, {
-        headers: { ...formData.getHeaders() },
-        timeout: 30000,
-      });
-      prediction = aiResponse.data;
-    } catch (error: any) {
-      aiError = error?.response?.data?.error || error?.message || 'AI service unavailable';
-      prediction = { status: 'fallback', message: aiError };
+        const aiResponse = await axios.post(`${aiConfig.url}/predict`, formData, {
+          headers: { ...formData.getHeaders() },
+          timeout: 15000,
+        });
+        prediction = aiResponse.data;
+      } catch (error: any) {
+        aiError = error?.response?.data?.error || error?.message || 'AI service unavailable';
+        prediction = { status: 'fallback', mode: 'service_unavailable', message: aiError };
+      }
     }
 
     const candidateNames = extractCandidateNames(prediction, req.file.originalname || path.basename(imagePath));
@@ -243,6 +275,8 @@ export const analyzeImage = async (req: any, res: Response) => {
       prediction,
       meta: {
         aiError,
+        aiScanMode: aiConfig.enabled ? 'remote' : 'local_demo_required',
+        aiServiceUrlConfigured: Boolean(aiConfig.url),
         candidateNames: expandedCandidateNames,
         suggestedFoodIds: suggestedFoods.map((food) => food.id),
       },
@@ -268,6 +302,7 @@ export const analyzeImage = async (req: any, res: Response) => {
         foodItem: foodItem ? toFoodPayload(foodItem) : null,
         suggestions: suggestedFoods.map(toFoodPayload),
         prediction: resultPayload,
+        fallback: Boolean(aiError),
       },
     });
   } catch (error: any) {

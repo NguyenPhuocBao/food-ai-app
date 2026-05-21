@@ -8,6 +8,7 @@ const auth_middleware_1 = require("../middlewares/auth.middleware");
 const router = (0, express_1.Router)();
 // User management
 router.get('/users', auth_middleware_1.authMiddleware, auth_middleware_1.adminMiddleware, admin_controller_1.getAllUsers);
+router.post('/users', auth_middleware_1.authMiddleware, auth_middleware_1.adminMiddleware, admin_controller_1.createUserByAdmin);
 router.get('/users/:id', auth_middleware_1.authMiddleware, auth_middleware_1.adminMiddleware, admin_controller_1.getUserById);
 router.put('/users/:id/role', auth_middleware_1.authMiddleware, auth_middleware_1.adminMiddleware, admin_controller_1.updateUserRole);
 router.delete('/users/:id', auth_middleware_1.authMiddleware, auth_middleware_1.adminMiddleware, admin_controller_1.deleteUser);

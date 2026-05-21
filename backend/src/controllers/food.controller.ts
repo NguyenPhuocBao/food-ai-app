@@ -170,6 +170,9 @@ const buildFoodClassification = (food: {
   protein?: number | null;
   isVegetarian?: boolean | null;
   isVegan?: boolean | null;
+  mealTimeTags?: string[] | null;
+  mealRoles?: string[] | null;
+  goalTags?: string[] | null;
 }) => {
   const text = normalizeSearchText(`${food.name || ''} ${food.category || ''} ${food.description || ''}`);
   const calories = Number(food.calories || 0);
@@ -199,8 +202,11 @@ const buildFoodClassification = (food: {
   if (!mealRoles.size) mealRoles.add('main_or_side');
 
   return {
+    mealTimeTags: food.mealTimeTags || [],
+    mealRoles: food.mealRoles || [],
+    goalTags: food.goalTags || [],
     smartTags: Array.from(smartTags),
-    mealRoles: Array.from(mealRoles),
+    inferredMealRoles: Array.from(mealRoles),
   };
 };
 

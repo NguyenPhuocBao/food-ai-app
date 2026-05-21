@@ -265,6 +265,28 @@ type FoodCandidate = {
   protein: number;
   fat: number;
   carbs: number;
+  mealTimeTags?: string[];
+  mealRoles?: string[];
+  goalTags?: string[];
+  cookingMethod?: string | null;
+  portionType?: string | null;
+};
+
+type FoodPlanningMeta = Pick<FoodCandidate, 'id' | 'mealTimeTags' | 'mealRoles' | 'goalTags' | 'cookingMethod' | 'portionType'>;
+
+const loadFoodPlanningMeta = async (foodIds: number[]) => {
+  if (!foodIds.length) return new Map<number, FoodPlanningMeta>();
+  const rows = await prisma.$queryRaw<FoodPlanningMeta[]>`
+    SELECT id, "mealTimeTags", "mealRoles", "goalTags", "cookingMethod", "portionType"
+    FROM "food_items"
+    WHERE id = ANY(${foodIds})
+  `;
+  return new Map(rows.map((row) => [row.id, row]));
+};
+
+const attachFoodPlanningMeta = async (foods: FoodCandidate[]) => {
+  const meta = await loadFoodPlanningMeta(foods.map((food) => food.id));
+  return foods.map((food) => ({ ...food, ...(meta.get(food.id) || {}) }));
 };
 
 const normalizeSearchText = (value?: string | null) =>
@@ -340,23 +362,32 @@ const DRINK_KEYWORDS = ['nuoc', 'drink', 'juice', 'smoothie', 'tea', 'coffee', '
 const toFoodSearchText = (food: FoodCandidate) =>
   normalizeSearchText(`${food.name} ${food.category || ''} ${food.description || ''}`);
 
+const hasFoodRole = (food: FoodCandidate, role: string) => (food.mealRoles || []).includes(role);
+const hasFoodMealTime = (food: FoodCandidate, mealType: MealType) => (food.mealTimeTags || []).includes(mealType);
+const hasFoodGoalTag = (food: FoodCandidate, goalType: GoalType | undefined) =>
+  !goalType || !(food.goalTags || []).length || (food.goalTags || []).includes(goalType);
+
 const isFruitOrDrinkFood = (food: FoodCandidate) => {
+  if (hasFoodRole(food, 'DESSERT') || hasFoodRole(food, 'DRINK')) return true;
   const text = toFoodSearchText(food);
   return FRUIT_DRINK_KEYWORDS.some((keyword) => text.includes(keyword));
 };
 
 const isWhiteRiceFood = (food: FoodCandidate) => {
+  if (hasFoodRole(food, 'STAPLE') && normalizeSearchText(food.name).includes('com')) return true;
   const text = toFoodSearchText(food);
   return WHITE_RICE_KEYWORDS.some((keyword) => text.includes(keyword));
 };
 
 const isStapleDishFood = (food: FoodCandidate) => {
+  if (hasFoodRole(food, 'STAPLE') || food.portionType === 'FULL_MEAL') return true;
   const text = toFoodSearchText(food);
   return STAPLE_DISH_KEYWORDS.some((keyword) => text.includes(keyword));
 };
 
 const isGoalCategoryCompatible = (food: FoodCandidate, goalType: GoalType | undefined) => {
   if (!goalType) return true;
+  if (!hasFoodGoalTag(food, goalType)) return false;
 
   const text = toFoodSearchText(food);
   const isWeightGainTagged = GOAL_CATEGORY_KEYWORDS.weightGain.some((keyword) => text.includes(keyword));
@@ -379,6 +410,7 @@ const isGoalCategoryCompatible = (food: FoodCandidate, goalType: GoalType | unde
 };
 
 const isFruitDessertFood = (food: FoodCandidate) => {
+  if (hasFoodRole(food, 'DESSERT')) return true;
   const text = toFoodSearchText(food);
   const isFruit = FRUIT_DESSERT_KEYWORDS.some((keyword) => text.includes(keyword));
   const isDrink = DRINK_KEYWORDS.some((keyword) => text.includes(keyword));
@@ -386,6 +418,7 @@ const isFruitDessertFood = (food: FoodCandidate) => {
 };
 
 const isSoupDishFood = (food: FoodCandidate) => {
+  if (hasFoodRole(food, 'SOUP')) return true;
   const text = toFoodSearchText(food);
   return SOUP_DISH_KEYWORDS.some((keyword) => text.includes(keyword));
 };
@@ -396,11 +429,13 @@ const isHotpotFood = (food: FoodCandidate) => {
 };
 
 const isHealthyCookingFood = (food: FoodCandidate) => {
+  if (['BOILED', 'STEAMED', 'GRILLED', 'RAW', 'SOUP'].includes(food.cookingMethod || '')) return true;
   const text = toFoodSearchText(food);
   return HEALTHY_COOKING_KEYWORDS.some((keyword) => text.includes(keyword));
 };
 
 const isOilyCookingFood = (food: FoodCandidate) => {
+  if (['FRIED', 'STIR_FRIED'].includes(food.cookingMethod || '')) return true;
   const text = toFoodSearchText(food);
   return OILY_COOKING_KEYWORDS.some((keyword) => text.includes(keyword));
 };
@@ -619,12 +654,13 @@ const pickFoodForMeal = (
   };
 
   const keywords = keywordsByMeal[mealType];
+  const taggedForMeal = foods.filter((food) => hasFoodMealTime(food, mealType));
   const byCategory = foods.filter((food) => {
     const category = (food.category || '').toLowerCase();
     return keywords.some((keyword) => category.includes(keyword));
   });
 
-  const basePool = byCategory.length >= 5 ? byCategory : foods;
+  const basePool = taggedForMeal.length >= 3 ? taggedForMeal : byCategory.length >= 5 ? byCategory : foods;
   const pool = filterFoodsByGoal(basePool, goalType, mealType);
   return pickFoodFromPool(pool, mealType, target, usedCounter, goalType, mealTypeUsedCounter);
 };
@@ -1260,7 +1296,7 @@ export const generateAutoMealPlan = async (req: any, res: Response) => {
       foodWhere.isGlutenFree = true;
     }
 
-    let foods = await prisma.foodItem.findMany({
+    let foods: FoodCandidate[] = await prisma.foodItem.findMany({
       where: foodWhere,
       select: {
         id: true,
@@ -1289,6 +1325,8 @@ export const generateAutoMealPlan = async (req: any, res: Response) => {
         },
       });
     }
+
+    foods = await attachFoodPlanningMeta(foods);
 
     if (!foods.length) {
       return res.status(400).json({ error: 'No food data available to generate plan' });
@@ -1392,6 +1430,8 @@ export const generateAutoMealPlan = async (req: any, res: Response) => {
           const mealTypeUsedCounter = usedByMealType.get(mealType);
 
           const rawDryPool = goalPool.filter((food) => (
+            (!food.mealTimeTags?.length || hasFoodMealTime(food, mealType)) &&
+            (hasFoodRole(food, 'MAIN') || hasFoodRole(food, 'SIDE') || !food.mealRoles?.length) &&
             !isWhiteRiceFood(food) &&
             !isStapleDishFood(food) &&
             !isFruitDessertFood(food) &&
@@ -1400,6 +1440,8 @@ export const generateAutoMealPlan = async (req: any, res: Response) => {
             !isHotpotFood(food)
           ));
           const dryFallbackPool = foods.filter((food) => (
+            (!food.mealTimeTags?.length || hasFoodMealTime(food, mealType)) &&
+            (hasFoodRole(food, 'MAIN') || hasFoodRole(food, 'SIDE') || !food.mealRoles?.length) &&
             !isWhiteRiceFood(food) &&
             !isStapleDishFood(food) &&
             !isFruitDessertFood(food) &&
@@ -1433,12 +1475,14 @@ export const generateAutoMealPlan = async (req: any, res: Response) => {
 
           const baseSoupPool = goalPool.filter((food) => (
             !selectedIds.has(food.id) &&
+            (!food.mealTimeTags?.length || hasFoodMealTime(food, mealType)) &&
             !isWhiteRiceFood(food) &&
             !isFruitDessertFood(food) &&
             (isSoupDishFood(food) || isHotpotFood(food))
           ));
           const soupFallbackPool = foods.filter((food) => (
             !selectedIds.has(food.id) &&
+            (!food.mealTimeTags?.length || hasFoodMealTime(food, mealType)) &&
             !isWhiteRiceFood(food) &&
             !isFruitDessertFood(food) &&
             (isSoupDishFood(food) || isHotpotFood(food))

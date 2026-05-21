@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Edit, Key, Lock, Search, Trash, Unlock } from 'lucide-react';
+import { Edit, Key, Lock, Plus, Search, Trash, Unlock, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
 import EmptyState from '../../components/admin/EmptyState';
@@ -15,6 +15,11 @@ type AdminUser = {
 };
 
 const normalize = (value: string) => value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+const getApiErrorMessage = (error: any, fallback: string) => {
+  const data = error?.response?.data;
+  if (typeof data === 'string') return data.slice(0, 160);
+  return data?.error || data?.message || fallback;
+};
 
 const AdminUsers = () => {
   const navigate = useNavigate();
@@ -22,6 +27,15 @@ const AdminUsers = () => {
   const [loading, setLoading] = useState(true);
   const [searchInput, setSearchInput] = useState('');
   const [page, setPage] = useState(1);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    name: '',
+    email: '',
+    password: '',
+    role: 'USER' as AdminUser['role'],
+    isActive: true,
+  });
   const itemsPerPage = 20;
 
   useEffect(() => {
@@ -106,6 +120,47 @@ const AdminUsers = () => {
     }
   };
 
+  const resetCreateForm = () => {
+    setCreateForm({
+      name: '',
+      email: '',
+      password: '',
+      role: 'USER',
+      isActive: true,
+    });
+  };
+
+  const handleCreateUser = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const name = createForm.name.trim();
+    const email = createForm.email.trim();
+
+    if (!name || !email || createForm.password.length < 6) {
+      toast.error('Nhap ten, email va mat khau toi thieu 6 ky tu');
+      return;
+    }
+
+    try {
+      setCreating(true);
+      const response = await api.post('/admin/users', {
+        name,
+        email,
+        password: createForm.password,
+        role: createForm.role,
+        isActive: createForm.isActive,
+      });
+      const newUser = response.data.data as AdminUser;
+      setAllUsers((prev) => [newUser, ...prev].sort((a, b) => a.id - b.id));
+      setShowCreateModal(false);
+      resetCreateForm();
+      toast.success('Da tao nguoi dung');
+    } catch (error: any) {
+      toast.error(getApiErrorMessage(error, 'Tao nguoi dung that bai'));
+    } finally {
+      setCreating(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -116,23 +171,22 @@ const AdminUsers = () => {
     );
   }
 
-  if (!loading && allUsers.length === 0) {
-    return (
-      <EmptyState
-        icon={Search}
-        title="Khong c? nguoi dung"
-        description="He thong chua co du lieu nguoi dung."
-      />
-    );
-  }
-
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-violet-600 bg-clip-text text-transparent">
-          Quan ly nguoi dung
-        </h1>
-        <p className="text-gray-500 dark:text-slate-400 mt-1">Trang thai online duoc tinh theo phien Dang nhap dang su dung.</p>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-violet-600 bg-clip-text text-transparent">
+            Quan ly nguoi dung
+          </h1>
+          <p className="text-gray-500 dark:text-slate-400 mt-1">Trang thai online duoc tinh theo phien Dang nhap dang su dung.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowCreateModal(true)}
+          className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 font-semibold text-white shadow-lg shadow-blue-500/20 transition hover:bg-blue-700"
+        >
+          <Plus size={18} /> Them nguoi dung
+        </button>
       </div>
 
       <div className="relative">
@@ -148,26 +202,35 @@ const AdminUsers = () => {
 
       <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-700 rounded-3xl shadow-xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="min-w-full">
-            <thead className="bg-gray-50 dark:bg-slate-800/70 text-xs font-semibold uppercase tracking-widest text-gray-500 dark:text-slate-300">
-              <tr>
-                <th className="px-6 py-4 text-left">ID</th>
-                <th className="px-6 py-4 text-left">Ten</th>
-                <th className="px-6 py-4 text-left">Email</th>
-                <th className="px-6 py-4 text-left">Vai tro</th>
-                <th className="px-6 py-4 text-left">Trang thai</th>
-                <th className="px-6 py-4 text-left">Hanh dong</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
-              {paginatedUsers.length === 0 ? (
+          {allUsers.length === 0 ? (
+            <div className="p-10">
+              <EmptyState
+                icon={Search}
+                title="Khong co nguoi dung"
+                description="He thong chua co du lieu nguoi dung. Bam Them nguoi dung de tao tai khoan moi."
+              />
+            </div>
+          ) : (
+            <table className="min-w-full">
+              <thead className="bg-gray-50 dark:bg-slate-800/70 text-xs font-semibold uppercase tracking-widest text-gray-500 dark:text-slate-300">
                 <tr>
-                  <td colSpan={6} className="px-6 py-10 text-center text-gray-500 dark:text-slate-400">
-                    Khong c? du lieu
-                  </td>
+                  <th className="px-6 py-4 text-left">ID</th>
+                  <th className="px-6 py-4 text-left">Ten</th>
+                  <th className="px-6 py-4 text-left">Email</th>
+                  <th className="px-6 py-4 text-left">Vai tro</th>
+                  <th className="px-6 py-4 text-left">Trang thai</th>
+                  <th className="px-6 py-4 text-left">Hanh dong</th>
                 </tr>
-              ) : (
-                paginatedUsers.map((user) => (
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
+                {paginatedUsers.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-10 text-center text-gray-500 dark:text-slate-400">
+                      Khong co du lieu
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedUsers.map((user) => (
                   <tr key={user.id} className="group hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-slate-300">{user.id}</td>
                     <td
@@ -224,10 +287,11 @@ const AdminUsers = () => {
                       </div>
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                  ))
+                )}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
 
@@ -248,6 +312,110 @@ const AdminUsers = () => {
           >
             Sau
           </button>
+        </div>
+      )}
+
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-xl rounded-3xl border border-gray-100 bg-white p-6 shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+            <div className="mb-6 flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-slate-100">Them nguoi dung</h2>
+                <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
+                  Tao tai khoan moi cho user, moderator hoac admin.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCreateModal(false);
+                  resetCreateForm();
+                }}
+                className="rounded-full p-2 text-gray-500 transition hover:bg-gray-100 dark:text-slate-400 dark:hover:bg-slate-800"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateUser} className="space-y-4">
+              <div>
+                <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-slate-300">Ten hien thi</label>
+                <input
+                  value={createForm.name}
+                  onChange={(event) => setCreateForm((prev) => ({ ...prev, name: event.target.value }))}
+                  className="w-full rounded-2xl border border-gray-200 px-4 py-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                  placeholder="Nguyen Van A"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-slate-300">Email dang nhap</label>
+                <input
+                  type="email"
+                  value={createForm.email}
+                  onChange={(event) => setCreateForm((prev) => ({ ...prev, email: event.target.value }))}
+                  className="w-full rounded-2xl border border-gray-200 px-4 py-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                  placeholder="user@example.com"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-slate-300">Mat khau tam thoi</label>
+                <input
+                  type="password"
+                  value={createForm.password}
+                  onChange={(event) => setCreateForm((prev) => ({ ...prev, password: event.target.value }))}
+                  className="w-full rounded-2xl border border-gray-200 px-4 py-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                  placeholder="Toi thieu 6 ky tu"
+                />
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-sm font-semibold text-gray-700 dark:text-slate-300">Vai tro</label>
+                  <select
+                    value={createForm.role}
+                    onChange={(event) => setCreateForm((prev) => ({ ...prev, role: event.target.value as AdminUser['role'] }))}
+                    className="w-full rounded-2xl border border-gray-200 px-4 py-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                  >
+                    <option value="USER">USER</option>
+                    <option value="MODERATOR">MODERATOR</option>
+                    <option value="ADMIN">ADMIN</option>
+                  </select>
+                </div>
+
+                <label className="flex items-center justify-between rounded-2xl border border-gray-200 px-4 py-3 text-sm font-semibold text-gray-700 dark:border-slate-700 dark:text-slate-300">
+                  Kich hoat tai khoan
+                  <input
+                    type="checkbox"
+                    checked={createForm.isActive}
+                    onChange={(event) => setCreateForm((prev) => ({ ...prev, isActive: event.target.checked }))}
+                    className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                </label>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCreateModal(false);
+                    resetCreateForm();
+                  }}
+                  className="rounded-2xl border border-gray-200 px-5 py-3 font-semibold text-gray-700 transition hover:bg-gray-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                  Huy
+                </button>
+                <button
+                  type="submit"
+                  disabled={creating}
+                  className="rounded-2xl bg-blue-600 px-5 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {creating ? 'Dang tao...' : 'Tao nguoi dung'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

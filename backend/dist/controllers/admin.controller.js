@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.broadcastNotification = exports.sendNotificationToMultipleUsers = exports.sendNotificationToUser = exports.sendToUsers = exports.deleteMealPlan = exports.updateMealPlan = exports.createMealPlan = exports.getUserMealPlans = exports.createRecipe = exports.updateRecipe = exports.updateManySettings = exports.getAllSettings = exports.deleteNotification = exports.getAllNotifications = exports.deleteReview = exports.getAllReviews = exports.deleteRecipe = exports.getAllRecipes = exports.updateUserProfileByAdmin = exports.resetUserPassword = exports.toggleUserBan = exports.getAuditLogs = exports.getSystemStats = exports.deleteFood = exports.updateFood = exports.createFood = exports.getFoodByIdAdmin = exports.getAllFoodsAdmin = exports.deleteUser = exports.updateUserRole = exports.getUserById = exports.getAllUsers = void 0;
+exports.broadcastNotification = exports.sendNotificationToMultipleUsers = exports.sendNotificationToUser = exports.sendToUsers = exports.deleteMealPlan = exports.updateMealPlan = exports.createMealPlan = exports.getUserMealPlans = exports.createRecipe = exports.updateRecipe = exports.updateManySettings = exports.getAllSettings = exports.deleteNotification = exports.getAllNotifications = exports.deleteReview = exports.getAllReviews = exports.deleteRecipe = exports.getAllRecipes = exports.updateUserProfileByAdmin = exports.resetUserPassword = exports.toggleUserBan = exports.getAuditLogs = exports.getSystemStats = exports.deleteFood = exports.updateFood = exports.createFood = exports.getFoodByIdAdmin = exports.getAllFoodsAdmin = exports.deleteUser = exports.updateUserRole = exports.getUserById = exports.createUserByAdmin = exports.getAllUsers = void 0;
 const client_1 = require("@prisma/client");
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const crypto_1 = require("crypto");
@@ -14,6 +14,35 @@ const toLocalDateKey = (date) => (0, timezone_util_1.toAppDateKey)(date);
 const SUPPORT_PREFIX = 'SUPPORT_';
 const SUPPORT_STATUS_OPEN = 'SUPPORT_OPEN';
 const SUPPORT_STATUS_PENDING = 'SUPPORT_PENDING';
+const normalizeSlug = (value) => value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[đĐ]/g, 'd')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+const loadFoodPlanningMeta = async (foodIds) => {
+    if (!foodIds.length)
+        return new Map();
+    const rows = await prisma_1.default.$queryRaw `
+    SELECT id, "mealTimeTags", "mealRoles", "goalTags", "cookingMethod", "portionType"
+    FROM "food_items"
+    WHERE id = ANY(${foodIds})
+  `;
+    return new Map(rows.map((row) => [row.id, row]));
+};
+const saveFoodPlanningMeta = async (foodId, data) => {
+    await prisma_1.default.$executeRaw `
+    UPDATE "food_items"
+    SET
+      "mealTimeTags" = ${Array.isArray(data.mealTimeTags) ? data.mealTimeTags : []}::text[],
+      "mealRoles" = ${Array.isArray(data.mealRoles) ? data.mealRoles : []}::text[],
+      "goalTags" = ${Array.isArray(data.goalTags) ? data.goalTags : []}::text[],
+      "cookingMethod" = ${data.cookingMethod ? String(data.cookingMethod) : null},
+      "portionType" = ${data.portionType ? String(data.portionType) : null}
+    WHERE id = ${foodId}
+  `;
+};
 const SUPPORT_STATUS_CLOSED = 'SUPPORT_CLOSED';
 const getAllUsers = async (req, res) => {
     try {
@@ -54,6 +83,60 @@ const getAllUsers = async (req, res) => {
     }
 };
 exports.getAllUsers = getAllUsers;
+const createUserByAdmin = async (req, res) => {
+    try {
+        const name = String(req.body?.name || '').trim();
+        const email = String(req.body?.email || '').trim().toLowerCase();
+        const password = String(req.body?.password || '');
+        const role = req.body?.role || client_1.Role.USER;
+        const isActive = typeof req.body?.isActive === 'boolean' ? req.body.isActive : true;
+        if (!name)
+            return res.status(400).json({ error: 'Name is required' });
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            return res.status(400).json({ error: 'Valid email is required' });
+        }
+        if (password.length < 6) {
+            return res.status(400).json({ error: 'Password must be at least 6 characters' });
+        }
+        if (!Object.values(client_1.Role).includes(role)) {
+            return res.status(400).json({ error: 'Invalid role' });
+        }
+        const existingUser = await prisma_1.default.user.findUnique({ where: { email } });
+        if (existingUser)
+            return res.status(409).json({ error: 'Email already exists' });
+        const hashedPassword = await bcryptjs_1.default.hash(password, 10);
+        const user = await prisma_1.default.user.create({
+            data: {
+                name,
+                email,
+                password: hashedPassword,
+                role: role,
+                isActive,
+                profile: { create: {} },
+            },
+            include: {
+                profile: true,
+                _count: { select: { meals: true, scanHistory: true } },
+            },
+        });
+        await prisma_1.default.auditLog.create({
+            data: {
+                userId: req.user.id,
+                action: 'CREATE_USER',
+                entity: 'User',
+                entityId: user.id,
+                newData: { name: user.name, email: user.email, role: user.role, isActive: user.isActive },
+                ipAddress: req.ip,
+                userAgent: req.get('user-agent'),
+            },
+        });
+        res.status(201).json({ success: true, data: { ...user, isOnline: false } });
+    }
+    catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+exports.createUserByAdmin = createUserByAdmin;
 const getUserById = async (req, res) => {
     try {
         const { id } = req.params;
@@ -152,10 +235,11 @@ const getAllFoodsAdmin = async (req, res) => {
             include: { recipe: true, _count: { select: { meals: true, favorites: true, reviews: true } } },
             orderBy: { createdAt: 'desc' },
         });
+        const meta = await loadFoodPlanningMeta(foods.map((food) => food.id));
         const total = await prisma_1.default.foodItem.count({ where });
         res.json({
             success: true,
-            data: foods,
+            data: foods.map((food) => ({ ...food, ...(meta.get(food.id) || {}) })),
             pagination: { page: Number(page), limit: Number(limit), total, totalPages: Math.ceil(total / Number(limit)) },
         });
     }
@@ -213,7 +297,8 @@ const getFoodByIdAdmin = async (req, res) => {
         });
         if (!food)
             return res.status(404).json({ error: 'Food not found' });
-        return res.json({ success: true, data: food });
+        const meta = await loadFoodPlanningMeta([food.id]);
+        return res.json({ success: true, data: { ...food, ...(meta.get(food.id) || {}) } });
     }
     catch (error) {
         return res.status(500).json({ error: error.message });
@@ -222,17 +307,30 @@ const getFoodByIdAdmin = async (req, res) => {
 exports.getFoodByIdAdmin = getFoodByIdAdmin;
 const createFood = async (req, res) => {
     try {
-        const { name, category, description, calories, protein, fat, carbs, isVegetarian, isVegan, isGlutenFree } = req.body;
-        if (!name || !category || !calories)
+        const { name, category, description, calories, protein, fat, carbs, isVegetarian, isVegan, isGlutenFree, mealTimeTags, mealRoles, goalTags, cookingMethod, portionType, } = req.body;
+        const normalizedName = String(name || '').trim();
+        const normalizedCategory = String(category || '').trim();
+        const parsedCalories = Number(calories);
+        if (!normalizedName || !normalizedCategory || !Number.isFinite(parsedCalories) || parsedCalories <= 0) {
             return res.status(400).json({ error: 'Missing required fields' });
-        const slug = name.toLowerCase().replace(/ /g, '-').replace(/[đĐ]/g, 'd');
+        }
+        const existingByName = await prisma_1.default.foodItem.findUnique({ where: { name: normalizedName } });
+        if (existingByName)
+            return res.status(409).json({ error: 'Food name already exists' });
+        const baseSlug = normalizeSlug(normalizedName) || `food-${Date.now()}`;
+        let slug = baseSlug;
+        let suffix = 1;
+        while (await prisma_1.default.foodItem.findUnique({ where: { slug } })) {
+            suffix += 1;
+            slug = `${baseSlug}-${suffix}`;
+        }
         const food = await prisma_1.default.foodItem.create({
             data: {
-                name,
+                name: normalizedName,
                 slug,
-                category,
+                category: normalizedCategory,
                 description,
-                calories: parseInt(calories),
+                calories: Math.round(parsedCalories),
                 protein: parseFloat(protein) || 0,
                 fat: parseFloat(fat) || 0,
                 carbs: parseFloat(carbs) || 0,
@@ -241,16 +339,18 @@ const createFood = async (req, res) => {
                 isGlutenFree: isGlutenFree || false,
             },
         });
+        await saveFoodPlanningMeta(food.id, { mealTimeTags, mealRoles, goalTags, cookingMethod, portionType });
+        const meta = await loadFoodPlanningMeta([food.id]);
         await prisma_1.default.auditLog.create({
             data: {
                 userId: req.user.id,
                 action: 'CREATE_FOOD',
                 entity: 'FoodItem',
                 entityId: food.id,
-                newData: { name, category },
+                newData: { name: normalizedName, category: normalizedCategory },
             },
         });
-        res.json({ success: true, data: food });
+        res.status(201).json({ success: true, data: { ...food, ...(meta.get(food.id) || {}) } });
     }
     catch (error) {
         res.status(500).json({ error: error.message });
@@ -260,7 +360,7 @@ exports.createFood = createFood;
 const updateFood = async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, category, description, calories, protein, fat, carbs, isVegetarian, isVegan, isGlutenFree } = req.body;
+        const { name, category, description, calories, protein, fat, carbs, isVegetarian, isVegan, isGlutenFree, mealTimeTags, mealRoles, goalTags, cookingMethod, portionType, } = req.body;
         const oldFood = await prisma_1.default.foodItem.findUnique({ where: { id: parseInt(id) } });
         if (!oldFood)
             return res.status(404).json({ error: 'Food not found' });
@@ -281,6 +381,7 @@ const updateFood = async (req, res) => {
                 isGlutenFree,
             },
         });
+        await saveFoodPlanningMeta(food.id, { mealTimeTags, mealRoles, goalTags, cookingMethod, portionType });
         await prisma_1.default.auditLog.create({
             data: {
                 userId: req.user.id,

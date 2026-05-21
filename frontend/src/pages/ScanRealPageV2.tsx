@@ -159,7 +159,11 @@ const ScanRealPageV2 = () => {
       const result = await analyzeFoodImage(file);
       setScanResult(result);
       await loadHistory();
-      toast.success('Đã phân tích ảnh thành công');
+      if (result.fallback || result?.prediction?.meta?.aiError) {
+        toast('AI scan đang ở chế độ demo local. Hãy chọn món thủ công từ danh sách.');
+      } else {
+        toast.success('Đã phân tích ảnh thành công');
+      }
     } catch (error: any) {
       toast.error(error?.response?.data?.error || 'Không thềEphân tích ảnh');
     } finally {
@@ -269,16 +273,22 @@ const ScanRealPageV2 = () => {
               <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="flex-1">
                 <div className="mb-4 flex items-start justify-between gap-4">
                   <div>
-                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold mb-3 border border-emerald-100">
-                      <CheckCircle2 size={14} /> ĐềEtin cậy {Math.round(scanResult.confidence)}%
-                    </div>
+                    {scanResult.fallback || scanResult?.prediction?.meta?.aiError ? (
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-bold mb-3 border border-amber-100">
+                        Demo local: chọn món thủ công
+                      </div>
+                    ) : (
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold mb-3 border border-emerald-100">
+                        <CheckCircle2 size={14} /> Độ tin cậy {Math.round(scanResult.confidence)}%
+                      </div>
+                    )}
                     <h2 className="text-2xl font-bold text-gray-900 leading-tight">{scanResult.foodName}</h2>
                   </div>
                 </div>
 
                 {!!scanResult?.prediction?.meta?.aiError && (
                   <div className="mb-4 rounded-2xl bg-amber-50 border border-amber-100 p-3 text-amber-800 text-sm">
-                    Không kết nối được AI service. Bạn vẫn có thềEchọn món thủ công bên dưới.
+                    Bản deploy không chạy model nhận diện ảnh. Để demo AI scan, hãy chạy local `food_ai_api` ở port 8000; hiện tại bạn vẫn có thể chọn món thủ công bên dưới.
                   </div>
                 )}
 
@@ -446,4 +456,3 @@ const ScanRealPageV2 = () => {
 };
 
 export default ScanRealPageV2;
-

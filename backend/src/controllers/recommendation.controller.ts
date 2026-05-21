@@ -18,6 +18,23 @@ type FoodCandidate = {
   isVegan?: boolean;
   isGlutenFree?: boolean;
   popularity?: number | null;
+  mealTimeTags?: string[];
+  mealRoles?: string[];
+  goalTags?: string[];
+  cookingMethod?: string | null;
+  portionType?: string | null;
+};
+
+type FoodPlanningMeta = Pick<FoodCandidate, 'id' | 'mealTimeTags' | 'mealRoles' | 'goalTags' | 'cookingMethod' | 'portionType'>;
+
+const loadFoodPlanningMeta = async (foodIds: number[]) => {
+  if (!foodIds.length) return new Map<number, FoodPlanningMeta>();
+  const rows = await prisma.$queryRaw<FoodPlanningMeta[]>`
+    SELECT id, "mealTimeTags", "mealRoles", "goalTags", "cookingMethod", "portionType"
+    FROM "food_items"
+    WHERE id = ANY(${foodIds})
+  `;
+  return new Map(rows.map((row) => [row.id, row]));
 };
 
 type UserNutritionContext = {
@@ -221,6 +238,11 @@ const analyzeFood = (food: FoodCandidate) => {
 };
 
 const classifyFoodGroup = (food: FoodCandidate): FoodGroup => {
+  if (food.mealRoles?.includes('STAPLE')) return 'STAPLE';
+  if (food.mealRoles?.includes('DESSERT')) return 'DESSERT_FRUIT';
+  if (food.mealRoles?.includes('DRINK') || food.mealRoles?.includes('SOUP')) return 'DRINK_SOUP';
+  if (food.mealRoles?.includes('SIDE')) return 'VEGETABLE_HEALTHY';
+  if (food.mealRoles?.includes('MAIN')) return food.isVegetarian || food.isVegan ? 'VEGETARIAN' : 'PROTEIN_MAIN';
   const text = toFoodText(food);
   const calories = Number(food.calories || 0);
   const protein = Number(food.protein || 0);
@@ -250,6 +272,16 @@ const foodGroupLabel: Record<FoodGroup, string> = {
 
 const matchesSlotGroup = (food: FoodCandidate, group: FoodGroup, slot: MealSlot) => {
   const text = toFoodText(food);
+  const mealTypeFromSlot = slot.key.includes('breakfast')
+    ? 'BREAKFAST'
+    : slot.key.includes('lunch')
+      ? 'LUNCH'
+      : slot.key.includes('dinner')
+        ? 'DINNER'
+        : slot.key.includes('snack')
+          ? 'SNACK'
+          : '';
+  if (food.mealTimeTags?.length && mealTypeFromSlot && !food.mealTimeTags.includes(mealTypeFromSlot)) return false;
   const isLunchDinnerStapleSlot = slot.key.includes('lunch-staple') || slot.key.includes('dinner-staple');
   const isSnackStyle = includesAny(text, SNACK_MEAL_KEYWORDS);
   const isSideStaple = includesAny(text, SIDE_STAPLE_KEYWORDS);
@@ -592,6 +624,7 @@ const isMealBudgetCompatible = (goalType: GoalType | null, food: FoodCandidate, 
   if (portion.calories > budget.maxCalories) return false;
   if (budget.mealType === 'SNACK' && portion.calories > 220) return false;
   if (goalType === 'WEIGHT_LOSS') {
+    if (food.goalTags?.length && !food.goalTags.includes('WEIGHT_LOSS')) return false;
     if (a.isUnhealthyStyle) return false;
     if (portion.calories > budget.maxCalories) return false;
     if (portion.fat > (budget.maxFat || 18)) return false;
@@ -709,6 +742,7 @@ const isGoalCompatible = (goalType: GoalType | null, food: FoodCandidate) => {
   }
 
   if (goalType === 'WEIGHT_GAIN') {
+    if (food.goalTags?.length && !food.goalTags.includes('WEIGHT_GAIN')) return false;
     if (a.calories < 180) return false;
     if (a.protein < 8) return false;
     if (a.isUnhealthyStyle && a.calories > 700) return false;
@@ -716,6 +750,7 @@ const isGoalCompatible = (goalType: GoalType | null, food: FoodCandidate) => {
   }
 
   if (goalType === 'MUSCLE_GAIN') {
+    if (food.goalTags?.length && !food.goalTags.includes('MUSCLE_GAIN')) return false;
     if (a.protein < 12) return false;
     if (a.calories < 170) return false;
     if (a.isUnhealthyStyle && a.fat > 30) return false;
@@ -803,6 +838,8 @@ export const generateRecommendations = async (req: any, res: Response) => {
       }),
     ]);
 
+    const foodMeta = await loadFoodPlanningMeta(foods.map((food) => food.id));
+    const enrichedFoods: FoodCandidate[] = foods.map((food) => ({ ...food, ...(foodMeta.get(food.id) || {}) }));
     const goalType = activeGoal?.goalType || null;
     const dailyCalorieTarget = estimateDailyCalories(profile, activeGoal);
     const currentCalories = Number(todayNutrition?.totalCalories || 0);
@@ -873,7 +910,7 @@ export const generateRecommendations = async (req: any, res: Response) => {
           maxFat: budget.maxFat ? Math.max(4, Math.round(budget.maxFat * slot.calorieRatio)) : undefined,
         };
 
-        const candidates = foods
+        const candidates = enrichedFoods
           .filter((food) => !selectedFoodIds.has(food.id))
           .map((food) => {
             const group = classifyFoodGroup(food);

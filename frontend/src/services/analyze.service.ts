@@ -19,6 +19,7 @@ export interface ScanAnalyzeResult {
   foodItem: ScanFoodSuggestion | null;
   suggestions: ScanFoodSuggestion[];
   prediction: any;
+  fallback?: boolean;
 }
 
 export interface ScanHistoryItem {

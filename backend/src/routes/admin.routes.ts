@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { 
-  getAllUsers, getUserById, updateUserRole, deleteUser,
+  getAllUsers, createUserByAdmin, getUserById, updateUserRole, deleteUser,
   getAllFoodsAdmin, getFoodByIdAdmin, createFood, updateFood, deleteFood,
   getSystemStats, getAuditLogs,
   updateUserProfileByAdmin,
@@ -30,6 +30,7 @@ const router = Router();
 
 // User management
 router.get('/users', authMiddleware, adminMiddleware, getAllUsers);
+router.post('/users', authMiddleware, adminMiddleware, createUserByAdmin);
 router.get('/users/:id', authMiddleware, adminMiddleware, getUserById);
 router.put('/users/:id/role', authMiddleware, adminMiddleware, updateUserRole);
 router.delete('/users/:id', authMiddleware, adminMiddleware, deleteUser);

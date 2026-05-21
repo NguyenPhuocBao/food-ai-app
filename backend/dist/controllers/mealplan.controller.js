@@ -207,6 +207,20 @@ const resolveWeightLossCalories = (baseCalories, goalType, bmi, hasOverride = fa
     return Math.max(MIN_WEIGHT_LOSS_CALORIES, Math.round(baseCalories * 0.9));
 };
 const shouldDisableSnackForWeightLoss = (goalType, bmi) => goalType === client_1.GoalType.WEIGHT_LOSS && !!bmi && bmi >= WEIGHT_LOSS_OBESE_BMI_THRESHOLD;
+const loadFoodPlanningMeta = async (foodIds) => {
+    if (!foodIds.length)
+        return new Map();
+    const rows = await prisma.$queryRaw `
+    SELECT id, "mealTimeTags", "mealRoles", "goalTags", "cookingMethod", "portionType"
+    FROM "food_items"
+    WHERE id = ANY(${foodIds})
+  `;
+    return new Map(rows.map((row) => [row.id, row]));
+};
+const attachFoodPlanningMeta = async (foods) => {
+    const meta = await loadFoodPlanningMeta(foods.map((food) => food.id));
+    return foods.map((food) => ({ ...food, ...(meta.get(food.id) || {}) }));
+};
 const normalizeSearchText = (value) => (value || '')
     .toLowerCase()
     .normalize('NFD')
@@ -228,6 +242,32 @@ const FRUIT_DRINK_KEYWORDS = [
     'sua',
 ];
 const WHITE_RICE_KEYWORDS = ['com trang', 'white rice'];
+const STAPLE_DISH_KEYWORDS = [
+    'com',
+    'rice',
+    'gao',
+    'bun',
+    'pho',
+    'mien',
+    'mi ',
+    'my ',
+    'noodle',
+    'xoi',
+    'banh mi',
+    'bread',
+    'pasta',
+    'spaghetti',
+    'khoai',
+    'potato',
+    'oat',
+    'yen mach',
+];
+const GOAL_CATEGORY_KEYWORDS = {
+    weightLoss: ['giam can', 'weight loss', 'low calorie', 'healthy', 'eat clean', 'it calo'],
+    weightGain: ['tang can', 'weight gain', 'high calorie', 'bulk'],
+    muscleGain: ['tang co', 'muscle', 'gym', 'protein'],
+    vegetarian: ['chay', 'vegetarian', 'vegan'],
+};
 const SOUP_DISH_KEYWORDS = ['canh', 'soup', 'broth', 'nuoc dung', 'nuoc leo'];
 const HOTPOT_KEYWORDS = ['lau', 'hotpot'];
 const HEALTHY_COOKING_KEYWORDS = ['luoc', 'hap', 'nuong', 'boiled', 'steamed', 'grilled'];
@@ -250,21 +290,58 @@ const FRUIT_DESSERT_KEYWORDS = [
 ];
 const DRINK_KEYWORDS = ['nuoc', 'drink', 'juice', 'smoothie', 'tea', 'coffee', 'cafe', 'sinh to', 'tra', 'sua'];
 const toFoodSearchText = (food) => normalizeSearchText(`${food.name} ${food.category || ''} ${food.description || ''}`);
+const hasFoodRole = (food, role) => (food.mealRoles || []).includes(role);
+const hasFoodMealTime = (food, mealType) => (food.mealTimeTags || []).includes(mealType);
+const hasFoodGoalTag = (food, goalType) => !goalType || !(food.goalTags || []).length || (food.goalTags || []).includes(goalType);
 const isFruitOrDrinkFood = (food) => {
+    if (hasFoodRole(food, 'DESSERT') || hasFoodRole(food, 'DRINK'))
+        return true;
     const text = toFoodSearchText(food);
     return FRUIT_DRINK_KEYWORDS.some((keyword) => text.includes(keyword));
 };
 const isWhiteRiceFood = (food) => {
+    if (hasFoodRole(food, 'STAPLE') && normalizeSearchText(food.name).includes('com'))
+        return true;
     const text = toFoodSearchText(food);
     return WHITE_RICE_KEYWORDS.some((keyword) => text.includes(keyword));
 };
+const isStapleDishFood = (food) => {
+    if (hasFoodRole(food, 'STAPLE') || food.portionType === 'FULL_MEAL')
+        return true;
+    const text = toFoodSearchText(food);
+    return STAPLE_DISH_KEYWORDS.some((keyword) => text.includes(keyword));
+};
+const isGoalCategoryCompatible = (food, goalType) => {
+    if (!goalType)
+        return true;
+    if (!hasFoodGoalTag(food, goalType))
+        return false;
+    const text = toFoodSearchText(food);
+    const isWeightGainTagged = GOAL_CATEGORY_KEYWORDS.weightGain.some((keyword) => text.includes(keyword));
+    const isWeightLossTagged = GOAL_CATEGORY_KEYWORDS.weightLoss.some((keyword) => text.includes(keyword));
+    const isMuscleTagged = GOAL_CATEGORY_KEYWORDS.muscleGain.some((keyword) => text.includes(keyword));
+    if (goalType === client_1.GoalType.WEIGHT_LOSS) {
+        return !isWeightGainTagged && !isMuscleTagged;
+    }
+    if (goalType === client_1.GoalType.WEIGHT_GAIN) {
+        return !isWeightLossTagged;
+    }
+    if (goalType === client_1.GoalType.MUSCLE_GAIN) {
+        return !isWeightLossTagged || isMuscleTagged;
+    }
+    return true;
+};
 const isFruitDessertFood = (food) => {
+    if (hasFoodRole(food, 'DESSERT'))
+        return true;
     const text = toFoodSearchText(food);
     const isFruit = FRUIT_DESSERT_KEYWORDS.some((keyword) => text.includes(keyword));
     const isDrink = DRINK_KEYWORDS.some((keyword) => text.includes(keyword));
     return isFruit && !isDrink;
 };
 const isSoupDishFood = (food) => {
+    if (hasFoodRole(food, 'SOUP'))
+        return true;
     const text = toFoodSearchText(food);
     return SOUP_DISH_KEYWORDS.some((keyword) => text.includes(keyword));
 };
@@ -273,10 +350,14 @@ const isHotpotFood = (food) => {
     return HOTPOT_KEYWORDS.some((keyword) => text.includes(keyword));
 };
 const isHealthyCookingFood = (food) => {
+    if (['BOILED', 'STEAMED', 'GRILLED', 'RAW', 'SOUP'].includes(food.cookingMethod || ''))
+        return true;
     const text = toFoodSearchText(food);
     return HEALTHY_COOKING_KEYWORDS.some((keyword) => text.includes(keyword));
 };
 const isOilyCookingFood = (food) => {
+    if (['FRIED', 'STIR_FRIED'].includes(food.cookingMethod || ''))
+        return true;
     const text = toFoodSearchText(food);
     return OILY_COOKING_KEYWORDS.some((keyword) => text.includes(keyword));
 };
@@ -326,6 +407,8 @@ const pickLeastUsedFood = (candidates, usedCounter, excludedIds = new Set()) => 
 const resolveMealQuantityByGoal = (food, goalType, rawQuantity) => {
     if (isFruitOrDrinkFood(food))
         return 1;
+    if (goalType === client_1.GoalType.WEIGHT_LOSS && isStapleDishFood(food))
+        return 0.5;
     if (goalType === client_1.GoalType.WEIGHT_LOSS)
         return 0.5;
     if (goalType === client_1.GoalType.MAINTENANCE)
@@ -351,6 +434,8 @@ const filterFoodsByGoal = (foods, goalType, mealType) => {
         const carbs = Number(food.carbs || 0);
         const protein = Number(food.protein || 0);
         if (goalType === client_1.GoalType.WEIGHT_LOSS) {
+            if (!isGoalCategoryCompatible(food, goalType))
+                return false;
             if (calories <= 0)
                 return false;
             if (mealType === client_1.MealType.SNACK && calories > 320)
@@ -369,12 +454,16 @@ const filterFoodsByGoal = (foods, goalType, mealType) => {
                 return false;
         }
         if (goalType === client_1.GoalType.WEIGHT_GAIN) {
+            if (!isGoalCategoryCompatible(food, goalType))
+                return false;
             if (calories < 180)
                 return false;
             if (protein < 6)
                 return false;
         }
         if (goalType === client_1.GoalType.MUSCLE_GAIN) {
+            if (!isGoalCategoryCompatible(food, goalType))
+                return false;
             if (protein < 12)
                 return false;
             if (calories < 150)
@@ -402,12 +491,16 @@ const goalFitPenalty = (food, goalType, mealType) => {
     const text = normalizeSearchText(`${food.name} ${food.category || ''} ${food.description || ''}`);
     let penalty = 0;
     if (goalType === client_1.GoalType.WEIGHT_LOSS) {
+        if (!isGoalCategoryCompatible(food, goalType))
+            penalty += 260;
         if (proteinDensity < 0.08)
             penalty += 100;
         if (fatRatioByCalories > 0.38)
             penalty += 90;
         if (carbRatioByCalories > 0.55)
             penalty += 70;
+        if (mealType === client_1.MealType.DINNER && isStapleDishFood(food))
+            penalty += 130;
         if (mealType === client_1.MealType.SNACK && calories > 260)
             penalty += 110;
         if (matchKeyword(text, GOAL_KEYWORDS.weightLossPositive))
@@ -422,6 +515,8 @@ const goalFitPenalty = (food, goalType, mealType) => {
             penalty += 220;
     }
     if (goalType === client_1.GoalType.WEIGHT_GAIN) {
+        if (!isGoalCategoryCompatible(food, goalType))
+            penalty += 180;
         if (calories < 260)
             penalty += 80;
         if (protein < 12)
@@ -432,6 +527,8 @@ const goalFitPenalty = (food, goalType, mealType) => {
             penalty -= 55;
     }
     if (goalType === client_1.GoalType.MUSCLE_GAIN) {
+        if (!isGoalCategoryCompatible(food, goalType))
+            penalty += 180;
         if (proteinDensity < 0.095)
             penalty += 120;
         if (protein < 18)
@@ -443,7 +540,7 @@ const goalFitPenalty = (food, goalType, mealType) => {
     }
     return penalty;
 };
-const pickFoodFromPool = (pool, mealType, target, usedCounter, goalType) => {
+const pickFoodFromPool = (pool, mealType, target, usedCounter, goalType, mealTypeUsedCounter) => {
     if (!pool.length)
         return null;
     const scored = pool
@@ -458,19 +555,20 @@ const pickFoodFromPool = (pool, mealType, target, usedCounter, goalType) => {
         const proteinGap = Math.abs(predictedProtein - target.protein) * 5;
         const fatGap = Math.abs(predictedFat - target.fat) * 4;
         const carbsGap = Math.abs(predictedCarbs - target.carbs) * 3;
-        const varietyPenalty = used * 120;
+        const sameMealUsed = mealTypeUsedCounter?.get(food.id) || 0;
+        const varietyPenalty = used * 180 + sameMealUsed * 260;
         const snackPenalty = mealType === client_1.MealType.SNACK && Number(food.calories || 0) > 450 ? 180 : 0;
         const fitPenalty = goalFitPenalty(food, goalType, mealType);
         const score = calorieGap + proteinGap + fatGap + carbsGap + varietyPenalty + snackPenalty + fitPenalty;
         return { food, score };
     })
         .sort((a, b) => a.score - b.score);
-    const topCandidates = scored.slice(0, Math.min(3, scored.length));
+    const topCandidates = scored.slice(0, Math.min(5, scored.length));
     if (!topCandidates.length)
         return null;
     return topCandidates[Math.floor(Math.random() * topCandidates.length)].food;
 };
-const pickFoodForMeal = (foods, mealType, target, usedCounter, goalType) => {
+const pickFoodForMeal = (foods, mealType, target, usedCounter, goalType, mealTypeUsedCounter) => {
     const keywordsByMeal = {
         [client_1.MealType.BREAKFAST]: ['sang', 'breakfast'],
         [client_1.MealType.LUNCH]: ['trua', 'lunch'],
@@ -478,13 +576,14 @@ const pickFoodForMeal = (foods, mealType, target, usedCounter, goalType) => {
         [client_1.MealType.SNACK]: ['snack', 'fruit', 'dessert'],
     };
     const keywords = keywordsByMeal[mealType];
+    const taggedForMeal = foods.filter((food) => hasFoodMealTime(food, mealType));
     const byCategory = foods.filter((food) => {
         const category = (food.category || '').toLowerCase();
         return keywords.some((keyword) => category.includes(keyword));
     });
-    const basePool = byCategory.length >= 5 ? byCategory : foods;
+    const basePool = taggedForMeal.length >= 3 ? taggedForMeal : byCategory.length >= 5 ? byCategory : foods;
     const pool = filterFoodsByGoal(basePool, goalType, mealType);
-    return pickFoodFromPool(pool, mealType, target, usedCounter, goalType);
+    return pickFoodFromPool(pool, mealType, target, usedCounter, goalType, mealTypeUsedCounter);
 };
 const getAppDayOfWeek = (value) => {
     const [year, month, day] = (0, timezone_util_1.toAppDateKey)(value).split('-').map(Number);
@@ -1071,6 +1170,7 @@ const generateAutoMealPlan = async (req, res) => {
                 },
             });
         }
+        foods = await attachFoodPlanningMeta(foods);
         if (!foods.length) {
             return res.status(400).json({ error: 'No food data available to generate plan' });
         }
@@ -1090,6 +1190,7 @@ const generateAutoMealPlan = async (req, res) => {
         const maxHotpotWeeks = selectedGoalType === client_1.GoalType.MAINTENANCE ? Math.max(1, Math.ceil(totalDays / 7)) : 0;
         const hotpotWeekUsed = new Set();
         const usedCounter = new Map();
+        const usedByMealType = new Map();
         const includeSnackResolved = shouldDisableSnackForWeightLoss(selectedGoalType, bmi)
             ? false
             : Boolean(includeSnack);
@@ -1097,9 +1198,15 @@ const generateAutoMealPlan = async (req, res) => {
             ? AUTO_MEAL_TYPES
             : AUTO_MEAL_TYPES.filter((mealType) => mealType !== client_1.MealType.SNACK);
         const detailsData = [];
-        const addDetail = (dayOfWeek, mealType, food, quantity) => {
+        const addDetail = (dayOfWeek, mealType, food, quantity, options) => {
             if (!food || quantity <= 0)
-                return;
+                return false;
+            const addedCalories = Number(food.calories || 0) * quantity;
+            if (options?.maxMealCalories &&
+                Number.isFinite(addedCalories) &&
+                (options.currentMealCalories || 0) + addedCalories > options.maxMealCalories) {
+                return false;
+            }
             detailsData.push({
                 dayOfWeek,
                 mealType,
@@ -1107,6 +1214,10 @@ const generateAutoMealPlan = async (req, res) => {
                 quantity: Number(quantity.toFixed(2)),
             });
             usedCounter.set(food.id, (usedCounter.get(food.id) || 0) + 1);
+            const mealCounter = usedByMealType.get(mealType) || new Map();
+            mealCounter.set(food.id, (mealCounter.get(food.id) || 0) + 1);
+            usedByMealType.set(mealType, mealCounter);
+            return true;
         };
         for (let dayOffset = 0; dayOffset < totalDays; dayOffset += 1) {
             const currentDate = addDays(computedStart, dayOffset);
@@ -1115,15 +1226,46 @@ const generateAutoMealPlan = async (req, res) => {
             for (const mealType of mealTypes) {
                 const targetMeal = toMealMacroTargets(dailyMacroTargets, mealType);
                 const isLunchOrDinner = mealType === client_1.MealType.LUNCH || mealType === client_1.MealType.DINNER;
+                const maxMealCalories = selectedGoalType === client_1.GoalType.WEIGHT_LOSS
+                    ? targetMeal.calories * 0.95
+                    : selectedGoalType === client_1.GoalType.MAINTENANCE
+                        ? targetMeal.calories * 1.05
+                        : targetMeal.calories * 1.12;
+                let mealPlannedCalories = 0;
+                let mealComponentCount = 0;
+                const maxMealComponents = selectedGoalType === client_1.GoalType.WEIGHT_LOSS
+                    ? (isLunchOrDinner ? 2 : 1)
+                    : (isLunchOrDinner ? 4 : 1);
+                const tryAddDetail = (food, quantity) => {
+                    if (!food || mealComponentCount >= maxMealComponents)
+                        return false;
+                    const added = Number(food.calories || 0) * quantity;
+                    const didAdd = addDetail(dayOfWeek, mealType, food, quantity, {
+                        maxMealCalories,
+                        currentMealCalories: mealPlannedCalories,
+                    });
+                    if (didAdd) {
+                        mealPlannedCalories += Number.isFinite(added) ? added : 0;
+                        mealComponentCount += 1;
+                    }
+                    return didAdd;
+                };
                 if (isLunchOrDinner) {
                     const selectedIds = new Set();
                     const goalPool = filterFoodsByGoal(foods, selectedGoalType, mealType);
-                    const rawDryPool = goalPool.filter((food) => (!isWhiteRiceFood(food) &&
+                    const mealTypeUsedCounter = usedByMealType.get(mealType);
+                    const rawDryPool = goalPool.filter((food) => ((!food.mealTimeTags?.length || hasFoodMealTime(food, mealType)) &&
+                        (hasFoodRole(food, 'MAIN') || hasFoodRole(food, 'SIDE') || !food.mealRoles?.length) &&
+                        !isWhiteRiceFood(food) &&
+                        !isStapleDishFood(food) &&
                         !isFruitDessertFood(food) &&
                         !isFruitOrDrinkFood(food) &&
                         !isSoupDishFood(food) &&
                         !isHotpotFood(food)));
-                    const dryFallbackPool = foods.filter((food) => (!isWhiteRiceFood(food) &&
+                    const dryFallbackPool = foods.filter((food) => ((!food.mealTimeTags?.length || hasFoodMealTime(food, mealType)) &&
+                        (hasFoodRole(food, 'MAIN') || hasFoodRole(food, 'SIDE') || !food.mealRoles?.length) &&
+                        !isWhiteRiceFood(food) &&
+                        !isStapleDishFood(food) &&
                         !isFruitDessertFood(food) &&
                         !isFruitOrDrinkFood(food) &&
                         !isSoupDishFood(food) &&
@@ -1140,16 +1282,18 @@ const generateAutoMealPlan = async (req, res) => {
                                 dryPool = lessOilPool;
                         }
                     }
-                    const dryDish = pickFoodFromPool(dryPool.length ? dryPool : (dryFallbackPool.length ? dryFallbackPool : goalPool), mealType, scaleMacroTargets(targetMeal, 0.45), usedCounter, selectedGoalType);
+                    const dryDish = pickFoodFromPool(dryPool.length ? dryPool : (dryFallbackPool.length ? dryFallbackPool : goalPool), mealType, scaleMacroTargets(targetMeal, 0.45), usedCounter, selectedGoalType, mealTypeUsedCounter);
                     if (dryDish) {
                         selectedIds.add(dryDish.id);
-                        addDetail(dayOfWeek, mealType, dryDish, resolveDryDishPortion(selectedGoalType));
+                        tryAddDetail(dryDish, resolveDryDishPortion(selectedGoalType));
                     }
                     const baseSoupPool = goalPool.filter((food) => (!selectedIds.has(food.id) &&
+                        (!food.mealTimeTags?.length || hasFoodMealTime(food, mealType)) &&
                         !isWhiteRiceFood(food) &&
                         !isFruitDessertFood(food) &&
                         (isSoupDishFood(food) || isHotpotFood(food))));
                     const soupFallbackPool = foods.filter((food) => (!selectedIds.has(food.id) &&
+                        (!food.mealTimeTags?.length || hasFoodMealTime(food, mealType)) &&
                         !isWhiteRiceFood(food) &&
                         !isFruitDessertFood(food) &&
                         (isSoupDishFood(food) || isHotpotFood(food))));
@@ -1174,41 +1318,48 @@ const generateAutoMealPlan = async (req, res) => {
                     }
                     const soupDish = pickFoodFromPool(soupPool.length
                         ? soupPool
-                        : (soupFallbackPool.length ? soupFallbackPool : goalPool.filter((food) => !selectedIds.has(food.id))), mealType, scaleMacroTargets(targetMeal, 0.25), usedCounter, selectedGoalType);
+                        : (soupFallbackPool.length ? soupFallbackPool : goalPool.filter((food) => !selectedIds.has(food.id))), mealType, scaleMacroTargets(targetMeal, 0.25), usedCounter, selectedGoalType, mealTypeUsedCounter);
                     if (soupDish) {
                         selectedIds.add(soupDish.id);
-                        addDetail(dayOfWeek, mealType, soupDish, resolveSoupDishPortion(selectedGoalType));
+                        tryAddDetail(soupDish, resolveSoupDishPortion(selectedGoalType));
                         if (selectedGoalType === client_1.GoalType.MAINTENANCE && isHotpotFood(soupDish)) {
                             hotpotWeekUsed.add(weekIndex);
                         }
                     }
-                    if (whiteRiceFood && !selectedIds.has(whiteRiceFood.id)) {
+                    const mealAlreadyHasStaple = [dryDish, soupDish].some((food) => food && isStapleDishFood(food));
+                    const shouldAddRiceSide = whiteRiceFood &&
+                        !selectedIds.has(whiteRiceFood.id) &&
+                        !mealAlreadyHasStaple &&
+                        selectedGoalType !== client_1.GoalType.WEIGHT_LOSS;
+                    if (shouldAddRiceSide) {
                         selectedIds.add(whiteRiceFood.id);
-                        addDetail(dayOfWeek, mealType, whiteRiceFood, resolveRiceSidePortion(selectedGoalType));
+                        tryAddDetail(whiteRiceFood, resolveRiceSidePortion(selectedGoalType));
                     }
                     const dessertPoolBase = fruitDessertFoods.length ? fruitDessertFoods : fruitOrDrinkDessertFoods;
-                    const dessert = pickLeastUsedFood(dessertPoolBase, usedCounter, selectedIds);
+                    const dessert = selectedGoalType === client_1.GoalType.WEIGHT_LOSS
+                        ? null
+                        : pickLeastUsedFood(dessertPoolBase, usedCounter, selectedIds);
                     if (dessert) {
                         selectedIds.add(dessert.id);
-                        addDetail(dayOfWeek, mealType, dessert, resolveFruitDessertPortion(selectedGoalType));
+                        tryAddDetail(dessert, resolveFruitDessertPortion(selectedGoalType));
                     }
                     if (selectedGoalType === client_1.GoalType.WEIGHT_GAIN) {
                         const extraMainPool = rawDryPool.filter((food) => !selectedIds.has(food.id));
-                        const extraMainDish = pickFoodFromPool(extraMainPool, mealType, scaleMacroTargets(targetMeal, 0.35), usedCounter, selectedGoalType);
+                        const extraMainDish = pickFoodFromPool(extraMainPool, mealType, scaleMacroTargets(targetMeal, 0.35), usedCounter, selectedGoalType, mealTypeUsedCounter);
                         if (extraMainDish) {
                             selectedIds.add(extraMainDish.id);
-                            addDetail(dayOfWeek, mealType, extraMainDish, resolveExtraMainPortion(selectedGoalType));
+                            tryAddDetail(extraMainDish, resolveExtraMainPortion(selectedGoalType));
                         }
                     }
                     continue;
                 }
-                const selectedFood = pickFoodForMeal(foods, mealType, targetMeal, usedCounter, selectedGoalType);
+                const selectedFood = pickFoodForMeal(foods, mealType, targetMeal, usedCounter, selectedGoalType, usedByMealType.get(mealType));
                 if (!selectedFood) {
                     continue;
                 }
                 const rawQuantity = targetMeal.calories / Number(selectedFood.calories || 1);
                 const quantity = resolveMealQuantityByGoal(selectedFood, selectedGoalType, rawQuantity);
-                addDetail(dayOfWeek, mealType, selectedFood, quantity);
+                tryAddDetail(selectedFood, quantity);
             }
         }
         const fallbackName = `Auto Plan ${(0, timezone_util_1.toAppDateKey)(computedStart)} - ${(0, timezone_util_1.toAppDateKey)(computedEnd)}`;

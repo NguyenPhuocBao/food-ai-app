@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Upload, X } from 'lucide-react';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
@@ -12,6 +12,11 @@ interface ImageUploadProps {
 const ImageUpload = ({ foodId, currentImage, onUploadSuccess }: ImageUploadProps) => {
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState(currentImage);
+
+  useEffect(() => {
+    setPreview(currentImage);
+    setUploading(false);
+  }, [foodId, currentImage]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

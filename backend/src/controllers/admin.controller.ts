@@ -18,6 +18,55 @@ const toLocalDateKey = (date: Date) => toAppDateKey(date);
 const SUPPORT_PREFIX = 'SUPPORT_';
 const SUPPORT_STATUS_OPEN = 'SUPPORT_OPEN';
 const SUPPORT_STATUS_PENDING = 'SUPPORT_PENDING';
+const normalizeSlug = (value: string) =>
+  value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[đĐ]/g, 'd')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+
+type FoodPlanningMeta = {
+  id: number;
+  mealTimeTags: string[];
+  mealRoles: string[];
+  goalTags: string[];
+  cookingMethod: string | null;
+  portionType: string | null;
+};
+
+const loadFoodPlanningMeta = async (foodIds: number[]) => {
+  if (!foodIds.length) return new Map<number, FoodPlanningMeta>();
+  const rows = await prisma.$queryRaw<FoodPlanningMeta[]>`
+    SELECT id, "mealTimeTags", "mealRoles", "goalTags", "cookingMethod", "portionType"
+    FROM "food_items"
+    WHERE id = ANY(${foodIds})
+  `;
+  return new Map(rows.map((row) => [row.id, row]));
+};
+
+const saveFoodPlanningMeta = async (
+  foodId: number,
+  data: {
+    mealTimeTags?: unknown;
+    mealRoles?: unknown;
+    goalTags?: unknown;
+    cookingMethod?: unknown;
+    portionType?: unknown;
+  },
+) => {
+  await prisma.$executeRaw`
+    UPDATE "food_items"
+    SET
+      "mealTimeTags" = ${Array.isArray(data.mealTimeTags) ? data.mealTimeTags : []}::text[],
+      "mealRoles" = ${Array.isArray(data.mealRoles) ? data.mealRoles : []}::text[],
+      "goalTags" = ${Array.isArray(data.goalTags) ? data.goalTags : []}::text[],
+      "cookingMethod" = ${data.cookingMethod ? String(data.cookingMethod) : null},
+      "portionType" = ${data.portionType ? String(data.portionType) : null}
+    WHERE id = ${foodId}
+  `;
+};
 const SUPPORT_STATUS_CLOSED = 'SUPPORT_CLOSED';
 
 export const getAllUsers = async (req: Request, res: Response) => {
@@ -54,6 +103,62 @@ export const getAllUsers = async (req: Request, res: Response) => {
         activeWindowMinutes: getActiveWindowMinutes(),
       },
     });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const createUserByAdmin = async (req: Request, res: Response) => {
+  try {
+    const name = String(req.body?.name || '').trim();
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    const password = String(req.body?.password || '');
+    const role = req.body?.role || Role.USER;
+    const isActive = typeof req.body?.isActive === 'boolean' ? req.body.isActive : true;
+
+    if (!name) return res.status(400).json({ error: 'Name is required' });
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: 'Valid email is required' });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+    if (!Object.values(Role).includes(role)) {
+      return res.status(400).json({ error: 'Invalid role' });
+    }
+
+    const existingUser = await prisma.user.findUnique({ where: { email } });
+    if (existingUser) return res.status(409).json({ error: 'Email already exists' });
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const user = await prisma.user.create({
+      data: {
+        name,
+        email,
+        password: hashedPassword,
+        role: role as Role,
+        isActive,
+        profile: { create: {} },
+      },
+      include: {
+        profile: true,
+        _count: { select: { meals: true, scanHistory: true } },
+      },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        userId: (req as any).user.id,
+        action: 'CREATE_USER',
+        entity: 'User',
+        entityId: user.id,
+        newData: { name: user.name, email: user.email, role: user.role, isActive: user.isActive },
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+      },
+    });
+
+    res.status(201).json({ success: true, data: { ...user, isOnline: false } });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -151,10 +256,11 @@ export const getAllFoodsAdmin = async (req: Request, res: Response) => {
       include: { recipe: true, _count: { select: { meals: true, favorites: true, reviews: true } } },
       orderBy: { createdAt: 'desc' },
     });
+    const meta = await loadFoodPlanningMeta(foods.map((food) => food.id));
     const total = await prisma.foodItem.count({ where });
     res.json({
       success: true,
-      data: foods,
+      data: foods.map((food) => ({ ...food, ...(meta.get(food.id) || {}) })),
       pagination: { page: Number(page), limit: Number(limit), total, totalPages: Math.ceil(total / Number(limit)) },
     });
   } catch (error: any) {
@@ -212,7 +318,8 @@ export const getFoodByIdAdmin = async (req: Request, res: Response) => {
     });
 
     if (!food) return res.status(404).json({ error: 'Food not found' });
-    return res.json({ success: true, data: food });
+    const meta = await loadFoodPlanningMeta([food.id]);
+    return res.json({ success: true, data: { ...food, ...(meta.get(food.id) || {}) } });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }
@@ -220,16 +327,48 @@ export const getFoodByIdAdmin = async (req: Request, res: Response) => {
 
 export const createFood = async (req: Request, res: Response) => {
   try {
-    const { name, category, description, calories, protein, fat, carbs, isVegetarian, isVegan, isGlutenFree } = req.body;
-    if (!name || !category || !calories) return res.status(400).json({ error: 'Missing required fields' });
-    const slug = name.toLowerCase().replace(/ /g, '-').replace(/[đĐ]/g, 'd');
+    const {
+      name,
+      category,
+      description,
+      calories,
+      protein,
+      fat,
+      carbs,
+      isVegetarian,
+      isVegan,
+      isGlutenFree,
+      mealTimeTags,
+      mealRoles,
+      goalTags,
+      cookingMethod,
+      portionType,
+    } = req.body;
+    const normalizedName = String(name || '').trim();
+    const normalizedCategory = String(category || '').trim();
+    const parsedCalories = Number(calories);
+    if (!normalizedName || !normalizedCategory || !Number.isFinite(parsedCalories) || parsedCalories <= 0) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    const existingByName = await prisma.foodItem.findUnique({ where: { name: normalizedName } });
+    if (existingByName) return res.status(409).json({ error: 'Food name already exists' });
+
+    const baseSlug = normalizeSlug(normalizedName) || `food-${Date.now()}`;
+    let slug = baseSlug;
+    let suffix = 1;
+    while (await prisma.foodItem.findUnique({ where: { slug } })) {
+      suffix += 1;
+      slug = `${baseSlug}-${suffix}`;
+    }
+
     const food = await prisma.foodItem.create({
       data: {
-        name,
+        name: normalizedName,
         slug,
-        category,
+        category: normalizedCategory,
         description,
-        calories: parseInt(calories),
+        calories: Math.round(parsedCalories),
         protein: parseFloat(protein) || 0,
         fat: parseFloat(fat) || 0,
         carbs: parseFloat(carbs) || 0,
@@ -238,16 +377,18 @@ export const createFood = async (req: Request, res: Response) => {
         isGlutenFree: isGlutenFree || false,
       },
     });
+    await saveFoodPlanningMeta(food.id, { mealTimeTags, mealRoles, goalTags, cookingMethod, portionType });
+    const meta = await loadFoodPlanningMeta([food.id]);
     await prisma.auditLog.create({
       data: {
         userId: (req as any).user.id,
         action: 'CREATE_FOOD',
         entity: 'FoodItem',
         entityId: food.id,
-        newData: { name, category },
+        newData: { name: normalizedName, category: normalizedCategory },
       },
     });
-    res.json({ success: true, data: food });
+    res.status(201).json({ success: true, data: { ...food, ...(meta.get(food.id) || {}) } });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -256,7 +397,23 @@ export const createFood = async (req: Request, res: Response) => {
 export const updateFood = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { name, category, description, calories, protein, fat, carbs, isVegetarian, isVegan, isGlutenFree } = req.body;
+    const {
+      name,
+      category,
+      description,
+      calories,
+      protein,
+      fat,
+      carbs,
+      isVegetarian,
+      isVegan,
+      isGlutenFree,
+      mealTimeTags,
+      mealRoles,
+      goalTags,
+      cookingMethod,
+      portionType,
+    } = req.body;
     const oldFood = await prisma.foodItem.findUnique({ where: { id: parseInt(id) } });
     if (!oldFood) return res.status(404).json({ error: 'Food not found' });
     const slug = name ? name.toLowerCase().replace(/ /g, '-').replace(/[đĐ]/g, 'd') : undefined;
@@ -276,6 +433,7 @@ export const updateFood = async (req: Request, res: Response) => {
         isGlutenFree,
       },
     });
+    await saveFoodPlanningMeta(food.id, { mealTimeTags, mealRoles, goalTags, cookingMethod, portionType });
     await prisma.auditLog.create({
       data: {
         userId: (req as any).user.id,
@@ -1132,5 +1290,3 @@ export const broadcastNotification = async (req: Request, res: Response) => {
     res.status(500).json({ error: error.message });
   }
 };
-
-

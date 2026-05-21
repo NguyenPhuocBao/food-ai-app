@@ -62,6 +62,11 @@ export interface FoodItem {
   isVegetarian: boolean;
   isVegan: boolean;
   isGlutenFree?: boolean;
+  mealTimeTags?: string[];
+  mealRoles?: string[];
+  goalTags?: string[];
+  cookingMethod?: string;
+  portionType?: string;
   popularity: number;
   isCustom?: boolean;
   recipe?: Recipe;
