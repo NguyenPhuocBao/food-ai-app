@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.getTrends = exports.getMonthlyStats = exports.getWeeklyStats = exports.getDailyStats = exports.getNutritionOverview = void 0;
 const client_1 = require("@prisma/client");
 const timezone_util_1 = require("../utils/timezone.util");
+const nutrition_service_1 = require("../services/nutrition.service");
 const prisma = new client_1.PrismaClient();
 const VN_UTC_OFFSET_HOURS = (0, timezone_util_1.getAppUtcOffsetHours)();
 const toVnDateKey = timezone_util_1.toAppDateKey;
@@ -186,9 +187,7 @@ const getDailyStats = async (req, res) => {
             ? parseInt(req.query.userId)
             : req.user.id;
         const targetDate = toVnDayStart(date ? String(date) : new Date());
-        const nutrition = await prisma.dailyNutrition.findUnique({
-            where: { userId_date: { userId, date: targetDate } }
-        });
+        const nutrition = await (0, nutrition_service_1.recalculateDailyNutrition)(userId, targetDate);
         const profile = await prisma.userProfile.findUnique({ where: { userId } });
         const goal = profile ? {
             calories: profile.targetCalories,

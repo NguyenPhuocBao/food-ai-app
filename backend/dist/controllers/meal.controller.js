@@ -48,9 +48,7 @@ const getMealsByDate = async (req, res) => {
             include: { food: true },
             orderBy: { eatenAt: 'asc' }
         });
-        const nutrition = await prisma.dailyNutrition.findUnique({
-            where: { userId_date: { userId, date: start } }
-        });
+        const nutrition = await (0, nutrition_service_1.recalculateDailyNutrition)(userId, start);
         res.json({ success: true, data: { meals, nutrition } });
     }
     catch (error) {

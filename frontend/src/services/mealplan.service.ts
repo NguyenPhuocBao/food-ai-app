@@ -90,6 +90,11 @@ export const getMealPlans = async (): Promise<MealPlan[]> => {
   return response.data.data;
 };
 
+export const getMealPlanById = async (planId: number): Promise<MealPlan> => {
+  const response = await api.get(`/meal-plans/${planId}`);
+  return response.data.data;
+};
+
 export const getActiveMealPlan = async (): Promise<MealPlan | null> => {
   const response = await api.get('/meal-plans/active');
   return response.data.data;
@@ -110,6 +115,19 @@ export const addDetailToMealPlan = async (
 ): Promise<MealPlanDetail> => {
   const response = await api.post(`/meal-plans/${planId}/details`, detail);
   return response.data.data;
+};
+
+export const updateMealPlanDetail = async (
+  planId: number,
+  detailId: number,
+  detail: { foodId?: number; mealType?: string; dayOfWeek?: number; quantity?: number }
+): Promise<MealPlanDetail> => {
+  const response = await api.patch(`/meal-plans/${planId}/details/${detailId}`, detail);
+  return response.data.data;
+};
+
+export const deleteDetailFromMealPlan = async (planId: number, detailId: number): Promise<void> => {
+  await api.delete(`/meal-plans/${planId}/details/${detailId}`);
 };
 
 export const setActiveMealPlan = async (planId: number): Promise<MealPlan> => {

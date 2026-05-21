@@ -8,17 +8,12 @@ const openai_1 = __importDefault(require("openai"));
 const timezone_util_1 = require("../utils/timezone.util");
 const chatbot_training_defaults_1 = require("../data/chatbot-training-defaults");
 const prisma_1 = __importDefault(require("../lib/prisma"));
-const openai = new openai_1.default({
-    apiKey: process.env.OPENAI_API_KEY,
-});
 const GROK_API_KEY = process.env.XAI_API_KEY || process.env.GROQ_API_KEY;
 const grokBaseURL = (process.env.XAI_BASE_URL || process.env.GROQ_BASE_URL || 'https://api.x.ai/v1').replace(/\/+$/, '');
 const isGroqCompatibleEndpoint = grokBaseURL.toLowerCase().includes('groq.com');
 const GROK_PROVIDER_LABEL = isGroqCompatibleEndpoint ? 'Groq (OpenAI-compatible)' : 'xAI Grok';
-const grokClient = new openai_1.default({
-    apiKey: GROK_API_KEY,
-    baseURL: grokBaseURL,
-});
+let openaiClient = null;
+let grokClient = null;
 const rawProviderMode = (process.env.CHAT_AI_PROVIDER || 'auto').toLowerCase();
 const CHAT_AI_PROVIDER = rawProviderMode === 'gemini' || rawProviderMode === 'openai' || rawProviderMode === 'retrieval' || rawProviderMode === 'grok'
     ? rawProviderMode
@@ -146,6 +141,21 @@ const isRetrievalOnlyMode = CHAT_AI_PROVIDER === 'retrieval';
 const hasGrok = () => Boolean(GROK_API_KEY);
 const hasGemini = () => Boolean(process.env.GEMINI_API_KEY);
 const hasOpenAI = () => Boolean(process.env.OPENAI_API_KEY);
+const getOpenAIClient = () => {
+    if (!process.env.OPENAI_API_KEY)
+        throw new Error('OPENAI_API_KEY is not configured');
+    openaiClient ?? (openaiClient = new openai_1.default({ apiKey: process.env.OPENAI_API_KEY }));
+    return openaiClient;
+};
+const getGrokClient = () => {
+    if (!GROK_API_KEY)
+        throw new Error('XAI_API_KEY or GROQ_API_KEY is not configured');
+    grokClient ?? (grokClient = new openai_1.default({
+        apiKey: GROK_API_KEY,
+        baseURL: grokBaseURL,
+    }));
+    return grokClient;
+};
 const hasAnyChatProvider = () => isRetrievalOnlyMode || hasGrok() || hasGemini() || hasOpenAI();
 const getProviderChain = () => {
     if (CHAT_AI_PROVIDER === 'retrieval') {
@@ -520,7 +530,7 @@ const generateWithOpenAI = async (systemPrompt, turns) => {
             content: turn.content,
         })),
     ];
-    const completion = await openai.chat.completions.create({
+    const completion = await getOpenAIClient().chat.completions.create({
         model: CHAT_MODEL,
         messages,
         temperature: 0.7,
@@ -538,7 +548,7 @@ const generateWithGrok = async (systemPrompt, turns) => {
             content: turn.content,
         })),
     ];
-    const completion = await grokClient.chat.completions.create({
+    const completion = await getGrokClient().chat.completions.create({
         model: GROK_MODEL,
         messages,
         temperature: 0.7,

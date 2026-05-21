@@ -5,11 +5,85 @@ const client_1 = require("@prisma/client");
 const health_engine_service_1 = require("../services/health-engine.service");
 const personalization_service_1 = require("../services/personalization.service");
 const timezone_util_1 = require("../utils/timezone.util");
+const email_service_1 = require("../services/email.service");
 const prisma = new client_1.PrismaClient();
 const OFFSET_HOURS = (0, timezone_util_1.getAppUtcOffsetHours)();
 const resolveUserId = (req) => req.user.role === 'ADMIN' && req.query.userId
     ? parseInt(req.query.userId, 10)
     : req.user.id;
+const REMINDER_SETTING_GROUP = 'runtime';
+const DAILY_ENGAGEMENT_KEY_PREFIX = 'daily_engagement';
+const markEngagementReminderSent = async (key) => {
+    await prisma.systemSetting.upsert({
+        where: { key },
+        update: {
+            value: String(Date.now()),
+            group: REMINDER_SETTING_GROUP,
+            updatedAt: new Date(),
+        },
+        create: {
+            key,
+            value: String(Date.now()),
+            group: REMINDER_SETTING_GROUP,
+        },
+    });
+};
+const runDailyEngagementCheck = async (userId) => {
+    const todayStart = (0, timezone_util_1.toAppDayStart)(new Date());
+    const yesterdayStart = (0, timezone_util_1.shiftAppDays)(todayStart, -1);
+    const yesterdayEnd = todayStart;
+    const dateKey = (0, timezone_util_1.toAppDateKey)(yesterdayStart);
+    const notifyKey = `${DAILY_ENGAGEMENT_KEY_PREFIX}:no_meal_notification:${dateKey}:${userId}`;
+    const emailKey = `${DAILY_ENGAGEMENT_KEY_PREFIX}:no_meal_email:${dateKey}:${userId}`;
+    const [mealCount, sentRows, user] = await Promise.all([
+        prisma.meal.count({
+            where: {
+                userId,
+                eatenAt: { gte: yesterdayStart, lt: yesterdayEnd },
+            },
+        }),
+        prisma.systemSetting.findMany({
+            where: {
+                group: REMINDER_SETTING_GROUP,
+                key: { in: [notifyKey, emailKey] },
+            },
+            select: { key: true },
+        }),
+        prisma.user.findUnique({
+            where: { id: userId },
+            select: { email: true, name: true, isActive: true, role: true },
+        }),
+    ]);
+    if (mealCount > 0 || !user?.isActive || user.role !== 'USER')
+        return;
+    const sentKeys = new Set(sentRows.map((row) => row.key));
+    if (!sentKeys.has(notifyKey)) {
+        await prisma.notification.create({
+            data: {
+                userId,
+                title: 'Hom qua ban chua ghi bua an nao',
+                message: `FoodAI chua ghi nhan bua an nao trong ngay ${dateKey}. Hay ghi nhat ky de he thong theo doi dinh duong chinh xac hon.`,
+                type: client_1.NotificationType.WARNING,
+                data: {
+                    source: 'daily_engagement',
+                    reminderType: 'no_meal_previous_day',
+                    dateKey,
+                },
+            },
+        });
+        await markEngagementReminderSent(notifyKey);
+    }
+    if (!sentKeys.has(emailKey)) {
+        const sent = await (0, email_service_1.sendNoMealReminderEmail)({
+            toEmail: user.email,
+            userName: user.name,
+            dateKey,
+        });
+        if (sent) {
+            await markEngagementReminderSent(emailKey);
+        }
+    }
+};
 const getWeekRange = (anchor) => {
     const dayStart = (0, timezone_util_1.toAppDayStart)(anchor || new Date());
     const localized = new Date(dayStart.getTime() + OFFSET_HOURS * 60 * 60 * 1000);
@@ -39,6 +113,9 @@ const getMealHealth = async (req, res) => {
                         name: true,
                         category: true,
                         description: true,
+                        mealRoles: true,
+                        cookingMethod: true,
+                        portionType: true,
                     },
                 },
             },
@@ -63,6 +140,7 @@ const getDailyHealth = async (req, res) => {
         const userId = resolveUserId(req);
         const date = String(req.query.date || new Date().toISOString());
         const { start, endExclusive } = (0, timezone_util_1.toAppDayRange)(date);
+        const shouldRunEngagementCheck = (0, timezone_util_1.toAppDateKey)(start) === (0, timezone_util_1.toAppDateKey)(new Date());
         const meals = await prisma.meal.findMany({
             where: {
                 userId,
@@ -75,6 +153,9 @@ const getDailyHealth = async (req, res) => {
                         name: true,
                         category: true,
                         description: true,
+                        mealRoles: true,
+                        cookingMethod: true,
+                        portionType: true,
                     },
                 },
             },
@@ -83,6 +164,9 @@ const getDailyHealth = async (req, res) => {
             Promise.resolve((0, health_engine_service_1.evaluateDailyHealth)(date, meals)),
             (0, personalization_service_1.getHydrationRecord)(userId, date),
             (0, personalization_service_1.resolvePersonalTargets)(userId),
+            shouldRunEngagementCheck ? runDailyEngagementCheck(userId).catch((error) => {
+                console.error('[daily-engagement] check failed:', error);
+            }) : Promise.resolve(),
         ]);
         res.json({
             success: true,

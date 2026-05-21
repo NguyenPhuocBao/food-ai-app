@@ -265,6 +265,7 @@ model Meal {
   id          Int      @id @default(autoincrement())
   userId      Int
   foodId      Int
+  mealPlanId  Int?
   mealType    MealType
   eatenAt     DateTime @default(now())
   quantity    Float    @default(1)
@@ -279,6 +280,7 @@ model Meal {
   
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   food        FoodItem @relation(fields: [foodId], references: [id])
+  mealPlan    MealPlan? @relation(fields: [mealPlanId], references: [id], onDelete: Cascade)
   
   @@map("meals")
 }
@@ -294,6 +296,7 @@ model MealPlan {
   
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   details     MealPlanDetail[]
+  appliedMeals Meal[]
   
   @@map("meal_plans")
 }

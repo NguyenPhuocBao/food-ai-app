@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { NotificationType, PrismaClient } from '@prisma/client';
 import {
   buildWeeklyRecommendations,
   evaluateDailyHealth,
@@ -17,7 +17,9 @@ import {
   shiftAppDays,
   toAppDayRange,
   toAppDayStart,
+  toAppDateKey,
 } from '../utils/timezone.util';
+import { sendNoMealReminderEmail } from '../services/email.service';
 
 const prisma = new PrismaClient();
 const OFFSET_HOURS = getAppUtcOffsetHours();
@@ -26,6 +28,85 @@ const resolveUserId = (req: any) =>
   req.user.role === 'ADMIN' && req.query.userId
     ? parseInt(req.query.userId as string, 10)
     : req.user.id;
+
+const REMINDER_SETTING_GROUP = 'runtime';
+const DAILY_ENGAGEMENT_KEY_PREFIX = 'daily_engagement';
+
+const markEngagementReminderSent = async (key: string) => {
+  await prisma.systemSetting.upsert({
+    where: { key },
+    update: {
+      value: String(Date.now()),
+      group: REMINDER_SETTING_GROUP,
+      updatedAt: new Date(),
+    },
+    create: {
+      key,
+      value: String(Date.now()),
+      group: REMINDER_SETTING_GROUP,
+    },
+  });
+};
+
+const runDailyEngagementCheck = async (userId: number) => {
+  const todayStart = toAppDayStart(new Date());
+  const yesterdayStart = shiftAppDays(todayStart, -1);
+  const yesterdayEnd = todayStart;
+  const dateKey = toAppDateKey(yesterdayStart);
+  const notifyKey = `${DAILY_ENGAGEMENT_KEY_PREFIX}:no_meal_notification:${dateKey}:${userId}`;
+  const emailKey = `${DAILY_ENGAGEMENT_KEY_PREFIX}:no_meal_email:${dateKey}:${userId}`;
+
+  const [mealCount, sentRows, user] = await Promise.all([
+    prisma.meal.count({
+      where: {
+        userId,
+        eatenAt: { gte: yesterdayStart, lt: yesterdayEnd },
+      },
+    }),
+    prisma.systemSetting.findMany({
+      where: {
+        group: REMINDER_SETTING_GROUP,
+        key: { in: [notifyKey, emailKey] },
+      },
+      select: { key: true },
+    }),
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true, name: true, isActive: true, role: true },
+    }),
+  ]);
+
+  if (mealCount > 0 || !user?.isActive || user.role !== 'USER') return;
+
+  const sentKeys = new Set(sentRows.map((row) => row.key));
+  if (!sentKeys.has(notifyKey)) {
+    await prisma.notification.create({
+      data: {
+        userId,
+        title: 'Hom qua ban chua ghi bua an nao',
+        message: `FoodAI chua ghi nhan bua an nao trong ngay ${dateKey}. Hay ghi nhat ky de he thong theo doi dinh duong chinh xac hon.`,
+        type: NotificationType.WARNING,
+        data: {
+          source: 'daily_engagement',
+          reminderType: 'no_meal_previous_day',
+          dateKey,
+        },
+      },
+    });
+    await markEngagementReminderSent(notifyKey);
+  }
+
+  if (!sentKeys.has(emailKey)) {
+    const sent = await sendNoMealReminderEmail({
+      toEmail: user.email,
+      userName: user.name,
+      dateKey,
+    });
+    if (sent) {
+      await markEngagementReminderSent(emailKey);
+    }
+  }
+};
 
 const getWeekRange = (anchor?: Date | string) => {
   const dayStart = toAppDayStart(anchor || new Date());
@@ -60,6 +141,9 @@ export const getMealHealth = async (req: any, res: Response) => {
             name: true,
             category: true,
             description: true,
+            mealRoles: true,
+            cookingMethod: true,
+            portionType: true,
           },
         },
       },
@@ -84,6 +168,7 @@ export const getDailyHealth = async (req: any, res: Response) => {
     const userId = resolveUserId(req);
     const date = String(req.query.date || new Date().toISOString());
     const { start, endExclusive } = toAppDayRange(date);
+    const shouldRunEngagementCheck = toAppDateKey(start) === toAppDateKey(new Date());
 
     const meals = await prisma.meal.findMany({
       where: {
@@ -97,6 +182,9 @@ export const getDailyHealth = async (req: any, res: Response) => {
             name: true,
             category: true,
             description: true,
+            mealRoles: true,
+            cookingMethod: true,
+            portionType: true,
           },
         },
       },
@@ -106,6 +194,9 @@ export const getDailyHealth = async (req: any, res: Response) => {
       Promise.resolve(evaluateDailyHealth(date, meals)),
       getHydrationRecord(userId, date),
       resolvePersonalTargets(userId),
+      shouldRunEngagementCheck ? runDailyEngagementCheck(userId).catch((error) => {
+        console.error('[daily-engagement] check failed:', error);
+      }) : Promise.resolve(),
     ]);
 
     res.json({

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, ChevronLeft, ChevronRight, BarChart2, Calendar as CalendarIcon, Droplets, Target, Flame, Loader2, Trash2, Search, X, CheckCircle, ShieldAlert, GlassWater } from 'lucide-react';
+import { Plus, ChevronLeft, ChevronRight, BarChart2, Calendar as CalendarIcon, Droplets, Target, Flame, Loader2, Trash2, Search, X, CheckCircle, ShieldAlert, GlassWater, AlertTriangle } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { getMealsByDate, addMeal, deleteMeal } from '../services/meal.service';
 import { getDailyStats } from '../services/statistics.service';
@@ -15,6 +15,12 @@ const MEAL_TYPES = [
   { id: 'LUNCH', name: 'Bữa Trưa' },
   { id: 'DINNER', name: 'Bữa Tối' },
   { id: 'SNACK', name: 'Ăn Nhẹ' },
+];
+
+const WATER_REMINDER_CHECKPOINTS = [
+  { key: 'breakfast', label: 'sau bữa sáng', hour: 9, ratio: 0.25 },
+  { key: 'lunch', label: 'sau bữa trưa', hour: 14, ratio: 0.55 },
+  { key: 'dinner', label: 'sau bữa tối', hour: 20, ratio: 0.85 },
 ];
 
 const formatTime = (dateStr: string) => {
@@ -230,8 +236,17 @@ const DiaryPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isLoggingWater, setIsLoggingWater] = useState(false);
   const [addModal, setAddModal] = useState<{ mealType: string } | null>(null);
+  const [dismissedCalorieAlertKey, setDismissedCalorieAlertKey] = useState<string | null>(() => (
+    typeof window === 'undefined' ? null : sessionStorage.getItem('diary-calorie-alert-dismissed')
+  ));
+  const [dismissedEngagementAlertKey, setDismissedEngagementAlertKey] = useState<string | null>(() => (
+    typeof window === 'undefined' ? null : sessionStorage.getItem('diary-engagement-alert-dismissed')
+  ));
 
-  const dateStr = currentDate.toISOString().split('T')[0];
+  const yyyy = currentDate.getFullYear();
+  const mm = String(currentDate.getMonth() + 1).padStart(2, '0');
+  const dd = String(currentDate.getDate()).padStart(2, '0');
+  const dateStr = `${yyyy}-${mm}-${dd}`;
 
   useEffect(() => {
     const urlDate = searchParams.get('date') || '';
@@ -322,6 +337,95 @@ const DiaryPage = () => {
   const proteinPercent = Math.min(100, Math.round((nutrition.totalProtein / goal.protein) * 100));
   const carbsPercent = Math.min(100, Math.round((nutrition.totalCarbs / goal.carbs) * 100));
   const fatPercent = Math.min(100, Math.round((nutrition.totalFat / goal.fat) * 100));
+  const rawCaloriesPercent = goal.calories > 0 ? Math.round((nutrition.totalCalories / goal.calories) * 100) : 0;
+  const nowHour = new Date().getHours();
+  const calorieAlert = (() => {
+    if (isLoading || !goal.calories) return null;
+    const calories = Number(nutrition.totalCalories || 0);
+    const target = Number(goal.calories || 0);
+    const overBy = calories - target;
+    const remaining = target - calories;
+
+    if (overBy > 0) {
+      return {
+        key: `${dateStr}:over:${Math.floor(calories / 50)}`,
+        type: 'over' as const,
+        title: 'Bạn đã vượt mục tiêu calo hôm nay',
+        message: `Hiện tại đã nạp ${calories.toLocaleString()} kcal, vượt ${overBy.toLocaleString()} kcal so với mục tiêu ${target.toLocaleString()} kcal.`,
+        advice: 'Nên chọn bữa còn lại nhẹ hơn, ưu tiên rau/canh/protein nạc và hạn chế món chiên, tinh bột hoặc đồ ngọt.',
+        tone: 'rose',
+      };
+    }
+
+    const shouldWarnLowCalories = calories > 0 && rawCaloriesPercent < 80 && (!isToday || nowHour >= 18);
+    if (shouldWarnLowCalories) {
+      return {
+        key: `${dateStr}:low:${Math.floor(calories / 50)}`,
+        type: 'low' as const,
+        title: 'Bạn chưa đạt mức calo tối thiểu hợp lý',
+        message: `Hiện tại mới đạt ${rawCaloriesPercent}% mục tiêu, còn thiếu khoảng ${remaining.toLocaleString()} kcal.`,
+        advice: 'Nên bổ sung một bữa phù hợp với mục tiêu, tránh bỏ bữa quá lâu vì có thể làm lệch kế hoạch dinh dưỡng.',
+        tone: 'amber',
+      };
+    }
+
+    return null;
+  })();
+  const showCalorieAlert = Boolean(calorieAlert && calorieAlert.key !== dismissedCalorieAlertKey);
+
+  const dismissCalorieAlert = () => {
+    if (!calorieAlert) return;
+    setDismissedCalorieAlertKey(calorieAlert.key);
+    sessionStorage.setItem('diary-calorie-alert-dismissed', calorieAlert.key);
+  };
+  const engagementAlert = (() => {
+    if (isLoading) return null;
+    const hasMeals = meals.length > 0;
+    const hydrationMl = Number(healthSummary.hydration?.totalMl || 0);
+    const hydrationGoal = Number(healthSummary.hydration?.goalMl || 2200);
+    const activeWaterCheckpoint = WATER_REMINDER_CHECKPOINTS
+      .filter((checkpoint) => !isToday || nowHour >= checkpoint.hour)
+      .reverse()
+      [0];
+
+    if (!hasMeals && (!isToday || nowHour >= 20)) {
+      return {
+        key: `${dateStr}:no-meal`,
+        type: 'no-meal' as const,
+        title: 'Bạn chưa ghi món ăn nào hôm nay',
+        message: 'FoodAI chưa có dữ liệu bữa ăn để phân tích dinh dưỡng. Nếu để qua ngày, hệ thống sẽ nhắc lại qua thông báo và email.',
+        action: 'Hãy thêm ít nhất một bữa ăn để tránh mất mạch theo dõi.',
+        tone: 'rose',
+      };
+    }
+
+    if (hasMeals && activeWaterCheckpoint) {
+      const expectedMl = Math.round(hydrationGoal * activeWaterCheckpoint.ratio);
+      if (hydrationMl >= expectedMl) return null;
+      const remainingToGoal = Math.max(0, hydrationGoal - hydrationMl);
+      const remainingToCheckpoint = Math.max(0, expectedMl - hydrationMl);
+      return {
+        key: `${dateStr}:water-${activeWaterCheckpoint.key}:${Math.floor(hydrationMl / 100)}`,
+        type: 'no-water' as const,
+        title: `Nhắc uống nước ${activeWaterCheckpoint.label}`,
+        message: `Bạn đang thiếu ${remainingToGoal.toLocaleString()}ml nước / tổng mục tiêu ${hydrationGoal.toLocaleString()}ml hôm nay.`,
+        action: `Tối thiểu nên bổ sung thêm khoảng ${remainingToCheckpoint.toLocaleString()}ml để kịp tiến độ ${activeWaterCheckpoint.label}.`,
+        tone: 'blue',
+      };
+    }
+
+    return null;
+  })();
+  const showEngagementAlert = Boolean(
+    !showCalorieAlert &&
+    engagementAlert &&
+    engagementAlert.key !== dismissedEngagementAlertKey,
+  );
+  const dismissEngagementAlert = () => {
+    if (!engagementAlert) return;
+    setDismissedEngagementAlertKey(engagementAlert.key);
+    sessionStorage.setItem('diary-engagement-alert-dismissed', engagementAlert.key);
+  };
 
   const groupedMeals = MEAL_TYPES.map(type => ({
     ...type,
@@ -342,6 +446,135 @@ const DiaryPage = () => {
             onClose={() => setAddModal(null)}
             onAdded={fetchData}
           />
+        )}
+        {showCalorieAlert && calorieAlert && (
+          <motion.div
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-gray-950/55 px-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 20, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 20, scale: 0.96 }}
+              className="w-full max-w-lg overflow-hidden rounded-[28px] bg-white shadow-2xl"
+            >
+              <div className={`p-6 text-white ${calorieAlert.tone === 'rose' ? 'bg-rose-600' : 'bg-amber-500'}`}>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex gap-3">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/20">
+                      <AlertTriangle size={24} />
+                    </div>
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-[0.18em] text-white/75">Cảnh báo calo</p>
+                      <h2 className="mt-1 text-2xl font-black">{calorieAlert.title}</h2>
+                    </div>
+                  </div>
+                  <button
+                    onClick={dismissCalorieAlert}
+                    className="rounded-full bg-white/15 p-2 text-white hover:bg-white/25"
+                    aria-label="Đóng cảnh báo calo"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-4 p-6">
+                <p className="text-sm font-semibold leading-6 text-gray-700">{calorieAlert.message}</p>
+                <div className="rounded-2xl bg-gray-50 p-4 text-sm text-gray-600">
+                  {calorieAlert.advice}
+                </div>
+                <div className="grid grid-cols-3 gap-3 text-center text-xs font-bold">
+                  <div className="rounded-2xl bg-emerald-50 px-3 py-3 text-emerald-700">
+                    <p className="text-[10px] uppercase tracking-wide text-emerald-500">Đã nạp</p>
+                    <p className="mt-1 text-base text-emerald-900">{nutrition.totalCalories.toLocaleString()}</p>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 px-3 py-3 text-slate-700">
+                    <p className="text-[10px] uppercase tracking-wide text-slate-500">Mục tiêu</p>
+                    <p className="mt-1 text-base text-slate-900">{goal.calories.toLocaleString()}</p>
+                  </div>
+                  <div className={`rounded-2xl px-3 py-3 ${calorieAlert.type === 'over' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-700'}`}>
+                    <p className="text-[10px] uppercase tracking-wide opacity-70">{calorieAlert.type === 'over' ? 'Vượt' : 'Còn thiếu'}</p>
+                    <p className="mt-1 text-base">{Math.abs(goal.calories - nutrition.totalCalories).toLocaleString()}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={dismissCalorieAlert}
+                  className="w-full rounded-2xl bg-gray-900 px-4 py-3 text-sm font-black text-white hover:bg-black"
+                >
+                  Tôi đã hiểu
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+        {showEngagementAlert && engagementAlert && (
+          <motion.div
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-gray-950/55 px-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 20, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 20, scale: 0.96 }}
+              className="w-full max-w-lg overflow-hidden rounded-[28px] bg-white shadow-2xl"
+            >
+              <div className={`p-6 text-white ${engagementAlert.tone === 'rose' ? 'bg-rose-600' : 'bg-blue-600'}`}>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex gap-3">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/20">
+                      {engagementAlert.type === 'no-water' ? <GlassWater size={24} /> : <AlertTriangle size={24} />}
+                    </div>
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-[0.18em] text-white/75">Nhắc nhở nhật ký</p>
+                      <h2 className="mt-1 text-2xl font-black">{engagementAlert.title}</h2>
+                    </div>
+                  </div>
+                  <button
+                    onClick={dismissEngagementAlert}
+                    className="rounded-full bg-white/15 p-2 text-white hover:bg-white/25"
+                    aria-label="Đóng nhắc nhở nhật ký"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-4 p-6">
+                <p className="text-sm font-semibold leading-6 text-gray-700">{engagementAlert.message}</p>
+                <div className="rounded-2xl bg-gray-50 p-4 text-sm text-gray-600">
+                  {engagementAlert.action}
+                </div>
+                {engagementAlert.type === 'no-water' && (
+                  <div className="grid grid-cols-2 gap-3">
+                    {[250, 500].map((amount) => (
+                      <button
+                        key={amount}
+                        onClick={async () => {
+                          await handleLogWater(amount);
+                          dismissEngagementAlert();
+                        }}
+                        disabled={isLoggingWater}
+                        className="rounded-2xl bg-blue-50 px-4 py-3 text-sm font-black text-blue-700 hover:bg-blue-100 disabled:opacity-60"
+                      >
+                        +{amount}ml
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <button
+                  onClick={dismissEngagementAlert}
+                  className="w-full rounded-2xl bg-gray-900 px-4 py-3 text-sm font-black text-white hover:bg-black"
+                >
+                  Tôi đã hiểu
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
 

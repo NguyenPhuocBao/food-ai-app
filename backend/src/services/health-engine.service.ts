@@ -14,6 +14,9 @@ export type MealInputForHealth = {
     name?: string | null;
     category?: string | null;
     description?: string | null;
+    mealRoles?: string[] | null;
+    cookingMethod?: string | null;
+    portionType?: string | null;
   } | null;
 };
 
@@ -59,6 +62,10 @@ const VEG_KEYWORDS = [
   'rau cai',
   'rau xanh',
   'canh rau',
+  'bong cai',
+  'dua chuot',
+  'nam',
+  'sup rau',
 ];
 
 const SALTY_KEYWORDS = [
@@ -77,13 +84,63 @@ const SALTY_KEYWORDS = [
   'ca muoi',
 ];
 
-const normalize = (value?: string | null) => (value || '').toLowerCase();
+const HEALTHY_COOKING_KEYWORDS = ['luoc', 'hap', 'nuong', 'ap chao', 'salad', 'canh'];
+const OILY_COOKING_KEYWORDS = ['chien', 'ran', 'xao', 'xoi mo', 'xoi mỡ', 'fried'];
+const PROTEIN_KEYWORDS = ['ga', 'bo', 'thit', 'ca', 'tom', 'muc', 'trung', 'dau hu', 'tofu', 'chicken', 'beef', 'fish', 'shrimp'];
+const STAPLE_KEYWORDS = ['com', 'bun', 'pho', 'mi', 'mien', 'banh mi', 'khoai', 'xoi', 'rice', 'noodle'];
+
+const normalize = (value?: string | null) => (value || '')
+  .toLowerCase()
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '');
 
 const toTextBlob = (meal: MealInputForHealth) =>
-  [meal.food?.name, meal.food?.category, meal.food?.description, meal.notes]
+  [meal.food?.name, meal.food?.category, meal.food?.description, meal.food?.cookingMethod, meal.food?.portionType, meal.notes]
     .filter(Boolean)
     .join(' ')
-    .toLowerCase();
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+const hasAnyKeyword = (text: string, keywords: string[]) => keywords.some((keyword) => text.includes(normalize(keyword)));
+const hasFoodRole = (meal: MealInputForHealth, role: string) => meal.food?.mealRoles?.includes(role) || false;
+const isFullMeal = (meal: MealInputForHealth) => meal.food?.portionType === 'FULL_MEAL';
+
+const aggregateMealsByType = (meals: MealInputForHealth[]): MealInputForHealth[] => {
+  const grouped = new Map<MealType, MealInputForHealth[]>();
+  meals.forEach((meal) => {
+    grouped.set(meal.mealType, [...(grouped.get(meal.mealType) || []), meal]);
+  });
+
+  return Array.from(grouped.entries()).map(([mealType, items]) => {
+    const first = items[0];
+    const names = items.map((item) => item.food?.name).filter(Boolean).join(', ');
+    const categories = items.map((item) => item.food?.category).filter(Boolean).join(', ');
+    const descriptions = items.map((item) => item.food?.description).filter(Boolean).join(' ');
+    const roles = Array.from(new Set(items.flatMap((item) => item.food?.mealRoles || [])));
+    const portionTypes = Array.from(new Set(items.map((item) => item.food?.portionType).filter(Boolean)));
+    const cookingMethods = Array.from(new Set(items.map((item) => item.food?.cookingMethod).filter(Boolean)));
+
+    return {
+      id: first.id,
+      mealType,
+      eatenAt: first.eatenAt,
+      calories: items.reduce((sum, item) => sum + Number(item.calories || 0), 0),
+      protein: items.reduce((sum, item) => sum + Number(item.protein || 0), 0),
+      fat: items.reduce((sum, item) => sum + Number(item.fat || 0), 0),
+      carbs: items.reduce((sum, item) => sum + Number(item.carbs || 0), 0),
+      notes: items.map((item) => item.notes).filter(Boolean).join(' '),
+      food: {
+        name: names,
+        category: categories,
+        description: descriptions,
+        mealRoles: roles,
+        cookingMethod: cookingMethods.join(' '),
+        portionType: portionTypes.includes('FULL_MEAL') ? 'FULL_MEAL' : portionTypes[0] || null,
+      },
+    };
+  });
+};
 
 const getLocalHour = (value: Date | string) => {
   const date = value instanceof Date ? value : new Date(value);
@@ -99,14 +156,14 @@ const getLocalHour = (value: Date | string) => {
 const mealCalorieRange = (mealType: MealType) => {
   switch (mealType) {
     case 'BREAKFAST':
-      return { min: 300, max: 650 };
+      return { min: 250, max: 650 };
     case 'LUNCH':
-      return { min: 450, max: 850 };
+      return { min: 400, max: 850 };
     case 'DINNER':
-      return { min: 350, max: 750 };
+      return { min: 320, max: 750 };
     case 'SNACK':
     default:
-      return { min: 100, max: 350 };
+      return { min: 80, max: 320 };
   }
 };
 
@@ -121,8 +178,20 @@ const toGrade = (score: number): 'A' | 'B' | 'C' | 'D' => {
 
 export const evaluateMealHealth = (meal: MealInputForHealth): MealHealthResult => {
   const textBlob = toTextBlob(meal);
-  const hasVegetable = VEG_KEYWORDS.some((keyword) => textBlob.includes(keyword));
-  const saltyRisk = SALTY_KEYWORDS.some((keyword) => textBlob.includes(keyword));
+  const hasVegetable =
+    hasAnyKeyword(textBlob, VEG_KEYWORDS) ||
+    hasFoodRole(meal, 'SIDE') ||
+    hasFoodRole(meal, 'SOUP');
+  const hasProtein =
+    Number(meal.protein || 0) >= (meal.mealType === 'SNACK' ? 5 : 14) ||
+    hasAnyKeyword(textBlob, PROTEIN_KEYWORDS) ||
+    hasFoodRole(meal, 'MAIN');
+  const hasStaple =
+    hasAnyKeyword(textBlob, STAPLE_KEYWORDS) ||
+    hasFoodRole(meal, 'STAPLE');
+  const saltyRisk = hasAnyKeyword(textBlob, SALTY_KEYWORDS);
+  const healthyCooking = hasAnyKeyword(textBlob, HEALTHY_COOKING_KEYWORDS);
+  const oilyCooking = hasAnyKeyword(textBlob, OILY_COOKING_KEYWORDS);
 
   const hour = getLocalHour(meal.eatenAt);
   const lateNight = hour >= 22 || hour <= 4;
@@ -135,6 +204,7 @@ export const evaluateMealHealth = (meal: MealInputForHealth): MealHealthResult =
     saltyPenalty: 0,
     latePenalty: 0,
     proteinBonus: 0,
+    balanceBonus: 0,
   };
 
   const range = mealCalorieRange(meal.mealType);
@@ -144,23 +214,34 @@ export const evaluateMealHealth = (meal: MealInputForHealth): MealHealthResult =
       ? meal.calories - range.max
       : 0;
 
-  scoreParts.caloriePenalty = Math.min(24, calorieDelta / 20);
+  const allowedTolerance = meal.mealType === 'SNACK' ? 80 : 140;
+  scoreParts.caloriePenalty = calorieDelta > allowedTolerance
+    ? Math.min(18, (calorieDelta - allowedTolerance) / 28)
+    : 0;
 
-  const totalMacro = Math.max(1, meal.protein + meal.fat + meal.carbs);
-  const proteinRatio = meal.protein / totalMacro;
-  const fatRatio = meal.fat / totalMacro;
+  const macroCalories = Math.max(1, meal.protein * 4 + meal.fat * 9 + meal.carbs * 4);
+  const proteinCalorieRatio = (meal.protein * 4) / macroCalories;
+  const fatCalorieRatio = (meal.fat * 9) / macroCalories;
+  const carbCalorieRatio = (meal.carbs * 4) / macroCalories;
 
-  if (proteinRatio < 0.18) scoreParts.macroPenalty += 8;
-  if (fatRatio > 0.38) scoreParts.macroPenalty += 8;
+  if (meal.mealType !== 'SNACK' && !hasProtein) scoreParts.macroPenalty += 10;
+  if (meal.mealType !== 'SNACK' && proteinCalorieRatio < 0.12) scoreParts.macroPenalty += 5;
+  if (fatCalorieRatio > 0.45) scoreParts.macroPenalty += 8;
+  if (meal.mealType !== 'SNACK' && carbCalorieRatio > 0.7 && !hasProtein) scoreParts.macroPenalty += 6;
 
-  if ((meal.mealType === 'LUNCH' || meal.mealType === 'DINNER') && !hasVegetable) {
-    scoreParts.veggiePenalty += 14;
+  if ((meal.mealType === 'LUNCH' || meal.mealType === 'DINNER') && !hasVegetable && !isFullMeal(meal)) {
+    scoreParts.veggiePenalty += 8;
   }
 
-  if (saltyRisk) scoreParts.saltyPenalty += 14;
+  if (saltyRisk) scoreParts.saltyPenalty += 10;
+  if (oilyCooking && meal.fat >= 18) scoreParts.saltyPenalty += 6;
   if (lateNight && meal.mealType !== 'BREAKFAST') scoreParts.latePenalty += 18;
 
-  if (meal.protein >= 22) scoreParts.proteinBonus += 5;
+  if (hasProtein && meal.protein >= 18) scoreParts.proteinBonus += 5;
+  if ((meal.mealType === 'LUNCH' || meal.mealType === 'DINNER') && hasProtein && hasStaple && hasVegetable) {
+    scoreParts.balanceBonus += 7;
+  }
+  if (healthyCooking && !oilyCooking) scoreParts.balanceBonus += 3;
 
   const rawScore =
     scoreParts.base -
@@ -169,20 +250,23 @@ export const evaluateMealHealth = (meal: MealInputForHealth): MealHealthResult =
     scoreParts.veggiePenalty -
     scoreParts.saltyPenalty -
     scoreParts.latePenalty +
-    scoreParts.proteinBonus;
+    scoreParts.proteinBonus +
+    scoreParts.balanceBonus;
 
   const score = clampScore(rawScore);
   const alerts: string[] = [];
   const positives: string[] = [];
 
-  if (scoreParts.veggiePenalty > 0) alerts.push('Thieu rau xanh trong bua an.');
-  if (scoreParts.saltyPenalty > 0) alerts.push('Mon an co dau hieu qua man.');
+  if (scoreParts.veggiePenalty > 0) alerts.push('Bua chinh nen them mot phan rau hoac canh rau.');
+  if (scoreParts.saltyPenalty >= 10) alerts.push('Mon an co dau hieu nhieu muoi/dau mo, nen can doi o bua tiep theo.');
   if (scoreParts.latePenalty > 0) alerts.push('An dem muon, de anh huong giac ngu.');
-  if (scoreParts.caloriePenalty > 12) alerts.push('Luong calo bua an lech nhieu so voi khung de xuat.');
+  if (scoreParts.caloriePenalty >= 10) alerts.push('Tong calo cua bua nay lech kha xa khung bua an thong thuong.');
+  if (meal.mealType !== 'SNACK' && !hasProtein) alerts.push('Bua chinh thieu nguon dam ro rang.');
 
   if (scoreParts.proteinBonus > 0) positives.push('Protein tot cho hoi phuc va co bap.');
-  if (hasVegetable) positives.push('Da bo sung rau xanh.');
-  if (!saltyRisk) positives.push('Khong c? dau hieu mon man cao.');
+  if (hasVegetable) positives.push('Co rau/canh giup bua an can bang hon.');
+  if (hasProtein && hasStaple && (meal.mealType === 'LUNCH' || meal.mealType === 'DINNER')) positives.push('Bua chinh co cau truc dam + tinh bot hop ly.');
+  if (!saltyRisk && !oilyCooking) positives.push('Khong co dau hieu qua man hoac qua dau mo.');
 
   return {
     mealId: meal.id,
@@ -266,7 +350,8 @@ export const evaluateDailyHealth = (date: Date | string, meals: MealInputForHeal
     };
   }
 
-  const mealScores = meals.map(evaluateMealHealth);
+  const mealGroups = aggregateMealsByType(meals);
+  const mealScores = mealGroups.map(evaluateMealHealth);
   const stats = mealScores.reduce(
     (acc, item) => ({
       meals: acc.meals + 1,
@@ -286,22 +371,28 @@ export const evaluateDailyHealth = (date: Date | string, meals: MealInputForHeal
     item.positives.forEach((positive) => highlights.add(positive));
   });
 
-  if (stats.meals > 0 && stats.veggieMeals / stats.meals < 0.4) {
-    alerts.add('Ti le bua an co rau xanh thap hon muc khuyen nghi.');
+  const mainMealCount = mealGroups.filter((meal) => meal.mealType === 'LUNCH' || meal.mealType === 'DINNER').length;
+  const mainMealsWithVeg = mealScores.filter((item) => (
+    item.signals.hasVegetable &&
+    mealGroups.find((meal) => meal.id === item.mealId && (meal.mealType === 'LUNCH' || meal.mealType === 'DINNER'))
+  )).length;
+
+  if (mainMealCount >= 2 && mainMealsWithVeg === 0) {
+    alerts.add('Bua trua va bua toi chua co rau/canh ro rang.');
   }
   if (stats.saltyMeals >= 2) {
-    alerts.add('Nhieu bua an co nguy co qua man trong ngay.');
+    alerts.add('Nhieu bua an co nguy co qua man hoac nhieu dau mo trong ngay.');
   }
   if (stats.lateMeals >= 1) {
     alerts.add('Can giam tan suat an dem de cai thien phuc hoi.');
   }
 
   const recommendations: string[] = [];
-  if (stats.veggieMeals / Math.max(1, stats.meals) < 0.5) {
-    recommendations.push('Them 1 phan rau/canh rau cho bua trua va bua toi.');
+  if (mainMealCount > 0 && mainMealsWithVeg < mainMealCount) {
+    recommendations.push('Neu bua chinh chua co rau, hay them 1 phan rau luoc/canh rau/salad nho.');
   }
   if (stats.saltyMeals > 0) {
-    recommendations.push('Giam mon kho/man, uu tien luoc/hap trong bua tiep theo.');
+    recommendations.push('Can doi mon kho/chien/xao bang mon luoc, hap hoac canh trong bua tiep theo.');
   }
   if (stats.lateMeals > 0) {
     recommendations.push('Dat gio an toi truoc 20:30, tranh snack sau 22:00.');

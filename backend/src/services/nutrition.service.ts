@@ -5,9 +5,28 @@ export const normalizeToDayStart = (value: Date | string) => {
   return toAppDayStart(value);
 };
 
+const AUTO_APPLIED_MEAL_PLAN_NOTE_PREFIX = 'Auto-applied from meal plan:';
+
+const cleanupOrphanAutoAppliedMealPlanMeals = async (userId: number, date: Date, nextDate: Date) => {
+  await prisma.meal.deleteMany({
+    where: {
+      userId,
+      eatenAt: {
+        gte: date,
+        lt: nextDate,
+      },
+      isFromAI: true,
+      notes: { startsWith: AUTO_APPLIED_MEAL_PLAN_NOTE_PREFIX },
+      mealPlanId: null,
+    },
+  });
+};
+
 export const recalculateDailyNutrition = async (userId: number, dateValue: Date | string) => {
   const date = normalizeToDayStart(dateValue);
   const nextDate = new Date(date.getTime() + 86400000);
+
+  await cleanupOrphanAutoAppliedMealPlanMeals(userId, date, nextDate);
 
   const dailyMeals = await prisma.meal.findMany({
     where: {

@@ -1,9 +1,12 @@
 import { Router } from 'express';
 import {
   getMealPlans,
+  getMealPlanById,
   getActiveMealPlan,
   createMealPlan,
   addDetailToMealPlan,
+  updateMealPlanDetail,
+  deleteDetailFromMealPlan,
   setActiveMealPlan,
   deleteMealPlan,
   generateAutoMealPlan,
@@ -19,10 +22,13 @@ const router = Router();
 
 router.get('/', authMiddleware, getMealPlans);
 router.get('/active', authMiddleware, getActiveMealPlan);
+router.get('/:id', authMiddleware, getMealPlanById);
 router.post('/active/apply-today', authMiddleware, applyActiveMealPlanToday);
 router.post('/', authMiddleware, createMealPlan);
 router.post('/auto-generate', authMiddleware, generateAutoMealPlan);
 router.post('/:id/details', authMiddleware, addDetailToMealPlan);
+router.patch('/:id/details/:detailId', authMiddleware, updateMealPlanDetail);
+router.delete('/:id/details/:detailId', authMiddleware, deleteDetailFromMealPlan);
 router.patch('/:id/activate', authMiddleware, setActiveMealPlan);
 router.delete('/:id', authMiddleware, deleteMealPlan);
 router.get('/:id/shopping-list', authMiddleware, getMealPlanShoppingList);

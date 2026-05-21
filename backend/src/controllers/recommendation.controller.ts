@@ -39,6 +39,7 @@ const loadFoodPlanningMeta = async (foodIds: number[]) => {
 
 type UserNutritionContext = {
   goalType: GoalType | null;
+  bmiCategory: BmiCategory;
   dailyCalorieTarget: number;
   currentCalories: number;
   remainingCalories: number;
@@ -50,8 +51,17 @@ type MealBudget = {
   mealType: MealType;
   minCalories: number;
   maxCalories: number;
+  idealCalories: number;
   minProtein: number;
   maxFat?: number;
+};
+
+type BmiCategory = 'UNDERWEIGHT' | 'NORMAL' | 'OVERWEIGHT' | 'OBESE' | 'UNKNOWN';
+
+type MealCalorieBand = {
+  min: number;
+  max: number;
+  ideal: number;
 };
 
 type FoodGroup =
@@ -381,20 +391,20 @@ const getMealSlots = (goalType: GoalType | null, mealType: MealType): MealSlot[]
         key: `${mealType.toLowerCase()}-main`,
         label: mealType === 'LUNCH' ? 'bua trua - mon chinh' : 'bua toi - mon chinh',
         groups: ['PROTEIN_MAIN', 'GRILLED', 'VEGETARIAN', 'DRY_FOOD'],
-        calorieRatio: 0.5,
+        calorieRatio: 0.95,
       },
       {
         key: `${mealType.toLowerCase()}-healthy`,
         label: mealType === 'LUNCH' ? 'bua trua - rau/canh' : 'bua toi - rau/canh',
         groups: ['VEGETABLE_HEALTHY', 'DRINK_SOUP', 'VEGETARIAN'],
-        calorieRatio: 0.25,
+        calorieRatio: 0.35,
         optional: true,
       },
       {
         key: `${mealType.toLowerCase()}-dessert`,
         label: mealType === 'LUNCH' ? 'bua trua - trang mieng' : 'bua toi - trang mieng',
         groups: ['DESSERT_FRUIT'],
-        calorieRatio: 0.12,
+        calorieRatio: 0.25,
         optional: true,
         maxPortion: goalType === 'WEIGHT_GAIN' || goalType === 'MUSCLE_GAIN' ? 1 : 0.5,
       },
@@ -402,7 +412,7 @@ const getMealSlots = (goalType: GoalType | null, mealType: MealType): MealSlot[]
         key: `${mealType.toLowerCase()}-staple`,
         label: mealType === 'LUNCH' ? 'bua trua - tinh bot phu' : 'bua toi - tinh bot phu',
         groups: ['STAPLE'],
-        calorieRatio: goalType === 'WEIGHT_GAIN' || goalType === 'MUSCLE_GAIN' ? 0.2 : 0.18,
+        calorieRatio: goalType === 'WEIGHT_GAIN' || goalType === 'MUSCLE_GAIN' ? 0.35 : 0.25,
         optional: true,
       },
     ];
@@ -430,6 +440,68 @@ const getPortionMultiplier = (goalType: GoalType | null, food: FoodCandidate) =>
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 const roundPortion = (value: number) => Number((Math.round(value * 4) / 4).toFixed(2));
+
+const getBmiCategory = (height?: number | null, weight?: number | null): BmiCategory => {
+  const h = Number(height || 0);
+  const w = Number(weight || 0);
+  if (h < 120 || h > 230 || w < 35 || w > 220) return 'UNKNOWN';
+  const bmi = w / ((h / 100) ** 2);
+  if (bmi < 18.5) return 'UNDERWEIGHT';
+  if (bmi < 23) return 'NORMAL';
+  if (bmi < 27.5) return 'OVERWEIGHT';
+  return 'OBESE';
+};
+
+const getEffectiveGoalType = (goalType: GoalType | null, bmiCategory: BmiCategory): GoalType => {
+  if (goalType) return goalType;
+  if (bmiCategory === 'UNDERWEIGHT') return 'WEIGHT_GAIN';
+  if (bmiCategory === 'OVERWEIGHT' || bmiCategory === 'OBESE') return 'WEIGHT_LOSS';
+  return 'MAINTENANCE';
+};
+
+const getMealCalorieBand = (
+  goalType: GoalType | null,
+  mealType: MealType,
+  bmiCategory: BmiCategory,
+): MealCalorieBand => {
+  const effectiveGoal = getEffectiveGoalType(goalType, bmiCategory);
+  const bands: Record<GoalType, Record<MealType, MealCalorieBand>> = {
+    WEIGHT_LOSS: {
+      BREAKFAST: { min: 220, max: 420, ideal: 330 },
+      LUNCH: { min: 320, max: 560, ideal: 450 },
+      DINNER: { min: 280, max: 500, ideal: 390 },
+      SNACK: { min: 80, max: 180, ideal: 130 },
+    },
+    MAINTENANCE: {
+      BREAKFAST: { min: 300, max: 550, ideal: 420 },
+      LUNCH: { min: 450, max: 750, ideal: 600 },
+      DINNER: { min: 380, max: 650, ideal: 520 },
+      SNACK: { min: 100, max: 250, ideal: 170 },
+    },
+    WEIGHT_GAIN: {
+      BREAKFAST: { min: 420, max: 700, ideal: 560 },
+      LUNCH: { min: 600, max: 900, ideal: 740 },
+      DINNER: { min: 550, max: 850, ideal: 700 },
+      SNACK: { min: 180, max: 350, ideal: 260 },
+    },
+    MUSCLE_GAIN: {
+      BREAKFAST: { min: 380, max: 650, ideal: 520 },
+      LUNCH: { min: 550, max: 850, ideal: 700 },
+      DINNER: { min: 500, max: 800, ideal: 650 },
+      SNACK: { min: 160, max: 320, ideal: 240 },
+    },
+  };
+
+  const base = bands[effectiveGoal][mealType];
+  if (effectiveGoal !== 'MAINTENANCE') return base;
+  if (bmiCategory === 'UNDERWEIGHT') {
+    return { min: base.min + 80, max: base.max + 120, ideal: base.ideal + 100 };
+  }
+  if (bmiCategory === 'OVERWEIGHT' || bmiCategory === 'OBESE') {
+    return { min: Math.max(80, base.min - 80), max: base.max - 100, ideal: base.ideal - 90 };
+  }
+  return base;
+};
 
 const getAge = (dateOfBirth?: Date | null) => {
   if (!dateOfBirth) return 30;
@@ -533,6 +605,7 @@ const getMealBudgets = (context: UserNutritionContext): MealBudget[] => {
   const target = context.dailyCalorieTarget;
   const remaining = Math.max(0, context.remainingCalories);
   const goalType = context.goalType;
+  const effectiveGoal = getEffectiveGoalType(goalType, context.bmiCategory);
 
   const shares: Record<MealType, number> = {
     BREAKFAST: 0.24,
@@ -542,22 +615,28 @@ const getMealBudgets = (context: UserNutritionContext): MealBudget[] => {
   };
 
   const build = (mealType: MealType, minRatio: number, maxRatio: number, minProtein: number, maxFat?: number): MealBudget => {
+    const band = getMealCalorieBand(goalType, mealType, context.bmiCategory);
     const baseMin = Math.round(target * minRatio);
     const baseMax = Math.round(target * maxRatio);
     const remainingCap = remaining > 0 ? Math.max(120, Math.round(remaining * shares[mealType])) : baseMax;
-    const maxCalories = goalType === 'WEIGHT_LOSS'
-      ? Math.min(baseMax, remainingCap, mealType === 'SNACK' ? 180 : mealType === 'DINNER' ? 430 : 520)
-      : Math.min(baseMax, Math.max(baseMin + 80, remainingCap || baseMax));
+    const maxCalories = effectiveGoal === 'WEIGHT_LOSS'
+      ? Math.min(baseMax, remainingCap, band.max)
+      : Math.min(Math.max(baseMin + 80, remainingCap || baseMax), band.max);
+    const minCalories = Math.min(
+      Math.max(80, band.min, Math.min(baseMin, maxCalories - 80)),
+      Math.max(80, maxCalories - 60),
+    );
     return {
       mealType,
-      minCalories: Math.min(baseMin, Math.max(80, maxCalories - 80)),
+      minCalories,
       maxCalories: Math.max(120, maxCalories),
+      idealCalories: Math.min(band.ideal, Math.max(120, maxCalories)),
       minProtein,
       maxFat,
     };
   };
 
-  if (goalType === 'WEIGHT_LOSS') {
+  if (effectiveGoal === 'WEIGHT_LOSS') {
     return [
       build('BREAKFAST', 0.16, 0.25, 10, 16),
       build('LUNCH', 0.22, 0.32, 16, 20),
@@ -566,7 +645,7 @@ const getMealBudgets = (context: UserNutritionContext): MealBudget[] => {
     ];
   }
 
-  if (goalType === 'MUSCLE_GAIN') {
+  if (effectiveGoal === 'MUSCLE_GAIN') {
     return [
       build('BREAKFAST', 0.2, 0.28, 20, 22),
       build('LUNCH', 0.26, 0.36, 28, 28),
@@ -575,7 +654,7 @@ const getMealBudgets = (context: UserNutritionContext): MealBudget[] => {
     ];
   }
 
-  if (goalType === 'WEIGHT_GAIN') {
+  if (effectiveGoal === 'WEIGHT_GAIN') {
     return [
       build('BREAKFAST', 0.2, 0.3, 14),
       build('LUNCH', 0.28, 0.38, 20),
@@ -840,8 +919,9 @@ export const generateRecommendations = async (req: any, res: Response) => {
 
     const foodMeta = await loadFoodPlanningMeta(foods.map((food) => food.id));
     const enrichedFoods: FoodCandidate[] = foods.map((food) => ({ ...food, ...(foodMeta.get(food.id) || {}) }));
-    const goalType = activeGoal?.goalType || null;
-    const dailyCalorieTarget = estimateDailyCalories(profile, activeGoal);
+    const bmiCategory = getBmiCategory(profile?.height, profile?.weight);
+    const goalType = getEffectiveGoalType(activeGoal?.goalType || null, bmiCategory);
+    const dailyCalorieTarget = estimateDailyCalories(profile, activeGoal || { goalType });
     const currentCalories = Number(todayNutrition?.totalCalories || 0);
     const remainingCalories = Math.max(0, dailyCalorieTarget - currentCalories);
     const practicalLimit = goalType === 'WEIGHT_LOSS'
@@ -851,6 +931,7 @@ export const generateRecommendations = async (req: any, res: Response) => {
         : Math.min(requestedLimit, 7);
     const nutritionContext: UserNutritionContext = {
       goalType,
+      bmiCategory,
       dailyCalorieTarget,
       currentCalories,
       remainingCalories,
@@ -887,10 +968,14 @@ export const generateRecommendations = async (req: any, res: Response) => {
 
       const slots = getMealSlots(goalType, budget.mealType);
       let mealPlannedCalories = 0;
+      let hasRequiredMealSelection = false;
 
       for (const slot of slots) {
         if (scoredFoods.length >= practicalLimit) break;
         if (remainingCalories > 0 && plannedCalories >= remainingCalories) break;
+        if (slot.optional && !hasRequiredMealSelection && (budget.mealType === 'LUNCH' || budget.mealType === 'DINNER')) {
+          continue;
+        }
 
         const dayRemainingCap = remainingCalories > 0 ? Math.max(80, remainingCalories - plannedCalories) : budget.maxCalories;
         const mealRemainingCap = Math.max(60, budget.maxCalories - mealPlannedCalories);
@@ -906,6 +991,7 @@ export const generateRecommendations = async (req: any, res: Response) => {
           ...budget,
           minCalories: Math.min(Math.max(50, Math.round(budget.minCalories * slot.calorieRatio)), Math.max(50, slotMaxCalories - 30)),
           maxCalories: slotMaxCalories,
+          idealCalories: Math.min(Math.max(60, Math.round(budget.idealCalories * slot.calorieRatio)), slotMaxCalories),
           minProtein: Math.max(0, Math.round(budget.minProtein * slot.calorieRatio)),
           maxFat: budget.maxFat ? Math.max(4, Math.round(budget.maxFat * slot.calorieRatio)) : undefined,
         };
@@ -923,13 +1009,17 @@ export const generateRecommendations = async (req: any, res: Response) => {
             const goalScore = scoreByGoal(goalType, food);
             const dietaryScore = scoreByDietaryPreference(dietaryPref, food);
             const allergyScore = hasAllergyConflict ? -1000 : 0;
-            const favoriteScore = favoriteIds.has(food.id) ? 10 : 0;
+            const favoriteScore = favoriteIds.has(food.id) ? 28 : 0;
             const recentPenalty = recentFoodIds.has(food.id) ? -16 : 5;
             const groupMatch = matchesSlotGroup(food, group, slot);
             const groupScore = groupMatch ? 42 : -160;
             const proteinFit = Math.min(24, portion.protein * 1.1);
-            const calorieFit = Math.max(0, 28 - Math.abs(portion.calories - ((effectiveBudget.minCalories + effectiveBudget.maxCalories) / 2)) / 10);
+            const calorieFit = Math.max(0, 34 - Math.abs(portion.calories - effectiveBudget.idealCalories) / 8);
             const overBudgetPenalty = portion.calories > effectiveBudget.maxCalories ? 180 : 0;
+            const underBudgetPenalty =
+              !slot.optional && portion.calories < effectiveBudget.minCalories * 0.65
+                ? 28
+                : 0;
             const lowProteinPenalty =
               slot.groups.includes('PROTEIN_MAIN') && portion.protein < Math.max(6, effectiveBudget.minProtein * 0.8)
                 ? 26
@@ -956,6 +1046,7 @@ export const generateRecommendations = async (req: any, res: Response) => {
               proteinFit +
               calorieFit -
               overBudgetPenalty -
+              underBudgetPenalty -
               lowProteinPenalty -
               weightLossStaplePenalty -
               weightLossDessertPenalty -
@@ -985,19 +1076,21 @@ export const generateRecommendations = async (req: any, res: Response) => {
         selectedFoodIds.add(selected.food.id);
         plannedCalories += selected.portion.calories;
         mealPlannedCalories += selected.portion.calories;
+        if (!slot.optional) hasRequiredMealSelection = true;
 
         const reasons = [
           slot.label,
           foodGroupLabel[selected.group],
           `khau phan ${selected.portion.portion}x`,
           `~${selected.portion.calories} kcal`,
-          `ngan sach ${mealLabel[budget.mealType]} ${budget.maxCalories} kcal`,
+          `nguong ${mealLabel[budget.mealType]} ${budget.minCalories}-${budget.maxCalories} kcal`,
           ...buildGoalReason(goalType, selected.food),
         ];
 
         if (nutritionContext.height && nutritionContext.weight) {
-          reasons.push(`theo ${nutritionContext.height}cm/${nutritionContext.weight}kg`);
+          reasons.push(`BMI ${nutritionContext.bmiCategory.toLowerCase()} ${nutritionContext.height}cm/${nutritionContext.weight}kg`);
         }
+        if (favoriteIds.has(selected.food.id)) reasons.push('uu tien tu mon yeu thich');
         if (!recentFoodIds.has(selected.food.id)) reasons.push('chua an gan day');
 
         scoredFoods.push({
@@ -1016,6 +1109,8 @@ export const generateRecommendations = async (req: any, res: Response) => {
           dailyCalorieTarget,
           currentCalories,
           remainingCalories,
+          bmiCategory,
+          effectiveGoalType: goalType,
           message: 'Calorie target is already reached for today.',
         },
       });
@@ -1056,6 +1151,8 @@ export const generateRecommendations = async (req: any, res: Response) => {
         dailyCalorieTarget,
         currentCalories,
         remainingCalories,
+        bmiCategory,
+        effectiveGoalType: goalType,
         plannedCalories,
         maxRecommendations: practicalLimit,
       },

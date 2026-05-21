@@ -7,6 +7,7 @@ import {
   toAppDateKey,
   toAppDayStart,
 } from '../utils/timezone.util';
+import { recalculateDailyNutrition } from '../services/nutrition.service';
 
 const prisma = new PrismaClient();
 const VN_UTC_OFFSET_HOURS = getAppUtcOffsetHours();
@@ -225,9 +226,7 @@ export const getDailyStats = async (req: any, res: Response) => {
     
     const targetDate = toVnDayStart(date ? String(date) : new Date());
     
-    const nutrition = await prisma.dailyNutrition.findUnique({
-      where: { userId_date: { userId, date: targetDate } }
-    });
+    const nutrition = await recalculateDailyNutrition(userId, targetDate);
     
     const profile = await prisma.userProfile.findUnique({ where: { userId } });
     

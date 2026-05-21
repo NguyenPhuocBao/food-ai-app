@@ -1,5 +1,5 @@
-﻿import { useEffect, useState } from 'react';
-import { CalendarDays, Eye, Loader2, Plus, Sparkles, Trash2, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { CalendarDays, Eye, Loader2, Plus, Sparkles, Trash2, X, Pencil } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getFoods } from '../services/food.service';
 import {
@@ -7,11 +7,15 @@ import {
   applyActiveMealPlanToday,
   createMealPlan,
   deleteMealPlan,
+  deleteDetailFromMealPlan,
   generateAutoMealPlan,
+  getMealPlanById,
   getMealPlanInsights,
   getMealPlans,
   setActiveMealPlan,
+  updateMealPlanDetail,
   type MealPlan,
+  type MealPlanDetail,
   type MealPlanInsights,
 } from '../services/mealplan.service';
 import type { FoodItem } from '../types';
@@ -66,6 +70,12 @@ const MealPlansPage = () => {
     { foodId: 0, mealType: 'BREAKFAST', dayOfWeek: 1, quantity: 1 },
   ]);
   const [previewPlan, setPreviewPlan] = useState<MealPlan | null>(null);
+  const [addingDetailToPreview, setAddingDetailToPreview] = useState<{ dayOfWeek: number; mealType: MealTypeKey } | null>(null);
+  const [previewDetailForm, setPreviewDetailForm] = useState({ foodId: 0, quantity: 1 });
+  const [editingDetail, setEditingDetail] = useState<MealPlanDetail | null>(null);
+  const [editDetailForm, setEditDetailForm] = useState({ foodId: 0, mealType: 'BREAKFAST' as MealTypeKey, dayOfWeek: 1, quantity: 1 });
+  const [draggingDetailId, setDraggingDetailId] = useState<number | null>(null);
+  const [dragOverTarget, setDragOverTarget] = useState<{ dayOfWeek: number; mealType: MealTypeKey } | null>(null);
   const [insightsByPlanId, setInsightsByPlanId] = useState<Record<number, MealPlanInsights>>({});
 
   const loadData = async () => {
@@ -243,6 +253,164 @@ const MealPlansPage = () => {
       toast.error('Không thể xóa meal plan');
     }
   };
+
+  const refreshPreviewPlan = async (planId: number) => {
+    try {
+      const updatedPlans = await getMealPlans();
+      setPlans(updatedPlans);
+      const updatedPlan = await getMealPlanById(planId);
+      setPreviewPlan(updatedPlan);
+      return updatedPlan;
+    } catch {
+      return null;
+    }
+  };
+
+  const handleDeletePreviewDetail = async (detailId: number) => {
+    if (!previewPlan) return;
+    try {
+      await deleteDetailFromMealPlan(previewPlan.id, detailId);
+      toast.success('Đã xóa món khỏi meal plan');
+      await refreshPreviewPlan(previewPlan.id);
+      loadData();
+    } catch {
+      toast.error('Không thể xóa món');
+    }
+  };
+
+  const handleAddPreviewDetail = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!previewPlan || !addingDetailToPreview || previewDetailForm.foodId === 0) return;
+
+    try {
+      await addDetailToMealPlan(previewPlan.id, {
+        foodId: previewDetailForm.foodId,
+        mealType: addingDetailToPreview.mealType,
+        dayOfWeek: addingDetailToPreview.dayOfWeek,
+        quantity: previewDetailForm.quantity,
+      });
+
+      toast.success('Đã thêm món vào meal plan');
+      setAddingDetailToPreview(null);
+      setPreviewDetailForm({ foodId: 0, quantity: 1 });
+
+      await refreshPreviewPlan(previewPlan.id);
+      loadData();
+    } catch {
+      toast.error('Không thể thêm món');
+    }
+  };
+
+  const handleStartEditDetail = (detail: MealPlanDetail) => {
+    setEditingDetail(detail);
+    setEditDetailForm({
+      foodId: detail.foodId,
+      mealType: detail.mealType,
+      dayOfWeek: detail.dayOfWeek,
+      quantity: detail.quantity,
+    });
+  };
+
+  const handleCancelEditDetail = () => {
+    setEditingDetail(null);
+  };
+
+  const handleSaveEditDetail = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!previewPlan || !editingDetail) return;
+
+    try {
+      const updated = await updateMealPlanDetail(previewPlan.id, editingDetail.id, {
+        foodId: editDetailForm.foodId,
+        mealType: editDetailForm.mealType,
+        dayOfWeek: editDetailForm.dayOfWeek,
+        quantity: editDetailForm.quantity,
+      });
+
+      toast.success('Cập nhật meal plan thành công');
+      setEditingDetail(null);
+      await refreshPreviewPlan(previewPlan.id);
+      loadData();
+    } catch {
+      toast.error('Không thể cập nhật món');
+    }
+  };
+
+  const handleDragStart = (detail: MealPlanDetail) => {
+    setDraggingDetailId(detail.id);
+  };
+
+  const handleDragEnd = () => {
+    setDraggingDetailId(null);
+    setDragOverTarget(null);
+  };
+
+  const handleDragEnter = (dayOfWeek: number, mealType: MealTypeKey) => {
+    if (!draggingDetailId) return;
+    setDragOverTarget({ dayOfWeek, mealType });
+  };
+
+  const handleDragLeave = () => {
+    setDragOverTarget(null);
+  };
+
+  const handleDropOnCell = async (dayOfWeek: number, mealType: MealTypeKey) => {
+    if (!previewPlan || !draggingDetailId) return;
+
+    const detail = previewPlan.details.find((item) => item.id === draggingDetailId);
+    if (!detail) return;
+
+    setDragOverTarget(null);
+    setDraggingDetailId(null);
+    if (detail.dayOfWeek === dayOfWeek && detail.mealType === mealType) return;
+
+    try {
+      const updated = await updateMealPlanDetail(previewPlan.id, detail.id, { dayOfWeek, mealType });
+      toast.success(`Đã di chuyển ${detail.food.name} sang ${MEAL_LABELS[mealType]} ${DAY_LABELS[dayOfWeek]}`);
+      await refreshPreviewPlan(previewPlan.id);
+      loadData();
+    } catch {
+      toast.error('Không thể di chuyển món ăn');
+    }
+  };
+
+  const getPreviewTotals = (dayOfWeek: number) => {
+    const dayDetails = previewPlan?.details.filter((detail) => detail.dayOfWeek === dayOfWeek) ?? [];
+    return dayDetails.reduce(
+      (result, detail) => {
+        result.calories += detail.food.calories * detail.quantity;
+        result.protein += detail.food.protein * detail.quantity;
+        result.fat += detail.food.fat * detail.quantity;
+        result.carbs += detail.food.carbs * detail.quantity;
+        return result;
+      },
+      { calories: 0, protein: 0, fat: 0, carbs: 0 }
+    );
+  };
+
+  const getWeekTotals = () => {
+    if (!previewPlan) return { calories: 0, protein: 0, fat: 0, carbs: 0, meals: 0, emptyCells: 28 };
+
+    const totals = previewPlan.details.reduce(
+      (result, detail) => {
+        result.calories += detail.food.calories * detail.quantity;
+        result.protein += detail.food.protein * detail.quantity;
+        result.fat += detail.food.fat * detail.quantity;
+        result.carbs += detail.food.carbs * detail.quantity;
+        result.meals += 1;
+        return result;
+      },
+      { calories: 0, protein: 0, fat: 0, carbs: 0, meals: 0 }
+    );
+
+    const fullCells = DAY_LABELS.length * Object.keys(MEAL_LABELS).length;
+    return {
+      ...totals,
+      emptyCells: fullCells - totals.meals,
+    };
+  };
+
+  const formatNumber = (value: number) => Math.round(value);
 
   const updateDetail = (index: number, field: keyof DraftDetail, value: number | DraftDetail['mealType']) => {
     setDetails((current) =>
@@ -653,6 +821,97 @@ const MealPlansPage = () => {
               </div>
             </div>
 
+
+            {editingDetail && (
+              <div className="border-t border-gray-100 bg-slate-50 p-5">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="space-y-2">
+                    <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-600">Sửa chi tiết</p>
+                    <h3 className="text-lg font-black text-gray-900">{editingDetail.food.name}</h3>
+                    <p className="text-sm text-gray-500">Điều chỉnh ngày, bữa và số khẩu phần cho mục đã chọn.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCancelEditDetail}
+                    className="rounded-2xl bg-white px-4 py-2 text-sm font-bold text-gray-700 border border-gray-200"
+                  >
+                    Hủy
+                  </button>
+                </div>
+
+                <form onSubmit={handleSaveEditDetail} className="mt-4 grid gap-4 lg:grid-cols-4">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-2">Món ăn</label>
+                    <select
+                      value={editDetailForm.foodId}
+                      onChange={(event) => setEditDetailForm((current) => ({ ...current, foodId: Number(event.target.value) }))}
+                      className="w-full rounded-2xl bg-white border border-gray-200 px-4 py-3 text-sm"
+                    >
+                      {editingDetail && !foods.some((food) => food.id === editingDetail.foodId) && (
+                        <option value={editingDetail.foodId}>{editingDetail.food.name}</option>
+                      )}
+                      {foods.map((food) => (
+                        <option key={food.id} value={food.id}>
+                          {food.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-2">Ngày</label>
+                    <select
+                      value={editDetailForm.dayOfWeek}
+                      onChange={(event) => setEditDetailForm((current) => ({ ...current, dayOfWeek: Number(event.target.value) }))}
+                      className="w-full rounded-2xl bg-white border border-gray-200 px-4 py-3 text-sm"
+                    >
+                      {DAY_LABELS.map((label, dayIndex) => (
+                        <option key={label} value={dayIndex}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-2">Bữa</label>
+                    <select
+                      value={editDetailForm.mealType}
+                      onChange={(event) =>
+                        setEditDetailForm((current) => ({ ...current, mealType: event.target.value as MealTypeKey }))
+                      }
+                      className="w-full rounded-2xl bg-white border border-gray-200 px-4 py-3 text-sm"
+                    >
+                      {(Object.keys(MEAL_LABELS) as MealTypeKey[]).map((mealType) => (
+                        <option key={mealType} value={mealType}>
+                          {MEAL_LABELS[mealType]}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-2">Khẩu phần</label>
+                    <input
+                      type="number"
+                      min="0.5"
+                      step="0.5"
+                      value={editDetailForm.quantity}
+                      onChange={(event) =>
+                        setEditDetailForm((current) => ({ ...current, quantity: Number(event.target.value) }))
+                      }
+                      className="w-full rounded-2xl bg-white border border-gray-200 px-4 py-3 text-sm"
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <button
+                      type="submit"
+                      className="w-full rounded-2xl bg-emerald-500 text-white py-3 text-sm font-black hover:bg-emerald-600"
+                    >
+                      Lưu thay đổi
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
             <div className="flex-1 overflow-auto bg-[linear-gradient(135deg,_#f8fafc,_#ecfeff)] p-5">
               <div className="min-w-[1040px] overflow-hidden rounded-[28px] border border-gray-100 bg-white shadow-sm">
                 <table className="w-full table-fixed border-collapse">
@@ -671,6 +930,20 @@ const MealPlansPage = () => {
                         );
                       })}
                     </tr>
+                    <tr className="bg-gray-50 text-gray-700 text-xs">
+                      <td className="px-4 py-2 font-semibold">Tổng mỗi ngày</td>
+                      {DAY_LABELS.map((_, dayIndex) => {
+                        const totals = getPreviewTotals(dayIndex);
+                        return (
+                          <td key={dayIndex} className="px-3 py-2 align-top">
+                            <div className="space-y-1">
+                              <div className="rounded-full bg-slate-100 px-2 py-1 inline-block">{Math.round(totals.calories)} kcal</div>
+                              <div className="rounded-full bg-emerald-50 px-2 py-1 inline-block text-emerald-700">{Math.round(totals.protein)}g P</div>
+                            </div>
+                          </td>
+                        );
+                      })}
+                    </tr>
                   </thead>
                   <tbody>
                     {(Object.keys(MEAL_LABELS) as MealTypeKey[]).map((mealType) => (
@@ -684,18 +957,77 @@ const MealPlansPage = () => {
                           const mealDetails = previewPlan.details.filter(
                             (detail) => detail.dayOfWeek === dayIndex && detail.mealType === mealType
                           );
+                          const isTarget = dragOverTarget?.dayOfWeek === dayIndex && dragOverTarget?.mealType === mealType;
 
                           return (
-                            <td key={`${dayLabel}-${mealType}`} className="h-32 border-l border-gray-100 p-3 align-top">
+                            <td
+                              key={`${dayLabel}-${mealType}`}
+                              className={`h-32 border-l border-gray-100 p-3 align-top group relative transition-colors ${isTarget ? 'ring-2 ring-emerald-300 bg-emerald-50/60' : 'hover:bg-gray-50/50'}`}
+                              onDragOver={(event) => event.preventDefault()}
+                              onDragEnter={() => handleDragEnter(dayIndex, mealType)}
+                              onDragLeave={handleDragLeave}
+                              onDrop={(event) => {
+                                event.preventDefault();
+                                handleDropOnCell(dayIndex, mealType);
+                              }}
+                            >
+                              {addingDetailToPreview?.dayOfWeek === dayIndex && addingDetailToPreview?.mealType === mealType ? (
+                                <form onSubmit={handleAddPreviewDetail} className="bg-white p-3 rounded-2xl shadow-lg border border-emerald-100 mb-2 relative z-20 animate-in fade-in slide-in-from-top-2">
+                                  <button type="button" onClick={() => setAddingDetailToPreview(null)} className="absolute top-2 right-2 text-gray-400 hover:text-gray-600"><X size={14}/></button>
+                                  <p className="text-xs font-bold text-gray-900 mb-2 pr-4">Thêm món</p>
+                                  <select 
+                                    className="w-full text-xs p-2 rounded-xl bg-gray-50 border-0 mb-2"
+                                    value={previewDetailForm.foodId}
+                                    onChange={e => setPreviewDetailForm(c => ({...c, foodId: Number(e.target.value)}))}
+                                    required
+                                  >
+                                    <option value={0}>Chọn món</option>
+                                    {foods.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                                  </select>
+                                  <div className="flex gap-2">
+                                    <input 
+                                      type="number" min="0.5" step="0.5" required
+                                      className="w-16 text-xs p-2 rounded-xl bg-gray-50 border-0"
+                                      value={previewDetailForm.quantity}
+                                      onChange={e => setPreviewDetailForm(c => ({...c, quantity: Number(e.target.value)}))}
+                                    />
+                                    <button type="submit" className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition-colors">Thêm</button>
+                                  </div>
+                                </form>
+                              ) : null}
+
                               {mealDetails.length === 0 ? (
                                 <div className="flex h-full min-h-[92px] items-center justify-center rounded-2xl border border-dashed border-gray-200 text-xs font-semibold text-gray-400">
                                   Trống
                                 </div>
                               ) : (
-                                <div className="space-y-2">
+                                <div className="space-y-2 relative z-10">
                                   {mealDetails.map((detail) => (
-                                    <div key={detail.id} className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
-                                      <p className="line-clamp-2 text-sm font-black text-gray-900">{detail.food.name}</p>
+                                    <div
+                                      key={detail.id}
+                                      draggable
+                                      onDragStart={() => handleDragStart(detail)}
+                                      onDragEnd={handleDragEnd}
+                                      className="group/item relative rounded-2xl border border-gray-100 bg-white p-3 shadow-sm hover:border-emerald-100 transition-colors"
+                                    >
+                                      <div className="absolute right-3 top-3 flex gap-2 opacity-0 group-hover/item:opacity-100 transition-all z-20">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleStartEditDetail(detail)}
+                                          className="rounded-full bg-white p-1.5 shadow-sm border border-gray-100 text-gray-400 hover:text-slate-900 hover:border-slate-200"
+                                          title="Chỉnh sửa"
+                                        >
+                                          <Pencil size={12} />
+                                        </button>
+                                        <button 
+                                          onClick={() => handleDeletePreviewDetail(detail.id)}
+                                          className="rounded-full bg-white p-1.5 shadow-sm border border-gray-100 text-gray-400 hover:text-red-500 hover:border-red-100"
+                                          title="Xóa"
+                                        >
+                                          <Trash2 size={12} />
+                                        </button>
+                                      </div>
+                                      <p className="line-clamp-2 text-sm font-black text-gray-900 pr-2">{detail.food.name}</p>
                                       <div className="mt-2 flex flex-wrap gap-1 text-[11px] font-bold">
                                         <span className="rounded-full bg-gray-100 px-2 py-0.5 text-gray-600">{detail.quantity}x</span>
                                         <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700">
@@ -708,6 +1040,16 @@ const MealPlansPage = () => {
                                     </div>
                                   ))}
                                 </div>
+                              )}
+                              
+                              {(!addingDetailToPreview || addingDetailToPreview.dayOfWeek !== dayIndex || addingDetailToPreview.mealType !== mealType) && (
+                                <button 
+                                  onClick={() => setAddingDetailToPreview({ dayOfWeek: dayIndex, mealType })}
+                                  className="absolute bottom-1 right-1/2 translate-x-1/2 translate-y-1/2 opacity-0 group-hover:opacity-100 bg-gray-900 text-white rounded-full p-1.5 shadow-md hover:scale-110 transition-all z-20"
+                                  title="Thêm món"
+                                >
+                                  <Plus size={14} strokeWidth={3} />
+                                </button>
                               )}
                             </td>
                           );

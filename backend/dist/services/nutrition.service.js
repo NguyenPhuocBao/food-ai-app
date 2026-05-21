@@ -10,9 +10,25 @@ const normalizeToDayStart = (value) => {
     return (0, timezone_util_1.toAppDayStart)(value);
 };
 exports.normalizeToDayStart = normalizeToDayStart;
+const AUTO_APPLIED_MEAL_PLAN_NOTE_PREFIX = 'Auto-applied from meal plan:';
+const cleanupOrphanAutoAppliedMealPlanMeals = async (userId, date, nextDate) => {
+    await prisma_1.default.meal.deleteMany({
+        where: {
+            userId,
+            eatenAt: {
+                gte: date,
+                lt: nextDate,
+            },
+            isFromAI: true,
+            notes: { startsWith: AUTO_APPLIED_MEAL_PLAN_NOTE_PREFIX },
+            mealPlanId: null,
+        },
+    });
+};
 const recalculateDailyNutrition = async (userId, dateValue) => {
     const date = (0, exports.normalizeToDayStart)(dateValue);
     const nextDate = new Date(date.getTime() + 86400000);
+    await cleanupOrphanAutoAppliedMealPlanMeals(userId, date, nextDate);
     const dailyMeals = await prisma_1.default.meal.findMany({
         where: {
             userId,
