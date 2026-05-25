@@ -69,7 +69,9 @@ const MealPlansPage = () => {
   const [details, setDetails] = useState<DraftDetail[]>([
     { foodId: 0, mealType: 'BREAKFAST', dayOfWeek: 1, quantity: 1 },
   ]);
+  const [previewPlanId, setPreviewPlanId] = useState<number | null>(null);
   const [previewPlan, setPreviewPlan] = useState<MealPlan | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [addingDetailToPreview, setAddingDetailToPreview] = useState<{ dayOfWeek: number; mealType: MealTypeKey } | null>(null);
   const [previewDetailForm, setPreviewDetailForm] = useState({ foodId: 0, quantity: 1 });
   const [editingDetail, setEditingDetail] = useState<MealPlanDetail | null>(null);
@@ -244,7 +246,8 @@ const MealPlansPage = () => {
   const handleDelete = async (planId: number) => {
     try {
       await deleteMealPlan(planId);
-      if (previewPlan?.id === planId) {
+      if (previewPlanId === planId) {
+        setPreviewPlanId(null);
         setPreviewPlan(null);
       }
       toast.success('Đã xóa meal plan');
@@ -256,8 +259,6 @@ const MealPlansPage = () => {
 
   const refreshPreviewPlan = async (planId: number) => {
     try {
-      const updatedPlans = await getMealPlans();
-      setPlans(updatedPlans);
       const updatedPlan = await getMealPlanById(planId);
       setPreviewPlan(updatedPlan);
       return updatedPlan;
@@ -265,6 +266,48 @@ const MealPlansPage = () => {
       return null;
     }
   };
+
+  const openPreviewPlan = (planId: number) => {
+    setPreviewPlanId(planId);
+    setPreviewPlan(null);
+  };
+
+  useEffect(() => {
+    if (!previewPlanId) return;
+
+    let disposed = false;
+    const loadPreview = async () => {
+      setPreviewLoading(true);
+      const updatedPlan = await refreshPreviewPlan(previewPlanId);
+      if (!updatedPlan && !disposed) {
+        toast.error('Không thể tải dữ liệu preview mới nhất');
+      }
+      if (!disposed) setPreviewLoading(false);
+    };
+
+    void loadPreview();
+
+    const handleFocus = () => {
+      void refreshPreviewPlan(previewPlanId);
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshPreviewPlan(previewPlanId);
+      }
+    };
+    const intervalId = window.setInterval(() => {
+      void refreshPreviewPlan(previewPlanId);
+    }, 10000);
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      disposed = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [previewPlanId]);
 
   const handleDeletePreviewDetail = async (detailId: number) => {
     if (!previewPlan) return;
@@ -718,7 +761,7 @@ const MealPlansPage = () => {
                     </div>
                     <div className="flex gap-3">
                       <button
-                        onClick={() => setPreviewPlan(plan)}
+                        onClick={() => void openPreviewPlan(plan.id)}
                         className="rounded-2xl bg-blue-50 px-4 py-2 text-sm font-bold text-blue-700 inline-flex items-center gap-2 hover:bg-blue-100"
                       >
                         <Eye size={16} />
@@ -781,39 +824,53 @@ const MealPlansPage = () => {
         </div>
       </section>
 
-      {previewPlan && (
+      {previewPlanId && (
         <div className="fixed inset-0 z-50 bg-gray-950/60 px-4 py-6 backdrop-blur-sm">
           <div className="mx-auto flex h-full max-w-7xl flex-col overflow-hidden rounded-[32px] bg-white shadow-2xl">
             <div className="flex flex-col gap-4 border-b border-gray-100 p-5 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-600">Weekly Preview</p>
-                <h2 className="mt-1 text-2xl font-black text-gray-900">{previewPlan.name}</h2>
-                <p className="mt-1 text-sm text-gray-500">
-                  {new Date(previewPlan.startDate).toLocaleDateString('vi-VN')} đến {new Date(previewPlan.endDate).toLocaleDateString('vi-VN')}
-                </p>
+                {previewPlan ? (
+                  <>
+                    <h2 className="mt-1 text-2xl font-black text-gray-900">{previewPlan.name}</h2>
+                    <p className="mt-1 text-sm text-gray-500">
+                      {new Date(previewPlan.startDate).toLocaleDateString('vi-VN')} đến {new Date(previewPlan.endDate).toLocaleDateString('vi-VN')}
+                    </p>
+                  </>
+                ) : (
+                  <div className="mt-2 flex items-center gap-2 text-sm font-semibold text-gray-500">
+                    <Loader2 size={16} className="animate-spin" />
+                    Đang tải dữ liệu preview mới nhất...
+                  </div>
+                )}
               </div>
 
               <div className="flex flex-wrap items-center gap-3">
-                <div className="grid grid-cols-3 gap-2 text-center text-xs font-bold">
-                  <div className="rounded-2xl bg-gray-50 px-4 py-2">
-                    <p className="text-gray-400">Món</p>
-                    <p className="text-lg text-gray-900">{previewPlan.details.length}</p>
+                {previewPlan && (
+                  <div className="grid grid-cols-3 gap-2 text-center text-xs font-bold">
+                    <div className="rounded-2xl bg-gray-50 px-4 py-2">
+                      <p className="text-gray-400">Món</p>
+                      <p className="text-lg text-gray-900">{previewPlan.details.length}</p>
+                    </div>
+                    <div className="rounded-2xl bg-amber-50 px-4 py-2">
+                      <p className="text-amber-500">Kcal</p>
+                      <p className="text-lg text-amber-800">
+                        {Math.round(previewPlan.details.reduce((sum, detail) => sum + detail.food.calories * detail.quantity, 0))}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl bg-emerald-50 px-4 py-2">
+                      <p className="text-emerald-500">Protein</p>
+                      <p className="text-lg text-emerald-800">
+                        {Math.round(previewPlan.details.reduce((sum, detail) => sum + detail.food.protein * detail.quantity, 0))}g
+                      </p>
+                    </div>
                   </div>
-                  <div className="rounded-2xl bg-amber-50 px-4 py-2">
-                    <p className="text-amber-500">Kcal</p>
-                    <p className="text-lg text-amber-800">
-                      {Math.round(previewPlan.details.reduce((sum, detail) => sum + detail.food.calories * detail.quantity, 0))}
-                    </p>
-                  </div>
-                  <div className="rounded-2xl bg-emerald-50 px-4 py-2">
-                    <p className="text-emerald-500">Protein</p>
-                    <p className="text-lg text-emerald-800">
-                      {Math.round(previewPlan.details.reduce((sum, detail) => sum + detail.food.protein * detail.quantity, 0))}g
-                    </p>
-                  </div>
-                </div>
+                )}
                 <button
-                  onClick={() => setPreviewPlan(null)}
+                  onClick={() => {
+                    setPreviewPlanId(null);
+                    setPreviewPlan(null);
+                  }}
                   className="rounded-2xl bg-gray-100 p-3 text-gray-600 hover:bg-gray-200"
                 >
                   <X size={20} />
@@ -821,7 +878,15 @@ const MealPlansPage = () => {
               </div>
             </div>
 
-
+            {!previewPlan || previewLoading ? (
+              <div className="flex flex-1 items-center justify-center bg-[linear-gradient(135deg,_#f8fafc,_#ecfeff)]">
+                <div className="flex items-center gap-3 rounded-2xl bg-white px-5 py-4 text-sm font-semibold text-gray-600 shadow-sm">
+                  <Loader2 size={18} className="animate-spin text-emerald-500" />
+                  Đang đồng bộ dữ liệu mới nhất...
+                </div>
+              </div>
+            ) : (
+              <>
             {editingDetail && (
               <div className="border-t border-gray-100 bg-slate-50 p-5">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -1060,6 +1125,8 @@ const MealPlansPage = () => {
                 </table>
               </div>
             </div>
+              </>
+            )}
           </div>
         </div>
       )}

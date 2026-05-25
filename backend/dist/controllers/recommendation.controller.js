@@ -1183,10 +1183,16 @@ const respondToRecommendation = async (req, res) => {
                     },
                 });
             }
+            const planForSync = await prisma.mealPlan.findFirst({
+                where: { userId },
+                orderBy: [{ isActive: 'desc' }, { createdAt: 'desc' }],
+                select: { id: true },
+            });
             createdMeal = await prisma.meal.create({
                 data: {
                     userId,
                     foodId: recommendation.foodId,
+                    mealPlanId: planForSync?.id ?? null,
                     mealType,
                     eatenAt: new Date(),
                     quantity,
@@ -1199,15 +1205,11 @@ const respondToRecommendation = async (req, res) => {
                 },
                 include: { food: true },
             });
-            const activeMealPlan = await prisma.mealPlan.findFirst({
-                where: { userId, isActive: true },
-                select: { id: true },
-            });
-            if (activeMealPlan) {
+            if (planForSync) {
                 const dayOfWeek = getAppDayOfWeek(createdMeal.eatenAt);
                 const existingDetail = await prisma.mealPlanDetail.findFirst({
                     where: {
-                        mealPlanId: activeMealPlan.id,
+                        mealPlanId: planForSync.id,
                         foodId: recommendation.foodId,
                         mealType,
                         dayOfWeek,
@@ -1216,14 +1218,14 @@ const respondToRecommendation = async (req, res) => {
                 if (existingDetail) {
                     syncedMealPlanDetail = await prisma.mealPlanDetail.update({
                         where: { id: existingDetail.id },
-                        data: { quantity },
+                        data: { quantity: Number((existingDetail.quantity + quantity).toFixed(2)) },
                         include: { food: true },
                     });
                 }
                 else {
                     syncedMealPlanDetail = await prisma.mealPlanDetail.create({
                         data: {
-                            mealPlanId: activeMealPlan.id,
+                            mealPlanId: planForSync.id,
                             foodId: recommendation.foodId,
                             mealType,
                             dayOfWeek,

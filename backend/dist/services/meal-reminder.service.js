@@ -144,7 +144,8 @@ const runMealReminderCycle = async () => {
         const { hour, minute } = getAppTimeParts(now);
         const { start, endExclusive } = (0, timezone_util_1.toAppDayRange)(now);
         const users = await prisma_1.default.user.findMany({
-            where: { isActive: true, role: 'USER' },
+            // Check all end-users, not only currently active sessions.
+            where: { role: 'USER' },
             select: { id: true, email: true, name: true },
         });
         if (users.length === 0)
