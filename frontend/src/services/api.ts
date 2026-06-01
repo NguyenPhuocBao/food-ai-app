@@ -18,10 +18,11 @@ api.interceptors.request.use((config) => {
   // 2. Xác định xem đây là request cho Admin hay User
   // Các route bắt đầu bằng /admin hoặc có query userId thường là dành cho admin
   const isAdminRoute = window.location.pathname.startsWith('/admin');
+  const isAuthRequest = config.url?.startsWith('/auth');
   const isAdminRequest =
     config.url?.startsWith('/admin') ||
     config.url?.includes('userId=') ||
-    (isAdminRoute && (config.url?.startsWith('/chat') || config.url?.startsWith('/support')));
+    (isAdminRoute && !isAuthRequest);
   
   const adminToken = localStorage.getItem('admin_token');
   const userToken = localStorage.getItem('token');
@@ -47,9 +48,10 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       const url = error.config.url;
       const isAdminRoute = window.location.pathname.startsWith('/admin');
+      const isAuthRequest = url?.startsWith('/auth');
       const isAdminRequest =
         url?.startsWith('/admin') ||
-        (isAdminRoute && (url?.startsWith('/chat') || url?.startsWith('/support')));
+        (isAdminRoute && !isAuthRequest);
 
       if (isAdminRequest) {
         localStorage.removeItem('admin_token');

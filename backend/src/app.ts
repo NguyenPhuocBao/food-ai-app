@@ -50,7 +50,11 @@ const isDatabaseAvailable = async () => {
 };
 
 // Middleware
-app.use(helmet());
+// Allow cross-origin image resources (frontend and API are on different domains).
+app.use(helmet({
+  crossOriginResourcePolicy: false,
+  crossOriginEmbedderPolicy: false,
+}));
 app.use(cors({
   credentials: true,
   origin: (origin, callback) => {
@@ -68,6 +72,7 @@ app.use(auditMutationMiddleware);
 app.use('/uploads', express.static(path.join(__dirname, '../uploads'), {
   setHeaders: (res) => {
     res.set('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.set('Access-Control-Allow-Origin', '*');
   }
 }));
 

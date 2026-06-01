@@ -16,6 +16,9 @@ frontend/dist/
 backend/uploads/
 logs/
 *.log
+backups/*.backup
+backups/*.sql
+backups/*.zip
 
 # IDE/OS
 .DS_Store
