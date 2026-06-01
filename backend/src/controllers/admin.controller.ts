@@ -384,7 +384,21 @@ export const createFood = async (req: Request, res: Response) => {
         action: 'CREATE_FOOD',
         entity: 'FoodItem',
         entityId: food.id,
-        newData: { name: normalizedName, category: normalizedCategory },
+        newData: {
+          id: food.id,
+          name: normalizedName,
+          category: normalizedCategory,
+          nutrition: {
+            calories: Math.round(parsedCalories),
+            protein: parseFloat(protein) || 0,
+            fat: parseFloat(fat) || 0,
+            carbs: parseFloat(carbs) || 0,
+          },
+          planningMeta: { mealTimeTags, mealRoles, goalTags, cookingMethod, portionType },
+          requestBody: req.body,
+        },
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
       },
     });
     res.status(201).json({ success: true, data: { ...food, ...(meta.get(food.id) || {}) } });
@@ -439,8 +453,32 @@ export const updateFood = async (req: Request, res: Response) => {
         action: 'UPDATE_FOOD',
         entity: 'FoodItem',
         entityId: food.id,
-        oldData: { name: oldFood.name },
-        newData: { name: food.name },
+        oldData: {
+          id: oldFood.id,
+          name: oldFood.name,
+          category: oldFood.category,
+          nutrition: {
+            calories: oldFood.calories,
+            protein: oldFood.protein,
+            fat: oldFood.fat,
+            carbs: oldFood.carbs,
+          },
+        },
+        newData: {
+          id: food.id,
+          name: food.name,
+          category: food.category,
+          nutrition: {
+            calories: food.calories,
+            protein: food.protein,
+            fat: food.fat,
+            carbs: food.carbs,
+          },
+          planningMeta: { mealTimeTags, mealRoles, goalTags, cookingMethod, portionType },
+          requestBody: req.body,
+        },
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
       },
     });
     res.json({ success: true, data: food });
@@ -452,20 +490,67 @@ export const updateFood = async (req: Request, res: Response) => {
 export const deleteFood = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const food = await prisma.foodItem.findUnique({ where: { id: parseInt(id) } });
+    const foodId = parseInt(id);
+    if (!Number.isFinite(foodId)) {
+      return res.status(400).json({ error: 'Invalid food id' });
+    }
+
+    const food = await prisma.foodItem.findUnique({ where: { id: foodId } });
     if (!food) return res.status(404).json({ error: 'Food not found' });
-    await prisma.foodItem.delete({ where: { id: parseInt(id) } });
+
+    const cleanupSummary = await prisma.$transaction(async (tx) => {
+      // 1) Prisma-level cleanup
+      const deletedRecommendations = await tx.recommendation.deleteMany({ where: { foodId } });
+      const deletedMealPlanDetails = await tx.mealPlanDetail.deleteMany({ where: { foodId } });
+      const deletedMeals = await tx.meal.deleteMany({ where: { foodId } });
+      const deletedFavorites = await tx.favorite.deleteMany({ where: { foodId } });
+      const deletedReviews = await tx.review.deleteMany({ where: { foodId } });
+
+      // 2) SQL fallback cleanup (in case some rows were created outside Prisma schema evolution)
+      await tx.$executeRaw`DELETE FROM "recommendations" WHERE "foodId" = ${foodId}`;
+      await tx.$executeRaw`DELETE FROM "meal_plan_details" WHERE "foodId" = ${foodId}`;
+      await tx.$executeRaw`DELETE FROM "meals" WHERE "foodId" = ${foodId}`;
+      await tx.$executeRaw`DELETE FROM "favorites" WHERE "foodId" = ${foodId}`;
+      await tx.$executeRaw`DELETE FROM "reviews" WHERE "foodId" = ${foodId}`;
+
+      await tx.foodItem.delete({ where: { id: foodId } });
+      return {
+        deletedRecommendations: deletedRecommendations.count,
+        deletedMealPlanDetails: deletedMealPlanDetails.count,
+        deletedMeals: deletedMeals.count,
+        deletedFavorites: deletedFavorites.count,
+        deletedReviews: deletedReviews.count,
+      };
+    });
+
     await prisma.auditLog.create({
       data: {
         userId: (req as any).user.id,
         action: 'DELETE_FOOD',
         entity: 'FoodItem',
-        entityId: parseInt(id),
-        oldData: { name: food.name },
+        entityId: foodId,
+        oldData: {
+          id: food.id,
+          name: food.name,
+          category: food.category,
+          nutrition: {
+            calories: food.calories,
+            protein: food.protein,
+            fat: food.fat,
+            carbs: food.carbs,
+          },
+        },
+        newData: {
+          deletedRelations: cleanupSummary,
+          requestBody: req.body,
+        },
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
       },
     });
     res.json({ success: true, message: 'Food deleted' });
   } catch (error: any) {
+    console.error('[deleteFood] failed', { foodId: req.params.id, message: error?.message, code: error?.code, meta: error?.meta });
     res.status(500).json({ error: error.message });
   }
 };

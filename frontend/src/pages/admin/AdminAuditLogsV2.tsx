@@ -17,12 +17,23 @@ const ACTION_OPTIONS = [
 
 const ENTITY_OPTIONS = ['User', 'FoodItem', 'UserProfile', 'Notification', 'Recipe', 'MealPlan'];
 
-const toPreview = (value: unknown) => {
+const toPreview = (value: unknown, max = 140) => {
   if (!value) return '-';
   try {
-    return JSON.stringify(value).slice(0, 140);
+    const text = JSON.stringify(value);
+    return text.length > max ? `${text.slice(0, max)}...` : text;
   } catch {
-    return String(value).slice(0, 140);
+    const text = String(value);
+    return text.length > max ? `${text.slice(0, max)}...` : text;
+  }
+};
+
+const toPrettyJson = (value: unknown) => {
+  if (!value) return '-';
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
   }
 };
 
@@ -219,8 +230,22 @@ const AdminAuditLogsV2 = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-gray-500 dark:text-slate-400">{log.entity}</td>
                     <td className="px-6 py-4 text-sm space-y-1">
-                      <p className="text-amber-700 dark:text-amber-300">Old: {toPreview(log.oldData)}</p>
-                      <p className="text-emerald-700 dark:text-emerald-300">New: {toPreview(log.newData)}</p>
+                      <details className="rounded-xl bg-amber-50/60 p-2 dark:bg-amber-900/20">
+                        <summary className="cursor-pointer text-amber-700 dark:text-amber-300">
+                          Old: {toPreview(log.oldData, 180)}
+                        </summary>
+                        <pre className="mt-2 whitespace-pre-wrap break-words text-xs text-amber-900 dark:text-amber-200">
+                          {toPrettyJson(log.oldData)}
+                        </pre>
+                      </details>
+                      <details className="rounded-xl bg-emerald-50/60 p-2 dark:bg-emerald-900/20">
+                        <summary className="cursor-pointer text-emerald-700 dark:text-emerald-300">
+                          New: {toPreview(log.newData, 180)}
+                        </summary>
+                        <pre className="mt-2 whitespace-pre-wrap break-words text-xs text-emerald-900 dark:text-emerald-200">
+                          {toPrettyJson(log.newData)}
+                        </pre>
+                      </details>
                     </td>
                   </tr>
                 ))

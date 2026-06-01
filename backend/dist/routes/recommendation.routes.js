@@ -6,6 +6,8 @@ const auth_middleware_1 = require("../middlewares/auth.middleware");
 const router = (0, express_1.Router)();
 router.get('/', auth_middleware_1.authMiddleware, recommendation_controller_1.getRecommendations);
 router.post('/generate', auth_middleware_1.authMiddleware, recommendation_controller_1.generateRecommendations);
+router.post('/generate-by-meal-plan', auth_middleware_1.authMiddleware, recommendation_controller_1.generateRecommendationsByMealPlan);
+router.post('/apply-to-meal-plan-days', auth_middleware_1.authMiddleware, recommendation_controller_1.applyRecommendationToMealPlanDays);
 router.put('/:id/viewed', auth_middleware_1.authMiddleware, recommendation_controller_1.markRecommendationViewed);
 router.put('/:id/respond', auth_middleware_1.authMiddleware, recommendation_controller_1.respondToRecommendation);
 exports.default = router;

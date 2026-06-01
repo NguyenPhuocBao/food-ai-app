@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { ActivityLevel, GoalType, MealType, PrismaClient } from '@prisma/client';
 import { recalculateDailyNutrition } from '../services/nutrition.service';
+import { resolvePersonalTargets } from '../services/personalization.service';
 import { toAppDateKey } from '../utils/timezone.util';
 
 const prisma = new PrismaClient();
@@ -671,6 +672,80 @@ const getMealBudgets = (context: UserNutritionContext): MealBudget[] => {
   ];
 };
 
+const MEAL_RATIO_BY_GOAL: Record<GoalType, Record<MealType, number>> = {
+  WEIGHT_LOSS: { BREAKFAST: 0.24, LUNCH: 0.34, DINNER: 0.3, SNACK: 0.12 },
+  MAINTENANCE: { BREAKFAST: 0.25, LUNCH: 0.35, DINNER: 0.3, SNACK: 0.1 },
+  WEIGHT_GAIN: { BREAKFAST: 0.24, LUNCH: 0.36, DINNER: 0.3, SNACK: 0.1 },
+  MUSCLE_GAIN: { BREAKFAST: 0.24, LUNCH: 0.36, DINNER: 0.3, SNACK: 0.1 },
+};
+
+const dayOfWeekList = [0, 1, 2, 3, 4, 5, 6];
+
+const getMealBudgetCap = (targetCalories: number, goalType: GoalType, bmiCategory: BmiCategory, mealType: MealType) => {
+  const ratio = MEAL_RATIO_BY_GOAL[goalType][mealType];
+  let max = Math.round(targetCalories * ratio);
+  let min = Math.round(max * 0.72);
+
+  if (goalType === 'WEIGHT_LOSS' || bmiCategory === 'OBESE') {
+    max = Math.round(max * 0.92);
+    min = Math.round(min * 0.9);
+  } else if (goalType === 'WEIGHT_GAIN' || goalType === 'MUSCLE_GAIN') {
+    max = Math.round(max * 1.08);
+  }
+
+  if (mealType === 'SNACK') {
+    max = Math.min(max, goalType === 'WEIGHT_LOSS' ? 180 : 260);
+    min = Math.max(60, Math.round(max * 0.45));
+  } else {
+    max = Math.max(260, max);
+    min = Math.max(170, min);
+  }
+
+  return { min, max, ideal: Math.round((min + max) / 2) };
+};
+
+const getHardDailyCap = (targetCalories: number, goalType: GoalType, bmiCategory: BmiCategory) => {
+  if (goalType === 'WEIGHT_LOSS' || bmiCategory === 'OBESE') return Math.round(targetCalories * 1.02);
+  if (goalType === 'MAINTENANCE') return Math.round(targetCalories * 1.08);
+  return Math.round(targetCalories * 1.15);
+};
+
+const matchesDietaryPref = (dietaryPref: string[], food: FoodCandidate) => {
+  if (!dietaryPref.length) return true;
+  const text = toFoodText(food);
+  const pref = dietaryPref.map((item) => normalize(item));
+
+  if (pref.some((item) => item.includes('vegan') || item.includes('thuan chay'))) {
+    if (!food.isVegan) return false;
+  }
+  if (pref.some((item) => item.includes('vegetarian') || item.includes('chay'))) {
+    if (!food.isVegetarian && !food.isVegan && !text.includes('chay')) return false;
+  }
+  if (pref.some((item) => item.includes('gluten free') || item.includes('khong gluten'))) {
+    if (!food.isGlutenFree) return false;
+  }
+  return true;
+};
+
+const isMainDish = (food: FoodCandidate) => {
+  if (food.mealRoles?.includes('MAIN')) return true;
+  if (food.portionType === 'FULL_MEAL') return true;
+  const group = classifyFoodGroup(food);
+  return group === 'PROTEIN_MAIN' || group === 'STAPLE' || group === 'GRILLED';
+};
+
+const canUseForMeal = (food: FoodCandidate, mealType: MealType) => {
+  if (!food.mealTimeTags?.length) return true;
+  return food.mealTimeTags.includes(mealType);
+};
+
+const caloriesByQuantity = (food: FoodCandidate, quantity: number) => Number(food.calories || 0) * quantity;
+
+const toValidDayOfWeeks = (raw: unknown): number[] => {
+  if (!Array.isArray(raw)) return [];
+  return Array.from(new Set(raw.map((item) => Number(item)).filter((item) => Number.isInteger(item) && item >= 0 && item <= 6)));
+};
+
 const resolvePortionForBudget = (
   goalType: GoalType | null,
   food: FoodCandidate,
@@ -1210,6 +1285,332 @@ export const markRecommendationViewed = async (req: any, res: Response) => {
     res.json({ success: true, data: updated });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
+  }
+};
+
+export const generateRecommendationsByMealPlan = async (req: any, res: Response) => {
+  try {
+    const userId = req.user.id;
+    const selectedMealPlanId = Number(req.body?.mealPlanId || req.query?.mealPlanId || 0);
+    const requestedMealType = String(req.body?.mealType || req.query?.mealType || '').toUpperCase();
+    const scopedMealType = Object.values(MealType).includes(requestedMealType as MealType) ? (requestedMealType as MealType) : null;
+    const dayOfWeeks = toValidDayOfWeeks(req.body?.dayOfWeeks ?? req.query?.dayOfWeeks ?? []);
+
+    const [targets, profile, activeGoal] = await Promise.all([
+      resolvePersonalTargets(userId),
+      prisma.userProfile.findUnique({ where: { userId }, select: { height: true, weight: true } }),
+      prisma.userGoal.findFirst({ where: { userId }, orderBy: [{ isActive: 'desc' }, { startDate: 'desc' }] }),
+    ]);
+
+    const mealPlan = selectedMealPlanId
+      ? await prisma.mealPlan.findFirst({
+          where: { id: selectedMealPlanId, userId },
+          include: { details: { include: { food: true } } },
+        })
+      : await prisma.mealPlan.findFirst({
+          where: { userId },
+          orderBy: [{ isActive: 'desc' }, { createdAt: 'desc' }],
+          include: { details: { include: { food: true } } },
+        });
+
+    if (!mealPlan) return res.status(404).json({ error: 'Meal plan not found' });
+
+    const foods = await prisma.foodItem.findMany({
+      where: { calories: { gt: 0 } },
+      select: {
+        id: true,
+        name: true,
+        category: true,
+        description: true,
+        calories: true,
+        protein: true,
+        fat: true,
+        carbs: true,
+        imageUrl: true,
+        isVegetarian: true,
+        isVegan: true,
+        isGlutenFree: true,
+      },
+    });
+    const foodMeta = await loadFoodPlanningMeta(foods.map((food) => food.id));
+    const candidates: FoodCandidate[] = foods.map((food) => ({ ...food, ...(foodMeta.get(food.id) || {}) }));
+
+    const bmiCategory = getBmiCategory(profile?.height, profile?.weight);
+    const goalType = getEffectiveGoalType((activeGoal?.goalType || targets.goalType || null) as GoalType | null, bmiCategory);
+    const targetCalories = targets.targetCalories;
+    const hardDailyCap = getHardDailyCap(targetCalories, goalType, bmiCategory);
+    const scopedDays = dayOfWeeks.length ? dayOfWeeks : dayOfWeekList;
+    const mealTypes = scopedMealType ? [scopedMealType] : [MealType.BREAKFAST, MealType.LUNCH, MealType.DINNER, MealType.SNACK];
+
+    const weeklyMainCount = new Map<number, number>();
+    mealPlan.details.forEach((detail) => {
+      const food = candidates.find((item) => item.id === detail.foodId);
+      if (food && isMainDish(food)) {
+        weeklyMainCount.set(food.id, (weeklyMainCount.get(food.id) || 0) + 1);
+      }
+    });
+
+    const generated: Array<{
+      dayOfWeek: number;
+      mealType: MealType;
+      action: 'FILL_EMPTY' | 'ADD_VARIETY';
+      suggestedFoodId: number;
+      suggestedFood: {
+        id: number;
+        name: string;
+        category?: string | null;
+        imageUrl?: string | null;
+        calories: number;
+        protein: number;
+        fat: number;
+        carbs: number;
+      };
+      suggestedQuantity: number;
+      estimatedCalories: number;
+      reason: string;
+      skipped?: false;
+    }> = [];
+    const skipped: Array<{ dayOfWeek: number; mealType: MealType; reason: string; skipped: true }> = [];
+
+    for (const dayOfWeek of scopedDays) {
+      const dayDetails = mealPlan.details.filter((item) => item.dayOfWeek === dayOfWeek);
+      const dayPlannedCalories = dayDetails.reduce((sum, item) => {
+        const food = candidates.find((f) => f.id === item.foodId);
+        return sum + (food ? caloriesByQuantity(food, item.quantity) : 0);
+      }, 0);
+      let dayProjectedCalories = dayPlannedCalories;
+
+      for (const mealType of mealTypes) {
+        const mealBudget = getMealBudgetCap(targetCalories, goalType, bmiCategory, mealType);
+        const currentMealDetails = dayDetails.filter((item) => item.mealType === mealType);
+        const currentMealCalories = currentMealDetails.reduce((sum, item) => {
+          const food = candidates.find((f) => f.id === item.foodId);
+          return sum + (food ? caloriesByQuantity(food, item.quantity) : 0);
+        }, 0);
+        const action: 'FILL_EMPTY' | 'ADD_VARIETY' = currentMealDetails.length === 0 ? 'FILL_EMPTY' : 'ADD_VARIETY';
+        const mealRemainingCap = Math.max(0, mealBudget.max - currentMealCalories);
+        const dayRemainingCap = Math.max(0, hardDailyCap - dayProjectedCalories);
+        if (mealRemainingCap < 80 || dayRemainingCap < 80) {
+          skipped.push({
+            dayOfWeek,
+            mealType,
+            reason: 'Khong con ngan sach calo hop ly cho bua nay.',
+            skipped: true,
+          });
+          continue;
+        }
+
+        const usedFoodIdsInDay = new Set(dayDetails.map((item) => item.foodId));
+        const filtered = candidates
+          .filter((food) => canUseForMeal(food, mealType))
+          .filter((food) => matchesDietaryPref(targets.dietaryPref || [], food))
+          .filter((food) => findMatchedAllergies(targets.allergies || [], food).length === 0)
+          .filter((food) => !usedFoodIdsInDay.has(food.id))
+          .filter((food) => isGoalCompatible(goalType, food))
+          .filter((food) => {
+            if (action === 'FILL_EMPTY') return isMainDish(food);
+            return !isMainDish(food) || currentMealDetails.length === 0;
+          })
+          .map((food) => {
+            const quantity = action === 'FILL_EMPTY'
+              ? clamp(resolvePortionForBudget(goalType, food, {
+                  mealType,
+                  minCalories: mealBudget.min,
+                  maxCalories: Math.min(mealBudget.max, currentMealCalories + mealRemainingCap),
+                  idealCalories: mealBudget.ideal,
+                  minProtein: 0,
+                }).portion, 0.5, 1.5)
+              : clamp(resolvePortionForBudget(goalType, food, {
+                  mealType,
+                  minCalories: Math.max(60, Math.round(mealBudget.min * 0.25)),
+                  maxCalories: Math.max(120, Math.round(mealBudget.max * 0.45)),
+                  idealCalories: Math.round(mealBudget.ideal * 0.3),
+                  minProtein: 0,
+                }).portion, 0.5, 1);
+            const estimatedCalories = Math.round(caloriesByQuantity(food, quantity));
+            const projectedMeal = currentMealCalories + estimatedCalories;
+            const projectedDay = dayProjectedCalories + estimatedCalories;
+            const repeatMainCount = isMainDish(food) ? (weeklyMainCount.get(food.id) || 0) : 0;
+            const repeatPenalty = repeatMainCount >= 2 ? 90 : repeatMainCount * 30;
+            const calorieFit = Math.abs(projectedMeal - mealBudget.ideal);
+            const score = scoreByGoal(goalType, food) - calorieFit - repeatPenalty;
+            return { food, quantity, estimatedCalories, projectedMeal, projectedDay, score };
+          })
+          .filter((item) => item.estimatedCalories <= mealRemainingCap)
+          .filter((item) => item.projectedMeal <= mealBudget.max)
+          .filter((item) => item.projectedDay <= hardDailyCap)
+          .sort((a, b) => b.score - a.score);
+
+        const selected = filtered[0];
+        if (!selected) {
+          skipped.push({
+            dayOfWeek,
+            mealType,
+            reason: 'Khong tim thay mon phu hop voi muc tieu calo/so thich.',
+            skipped: true,
+          });
+          continue;
+        }
+
+        generated.push({
+          dayOfWeek,
+          mealType,
+          action,
+          suggestedFoodId: selected.food.id,
+          suggestedFood: {
+            id: selected.food.id,
+            name: selected.food.name,
+            category: selected.food.category || null,
+            imageUrl: (selected.food as any).imageUrl || null,
+            calories: Number(selected.food.calories || 0),
+            protein: Number(selected.food.protein || 0),
+            fat: Number(selected.food.fat || 0),
+            carbs: Number(selected.food.carbs || 0),
+          },
+          suggestedQuantity: Number(selected.quantity.toFixed(2)),
+          estimatedCalories: selected.estimatedCalories,
+          reason:
+            action === 'FILL_EMPTY'
+              ? `Fill o trong theo ngan sach ${mealBudget.min}-${mealBudget.max} kcal`
+              : `Bo sung da dang, giu tong bua trong nguong ${mealBudget.max} kcal`,
+        });
+        dayProjectedCalories = selected.projectedDay;
+        dayDetails.push({
+          id: -Date.now(),
+          mealPlanId: mealPlan.id,
+          foodId: selected.food.id,
+          mealType,
+          dayOfWeek,
+          quantity: selected.quantity,
+          food: selected.food as any,
+        } as any);
+        if (isMainDish(selected.food)) {
+          weeklyMainCount.set(selected.food.id, (weeklyMainCount.get(selected.food.id) || 0) + 1);
+        }
+      }
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        mealPlanId: mealPlan.id,
+        targetCalories,
+        hardDailyCap,
+        goalType,
+        bmiCategory,
+        recommendations: generated,
+        skipped,
+      },
+    });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+};
+
+export const applyRecommendationToMealPlanDays = async (req: any, res: Response) => {
+  try {
+    const userId = req.user.id;
+    const mealPlanId = Number(req.body?.mealPlanId || 0);
+    const foodId = Number(req.body?.foodId || 0);
+    const requestedMealType = String(req.body?.mealType || '').toUpperCase();
+    const mealType = Object.values(MealType).includes(requestedMealType as MealType)
+      ? (requestedMealType as MealType)
+      : null;
+    const applyMode = String(req.body?.applyMode || 'SELECTED_DAYS').toUpperCase();
+    const dayOfWeeksRaw = toValidDayOfWeeks(req.body?.dayOfWeeks || []);
+    const quantity = clamp(Number(req.body?.quantity || 1), 0.5, 2);
+    if (!mealPlanId || !foodId || !mealType) return res.status(400).json({ error: 'mealPlanId, foodId, mealType are required' });
+
+    const [mealPlan, targets, profile, activeGoal, food] = await Promise.all([
+      prisma.mealPlan.findFirst({ where: { id: mealPlanId, userId }, include: { details: { include: { food: true } } } }),
+      resolvePersonalTargets(userId),
+      prisma.userProfile.findUnique({ where: { userId }, select: { height: true, weight: true } }),
+      prisma.userGoal.findFirst({ where: { userId }, orderBy: [{ isActive: 'desc' }, { startDate: 'desc' }] }),
+      prisma.foodItem.findUnique({ where: { id: foodId } }),
+    ]);
+    if (!mealPlan) return res.status(404).json({ error: 'Meal plan not found' });
+    if (!food) return res.status(404).json({ error: 'Food not found' });
+
+    const foodMeta = await loadFoodPlanningMeta([food.id]);
+    const candidate: FoodCandidate = { ...food, ...(foodMeta.get(food.id) || {}) };
+    const bmiCategory = getBmiCategory(profile?.height, profile?.weight);
+    const goalType = getEffectiveGoalType((activeGoal?.goalType || targets.goalType || null) as GoalType | null, bmiCategory);
+    const targetCalories = targets.targetCalories;
+    const hardDailyCap = getHardDailyCap(targetCalories, goalType, bmiCategory);
+    const budget = getMealBudgetCap(targetCalories, goalType, bmiCategory, mealType);
+    const addCalories = Math.round(Number(food.calories || 0) * quantity);
+    const allDays = dayOfWeekList;
+
+    const selectedDays =
+      applyMode === 'ALL_DAYS'
+        ? allDays
+        : applyMode === 'FILL_EMPTY'
+          ? allDays.filter((day) => !mealPlan.details.some((detail) => detail.dayOfWeek === day && detail.mealType === mealType))
+          : (dayOfWeeksRaw.length ? dayOfWeeksRaw : []);
+
+    if (!selectedDays.length) return res.status(400).json({ error: 'No day selected to apply' });
+
+    const results: Array<{ dayOfWeek: number; status: 'APPLIED' | 'SKIPPED'; reason?: string; detailId?: number }> = [];
+
+    for (const dayOfWeek of selectedDays) {
+      const dayDetails = mealPlan.details.filter((item) => item.dayOfWeek === dayOfWeek);
+      const mealDetails = dayDetails.filter((item) => item.mealType === mealType);
+      const dayCalories = dayDetails.reduce((sum, item) => sum + Number(item.food.calories || 0) * item.quantity, 0);
+      const mealCalories = mealDetails.reduce((sum, item) => sum + Number(item.food.calories || 0) * item.quantity, 0);
+
+      if (!canUseForMeal(candidate, mealType)) {
+        results.push({ dayOfWeek, status: 'SKIPPED', reason: 'Mon khong phu hop khung bua nay.' });
+        continue;
+      }
+      if (!matchesDietaryPref(targets.dietaryPref || [], candidate)) {
+        results.push({ dayOfWeek, status: 'SKIPPED', reason: 'Mon khong phu hop dietary preference.' });
+        continue;
+      }
+      if (findMatchedAllergies(targets.allergies || [], candidate).length) {
+        results.push({ dayOfWeek, status: 'SKIPPED', reason: 'Mon xung dot voi di ung cua user.' });
+        continue;
+      }
+      if (dayCalories + addCalories > hardDailyCap) {
+        results.push({ dayOfWeek, status: 'SKIPPED', reason: 'Vuot hard cap calo cua ngay.' });
+        continue;
+      }
+      if (mealCalories + addCalories > budget.max) {
+        results.push({ dayOfWeek, status: 'SKIPPED', reason: `Vuot nguong calo bua ${budget.max} kcal.` });
+        continue;
+      }
+
+      const existing = await prisma.mealPlanDetail.findFirst({
+        where: { mealPlanId, dayOfWeek, mealType, foodId },
+      });
+
+      if (existing) {
+        const updated = await prisma.mealPlanDetail.update({
+          where: { id: existing.id },
+          data: { quantity: Number((existing.quantity + quantity).toFixed(2)) },
+        });
+        results.push({ dayOfWeek, status: 'APPLIED', detailId: updated.id });
+      } else {
+        const created = await prisma.mealPlanDetail.create({
+          data: { mealPlanId, dayOfWeek, mealType, foodId, quantity },
+        });
+        results.push({ dayOfWeek, status: 'APPLIED', detailId: created.id });
+      }
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        mealPlanId,
+        foodId,
+        mealType,
+        quantity,
+        targetCalories,
+        hardDailyCap,
+        results,
+      },
+    });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
   }
 };
 

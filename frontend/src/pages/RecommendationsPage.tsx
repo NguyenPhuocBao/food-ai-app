@@ -4,12 +4,17 @@ import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import type { Recommendation } from '../types';
 import {
+  applyRecommendationToMealPlanDays,
   generateRecommendations,
+  generateRecommendationsByMealPlan,
   getRecommendations,
   markRecommendationViewed,
+  type MealPlanRecommendationItem,
   respondRecommendation,
 } from '../services/recommendation.service';
 import { getAssetUrl } from '../services/api';
+import { getMealPlans, type MealPlan } from '../services/mealplan.service';
+import { getFoods } from '../services/food.service';
 
 const MEAL_TYPE_OPTIONS = [
   { value: 'BREAKFAST', label: 'Bữa sáng' },
@@ -24,6 +29,8 @@ const STATUS_TABS: Array<{ label: string; value: 'all' | 'new' | 'accepted' | 'r
   { label: 'Đã chọn', value: 'accepted' },
   { label: 'Đã bỏ qua', value: 'rejected' },
 ];
+const DAY_LABELS = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
+type ApplyResultEntry = { applied: number; skipped: number; reason?: string; mode: 'SELECTED_DAYS' | 'FILL_EMPTY' | 'ALL_DAYS' };
 
 const RecommendationsPage = () => {
   const [status, setStatus] = useState<'all' | 'new' | 'accepted' | 'rejected'>('all');
@@ -35,6 +42,15 @@ const RecommendationsPage = () => {
   const [selectedQuantity, setSelectedQuantity] = useState(1);
   const [adding, setAdding] = useState(false);
   const [pendingWarning, setPendingWarning] = useState<Awaited<ReturnType<typeof respondRecommendation>> | null>(null);
+  const [mealPlans, setMealPlans] = useState<MealPlan[]>([]);
+  const [foodLookup, setFoodLookup] = useState<Record<number, { id: number; name: string; imageUrl?: string; category?: string; calories?: number }>>({});
+  const [selectedMealPlanId, setSelectedMealPlanId] = useState<number>(0);
+  const [mealPlanSuggestions, setMealPlanSuggestions] = useState<MealPlanRecommendationItem[]>([]);
+  const [generatingByPlan, setGeneratingByPlan] = useState(false);
+  const [applyingSuggestionKey, setApplyingSuggestionKey] = useState<string | null>(null);
+  const [selectedApplyDays, setSelectedApplyDays] = useState<number[]>([]);
+  const [applyingAllVisible, setApplyingAllVisible] = useState(false);
+  const [applyResults, setApplyResults] = useState<Record<string, ApplyResultEntry>>({});
   const hasGeneratedOnMount = useRef(false);
 
   const inferMealType = (reason: string) => {
@@ -89,6 +105,42 @@ const RecommendationsPage = () => {
     void generateFreshBatch();
   }, []);
 
+  useEffect(() => {
+    const loadFoodLookup = async () => {
+      try {
+        const response = await getFoods(1, 1000);
+        const map: Record<number, { id: number; name: string; imageUrl?: string; category?: string; calories?: number }> = {};
+        response.items.forEach((food) => {
+          map[food.id] = {
+            id: food.id,
+            name: food.name,
+            imageUrl: food.imageUrl,
+            category: food.category,
+            calories: food.calories,
+          };
+        });
+        setFoodLookup(map);
+      } catch {
+        // keep empty; UI still has id fallback
+      }
+    };
+    void loadFoodLookup();
+  }, []);
+
+  useEffect(() => {
+    const loadMealPlans = async () => {
+      try {
+        const plans = await getMealPlans();
+        setMealPlans(plans);
+        const active = plans.find((plan) => plan.isActive) || plans[0];
+        if (active) setSelectedMealPlanId(active.id);
+      } catch {
+        // ignore; recommendations page still works with old flow
+      }
+    };
+    void loadMealPlans();
+  }, []);
+
   const handleGenerate = async () => {
     setGenerating(true);
     try {
@@ -100,6 +152,102 @@ const RecommendationsPage = () => {
       toast.error('Không tạo được gợi ý');
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const handleGenerateByMealPlan = async () => {
+    if (!selectedMealPlanId) {
+      toast.error('Chưa có meal plan để tạo gợi ý theo tuần');
+      return;
+    }
+    setGeneratingByPlan(true);
+    try {
+      const result = await generateRecommendationsByMealPlan({ mealPlanId: selectedMealPlanId });
+      setMealPlanSuggestions(result.recommendations || []);
+      toast.success(`Đã tạo ${result.recommendations.length} gợi ý theo meal plan`);
+    } catch {
+      toast.error('Không tạo được gợi ý theo meal plan');
+    } finally {
+      setGeneratingByPlan(false);
+    }
+  };
+
+  const handleApplySuggestion = async (
+    suggestion: MealPlanRecommendationItem,
+    applyMode: 'SELECTED_DAYS' | 'FILL_EMPTY' | 'ALL_DAYS' = 'SELECTED_DAYS',
+  ) => {
+    if (!selectedMealPlanId) return;
+    const key = `${suggestion.dayOfWeek}-${suggestion.mealType}-${suggestion.suggestedFoodId}-${applyMode}`;
+    setApplyingSuggestionKey(key);
+    try {
+      const result = await applyRecommendationToMealPlanDays({
+        mealPlanId: selectedMealPlanId,
+        foodId: suggestion.suggestedFoodId,
+        mealType: suggestion.mealType,
+        quantity: suggestion.suggestedQuantity,
+        applyMode,
+        dayOfWeeks: applyMode === 'SELECTED_DAYS' ? (selectedApplyDays.length ? selectedApplyDays : [suggestion.dayOfWeek]) : undefined,
+      });
+      const applied = result.results.filter((item) => item.status === 'APPLIED').length;
+      const skipped = result.results.filter((item) => item.status === 'SKIPPED').length;
+      const firstSkipReason = result.results.find((item) => item.status === 'SKIPPED')?.reason;
+      setApplyResults((prev) => ({
+        ...prev,
+        [keyBase]: { applied, skipped, reason: firstSkipReason, mode: applyMode },
+      }));
+      if (applied > 0 && skipped > 0) {
+        toast.success(`Đã áp dụng ${applied} ngày, bỏ qua ${skipped} ngày`);
+      } else if (applied > 0) {
+        toast.success(`Đã áp dụng ${applied} ngày`);
+      } else {
+        toast.error(result.results[0]?.reason || 'Không thể áp dụng đề xuất');
+      }
+    } catch {
+      toast.error('Không thể áp dụng đề xuất');
+    } finally {
+      setApplyingSuggestionKey(null);
+    }
+  };
+
+  const toggleApplyDay = (day: number) => {
+    setSelectedApplyDays((prev) => (prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort((a, b) => a - b)));
+  };
+
+  const handleApplyAllVisible = async () => {
+    if (!selectedMealPlanId || mealPlanSuggestions.length === 0) return;
+    setApplyingAllVisible(true);
+    let totalApplied = 0;
+    let totalSkipped = 0;
+    try {
+      for (const suggestion of mealPlanSuggestions) {
+        const keyBase = `${suggestion.dayOfWeek}-${suggestion.mealType}-${suggestion.suggestedFoodId}`;
+        const result = await applyRecommendationToMealPlanDays({
+          mealPlanId: selectedMealPlanId,
+          foodId: suggestion.suggestedFoodId,
+          mealType: suggestion.mealType,
+          quantity: suggestion.suggestedQuantity,
+          applyMode: 'SELECTED_DAYS',
+          dayOfWeeks: selectedApplyDays.length ? selectedApplyDays : [suggestion.dayOfWeek],
+        });
+        const applied = result.results.filter((item) => item.status === 'APPLIED').length;
+        const skipped = result.results.filter((item) => item.status === 'SKIPPED').length;
+        const firstSkipReason = result.results.find((item) => item.status === 'SKIPPED')?.reason;
+        totalApplied += applied;
+        totalSkipped += skipped;
+        setApplyResults((prev) => ({
+          ...prev,
+          [keyBase]: { applied, skipped, reason: firstSkipReason, mode: 'SELECTED_DAYS' },
+        }));
+      }
+      if (totalApplied > 0) {
+        toast.success(`Áp dụng hàng loạt xong: ${totalApplied} ngày, bỏ qua ${totalSkipped} ngày`);
+      } else {
+        toast.error('Không có mục nào được áp dụng');
+      }
+    } catch {
+      toast.error('Áp dụng hàng loạt thất bại');
+    } finally {
+      setApplyingAllVisible(false);
     }
   };
 
@@ -215,6 +363,124 @@ const RecommendationsPage = () => {
             Tạo gợi ý mới
           </button>
         </div>
+      </section>
+
+      <section className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-600">Meal Plan Aware</p>
+            <h2 className="mt-1 text-xl font-black text-gray-900 dark:text-slate-100">Gợi ý theo từng ô meal plan trong tuần</h2>
+            <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">Ưu tiên ô trống, tôn trọng ngân sách calo từng bữa và hard cap theo ngày.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <select
+              value={selectedMealPlanId || 0}
+              onChange={(event) => setSelectedMealPlanId(Number(event.target.value))}
+              className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+            >
+              <option value={0}>Chọn meal plan</option>
+              {mealPlans.map((plan) => (
+                <option key={plan.id} value={plan.id}>{plan.name}</option>
+              ))}
+            </select>
+            <button
+              onClick={handleGenerateByMealPlan}
+              disabled={generatingByPlan || !selectedMealPlanId}
+              className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-600 disabled:opacity-60"
+            >
+              {generatingByPlan ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+              Tạo theo meal plan
+            </button>
+          </div>
+        </div>
+
+        {mealPlanSuggestions.length > 0 && (
+          <div className="mt-4 space-y-3">
+            <div className="rounded-2xl border border-gray-100 p-3 dark:border-slate-700">
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-gray-500 dark:text-slate-400">Chọn ngày áp dụng</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {DAY_LABELS.map((label, index) => {
+                  const active = selectedApplyDays.includes(index);
+                  return (
+                    <button
+                      key={label}
+                      onClick={() => toggleApplyDay(index)}
+                      className={`rounded-xl px-3 py-1.5 text-xs font-semibold ${
+                        active
+                          ? 'bg-emerald-500 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-slate-800 dark:text-slate-200'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-2 text-xs text-gray-500 dark:text-slate-400">
+                Không chọn ngày nào thì mỗi card sẽ áp dụng theo ngày gợi ý của card đó.
+              </p>
+              <button
+                onClick={handleApplyAllVisible}
+                disabled={!!applyingSuggestionKey || applyingAllVisible}
+                className="mt-3 rounded-xl bg-gray-900 px-3 py-2 text-xs font-bold text-white hover:bg-gray-800 disabled:opacity-60 dark:bg-slate-100 dark:text-slate-900"
+              >
+                {applyingAllVisible ? 'Đang áp dụng hàng loạt...' : 'Áp dụng tất cả gợi ý đang hiển thị'}
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {mealPlanSuggestions.map((item) => {
+              const keyBase = `${item.dayOfWeek}-${item.mealType}-${item.suggestedFoodId}`;
+              const isApplyingSingle = applyingSuggestionKey === `${keyBase}-SELECTED_DAYS`;
+              const isApplyingFill = applyingSuggestionKey === `${keyBase}-FILL_EMPTY`;
+              const suggestedFood = item.suggestedFood || foodLookup[item.suggestedFoodId];
+              const imageUrl = getAssetUrl(suggestedFood?.imageUrl);
+              const applySummary = applyResults[keyBase];
+              return (
+                <div key={keyBase} className="rounded-2xl border border-gray-100 p-3 dark:border-slate-700">
+                  <div className="flex gap-3">
+                    <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-gray-100">
+                      {imageUrl ? <img src={imageUrl} alt={suggestedFood?.name || `food-${item.suggestedFoodId}`} className="h-full w-full object-cover" /> : null}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-black text-gray-900 dark:text-slate-100">
+                        {suggestedFood?.name || `Món #${item.suggestedFoodId}`}
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-slate-400">{DAY_LABELS[item.dayOfWeek]} • {MEAL_TYPE_OPTIONS.find((m) => m.value === item.mealType)?.label}</p>
+                      <p className="text-xs font-semibold text-emerald-700">
+                        {item.estimatedCalories || suggestedFood?.calories || 0} kcal • {item.suggestedQuantity}x
+                      </p>
+                    </div>
+                  </div>
+                  <p className="mt-2 line-clamp-2 text-xs text-gray-500 dark:text-slate-400">{item.reason}</p>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => handleApplySuggestion(item, 'SELECTED_DAYS')}
+                      disabled={!!applyingSuggestionKey}
+                      className="rounded-xl bg-emerald-500 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-600 disabled:opacity-60"
+                    >
+                      {isApplyingSingle ? 'Đang áp dụng...' : 'Áp dụng ngày này'}
+                    </button>
+                    <button
+                      onClick={() => handleApplySuggestion(item, 'FILL_EMPTY')}
+                      disabled={!!applyingSuggestionKey}
+                      className="rounded-xl bg-gray-100 px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-200 disabled:opacity-60 dark:bg-slate-800 dark:text-slate-200"
+                    >
+                      {isApplyingFill ? 'Đang áp dụng...' : 'Fill các ngày trống'}
+                    </button>
+                  </div>
+                  {applySummary && (
+                    <div className="mt-2 rounded-xl bg-gray-50 px-2 py-1.5 text-xs text-gray-700 dark:bg-slate-800 dark:text-slate-300">
+                      {applySummary.mode === 'FILL_EMPTY' ? 'Fill ngày trống' : 'Theo ngày chọn'}: áp dụng {applySummary.applied}, bỏ qua {applySummary.skipped}
+                      {applySummary.reason ? ` • ${applySummary.reason}` : ''}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            </div>
+          </div>
+        )}
       </section>
 
       <div className="flex flex-wrap items-center gap-2">

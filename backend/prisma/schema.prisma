@@ -478,13 +478,8 @@ model Notification {
 
 // ==================== 10. SYSTEM ====================
 model AuditLog {
-  id          Int      @id @default(autoincrement())
-  userId      Int?
-  action      String
-  entity      String
-  entityId    Int?
-  oldData     Json?
-  newData     Json?
+  errorCode   String? // Mã lỗi khi có
+  details     Json?
   ipAddress   String?
   userAgent   String?
   createdAt   DateTime @default(now())
