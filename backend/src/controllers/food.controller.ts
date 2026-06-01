@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { Difficulty, PrismaClient } from '@prisma/client';
 import { buildPopularFoodSeedData } from '../services/popular-foods.service';
+import { deleteLocalUploadIfExists, uploadImageToCloudinary } from '../services/cloudinary-upload.service';
 
 const prisma = new PrismaClient();
 
@@ -714,11 +715,17 @@ export const uploadFoodImage = async (req: any, res: Response) => {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
-    const imageUrl = `/uploads/${req.file.filename}`;
+    const localImageUrl = `/uploads/${req.file.filename}`;
+    const cloudinaryUrl = await uploadImageToCloudinary(req.file.path, 'foods').catch(() => null);
+    const imageUrl = cloudinaryUrl || localImageUrl;
+
     await prisma.foodItem.update({
       where: { id: foodId },
       data: { imageUrl },
     });
+    if (cloudinaryUrl) {
+      await deleteLocalUploadIfExists(req.file.path);
+    }
     res.json({ success: true, data: { imageUrl } });
   } catch (error: any) {
     res.status(500).json({ error: error.message });

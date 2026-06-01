@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import FormData from 'form-data';
 import prisma from '../lib/prisma';
+import { deleteLocalUploadIfExists, uploadImageToCloudinary } from '../services/cloudinary-upload.service';
 const AI_API_URL = String(process.env.AI_API_URL || '').trim();
 const AI_SCAN_MODE = String(process.env.AI_SCAN_MODE || 'auto').trim().toLowerCase();
 const LOCAL_AI_API_URL = 'http://localhost:8000';
@@ -233,7 +234,7 @@ export const analyzeImage = async (req: any, res: Response) => {
     }
 
     const imagePath = req.file.path;
-    const imageUrl = `/uploads/${path.basename(imagePath)}`;
+    const localImageUrl = `/uploads/${path.basename(imagePath)}`;
 
     let prediction: any = null;
     let aiError: string | null = null;
@@ -281,6 +282,12 @@ export const analyzeImage = async (req: any, res: Response) => {
         suggestedFoodIds: suggestedFoods.map((food) => food.id),
       },
     };
+
+    const cloudinaryUrl = await uploadImageToCloudinary(imagePath, 'scans').catch(() => null);
+    const imageUrl = cloudinaryUrl || localImageUrl;
+    if (cloudinaryUrl) {
+      await deleteLocalUploadIfExists(imagePath);
+    }
 
     const scanHistory = await prisma.scanHistory.create({
       data: {

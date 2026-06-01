@@ -10,6 +10,10 @@ const envSchema = z.object({
   DATABASE_URL: z.string().optional(),
   CORS_ORIGIN: z.string().optional(),
   FRONTEND_URL: z.string().optional(),
+  CLOUDINARY_CLOUD_NAME: z.string().optional(),
+  CLOUDINARY_API_KEY: z.string().optional(),
+  CLOUDINARY_API_SECRET: z.string().optional(),
+  CLOUDINARY_FOLDER: z.string().optional(),
 });
 
 const normalizeNodeEnv = (value?: string): NodeEnv => {
@@ -66,6 +70,13 @@ export type RuntimeEnv = {
   databaseUrl: string;
   frontendUrl: string;
   corsOrigins: string[];
+  cloudinary: {
+    enabled: boolean;
+    cloudName: string;
+    apiKey: string;
+    apiSecret: string;
+    folder: string;
+  };
 };
 
 let runtimeEnvCache: RuntimeEnv | null = null;
@@ -86,6 +97,11 @@ export const getRuntimeEnv = (): RuntimeEnv => {
   assertHttpUrl('FRONTEND_URL', frontendUrl);
 
   const corsOrigins = parseCorsOrigins(String(parsed.CORS_ORIGIN || ''), frontendUrl);
+  const cloudName = String(parsed.CLOUDINARY_CLOUD_NAME || '').trim();
+  const apiKey = String(parsed.CLOUDINARY_API_KEY || '').trim();
+  const apiSecret = String(parsed.CLOUDINARY_API_SECRET || '').trim();
+  const folder = String(parsed.CLOUDINARY_FOLDER || 'foodai').trim() || 'foodai';
+  const cloudinaryEnabled = Boolean(cloudName && apiKey && apiSecret);
 
   runtimeEnvCache = {
     nodeEnv,
@@ -93,8 +109,14 @@ export const getRuntimeEnv = (): RuntimeEnv => {
     databaseUrl,
     frontendUrl,
     corsOrigins,
+    cloudinary: {
+      enabled: cloudinaryEnabled,
+      cloudName,
+      apiKey,
+      apiSecret,
+      folder,
+    },
   };
 
   return runtimeEnvCache;
 };
-

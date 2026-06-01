@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.uploadFoodImage = exports.createRecipe = exports.updateRecipe = exports.bootstrapPopularFoods = exports.createCustomFood = exports.getMyCustomFoods = exports.getPopularFoods = exports.getCategories = exports.searchFoods = exports.getFoodById = exports.getAllFoods = void 0;
 const client_1 = require("@prisma/client");
 const popular_foods_service_1 = require("../services/popular-foods.service");
+const cloudinary_upload_service_1 = require("../services/cloudinary-upload.service");
 const prisma = new client_1.PrismaClient();
 const CUSTOM_CATEGORY_PREFIX = 'CUSTOM_USER_';
 const getCustomCategory = (userId) => `${CUSTOM_CATEGORY_PREFIX}${userId}`;
@@ -626,11 +627,16 @@ const uploadFoodImage = async (req, res) => {
             !isOwnedCustomCategory(food.category, req.user.id)) {
             return res.status(403).json({ error: 'Forbidden' });
         }
-        const imageUrl = `/uploads/${req.file.filename}`;
+        const localImageUrl = `/uploads/${req.file.filename}`;
+        const cloudinaryUrl = await (0, cloudinary_upload_service_1.uploadImageToCloudinary)(req.file.path, 'foods').catch(() => null);
+        const imageUrl = cloudinaryUrl || localImageUrl;
         await prisma.foodItem.update({
             where: { id: foodId },
             data: { imageUrl },
         });
+        if (cloudinaryUrl) {
+            await (0, cloudinary_upload_service_1.deleteLocalUploadIfExists)(req.file.path);
+        }
         res.json({ success: true, data: { imageUrl } });
     }
     catch (error) {

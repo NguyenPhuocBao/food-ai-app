@@ -9,6 +9,7 @@ const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const form_data_1 = __importDefault(require("form-data"));
 const prisma_1 = __importDefault(require("../lib/prisma"));
+const cloudinary_upload_service_1 = require("../services/cloudinary-upload.service");
 const AI_API_URL = String(process.env.AI_API_URL || '').trim();
 const AI_SCAN_MODE = String(process.env.AI_SCAN_MODE || 'auto').trim().toLowerCase();
 const LOCAL_AI_API_URL = 'http://localhost:8000';
@@ -212,7 +213,7 @@ const analyzeImage = async (req, res) => {
             return res.status(400).json({ error: 'No image uploaded' });
         }
         const imagePath = req.file.path;
-        const imageUrl = `/uploads/${path_1.default.basename(imagePath)}`;
+        const localImageUrl = `/uploads/${path_1.default.basename(imagePath)}`;
         let prediction = null;
         let aiError = null;
         const aiConfig = resolveAiScanConfig();
@@ -255,6 +256,11 @@ const analyzeImage = async (req, res) => {
                 suggestedFoodIds: suggestedFoods.map((food) => food.id),
             },
         };
+        const cloudinaryUrl = await (0, cloudinary_upload_service_1.uploadImageToCloudinary)(imagePath, 'scans').catch(() => null);
+        const imageUrl = cloudinaryUrl || localImageUrl;
+        if (cloudinaryUrl) {
+            await (0, cloudinary_upload_service_1.deleteLocalUploadIfExists)(imagePath);
+        }
         const scanHistory = await prisma_1.default.scanHistory.create({
             data: {
                 userId: req.user.id,
