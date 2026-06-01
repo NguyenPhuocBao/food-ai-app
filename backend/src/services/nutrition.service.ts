@@ -17,7 +17,9 @@ const cleanupOrphanAutoAppliedMealPlanMeals = async (userId: number, date: Date,
       },
       isFromAI: true,
       notes: { startsWith: AUTO_APPLIED_MEAL_PLAN_NOTE_PREFIX },
-      mealPlanId: null,
+      mealPlanId: { equals: null },
+
+
     },
   });
 };
