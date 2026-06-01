@@ -10,6 +10,7 @@ import {
   getRecommendations,
   markRecommendationViewed,
   type MealPlanRecommendationItem,
+  rollbackMealPlanApply,
   respondRecommendation,
 } from '../services/recommendation.service';
 import { getAssetUrl } from '../services/api';
@@ -31,6 +32,9 @@ const STATUS_TABS: Array<{ label: string; value: 'all' | 'new' | 'accepted' | 'r
 ];
 const DAY_LABELS = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
 type ApplyResultEntry = { applied: number; skipped: number; reason?: string; mode: 'SELECTED_DAYS' | 'FILL_EMPTY' | 'ALL_DAYS' };
+type RollbackOperation = { detailId: number; mutation: 'CREATED' | 'UPDATED'; previousQuantity?: number; appliedQuantity?: number };
+const LAST_APPLY_BATCH_KEY = 'foodai:last_apply_batch';
+type LastApplySnapshot = { mealPlanId: number; operations: RollbackOperation[] };
 
 const RecommendationsPage = () => {
   const [status, setStatus] = useState<'all' | 'new' | 'accepted' | 'rejected'>('all');
@@ -51,6 +55,9 @@ const RecommendationsPage = () => {
   const [selectedApplyDays, setSelectedApplyDays] = useState<number[]>([]);
   const [applyingAllVisible, setApplyingAllVisible] = useState(false);
   const [applyResults, setApplyResults] = useState<Record<string, ApplyResultEntry>>({});
+  const [onlyUnapplied, setOnlyUnapplied] = useState(false);
+  const [lastApplyBatch, setLastApplyBatch] = useState<LastApplySnapshot | null>(null);
+  const [rollingBack, setRollingBack] = useState(false);
   const hasGeneratedOnMount = useRef(false);
 
   const inferMealType = (reason: string) => {
@@ -83,6 +90,31 @@ const RecommendationsPage = () => {
   useEffect(() => {
     loadData(status);
   }, [status]);
+
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(LAST_APPLY_BATCH_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as LastApplySnapshot;
+      if (parsed && Number(parsed.mealPlanId) > 0 && Array.isArray(parsed.operations) && parsed.operations.length) {
+        setLastApplyBatch(parsed);
+      }
+    } catch {
+      // ignore invalid cache
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      if (lastApplyBatch?.operations?.length) {
+        sessionStorage.setItem(LAST_APPLY_BATCH_KEY, JSON.stringify(lastApplyBatch));
+      } else {
+        sessionStorage.removeItem(LAST_APPLY_BATCH_KEY);
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }, [lastApplyBatch]);
 
   useEffect(() => {
     if (hasGeneratedOnMount.current) return;
@@ -177,6 +209,7 @@ const RecommendationsPage = () => {
     applyMode: 'SELECTED_DAYS' | 'FILL_EMPTY' | 'ALL_DAYS' = 'SELECTED_DAYS',
   ) => {
     if (!selectedMealPlanId) return;
+    const keyBase = `${suggestion.dayOfWeek}-${suggestion.mealType}-${suggestion.suggestedFoodId}`;
     const key = `${suggestion.dayOfWeek}-${suggestion.mealType}-${suggestion.suggestedFoodId}-${applyMode}`;
     setApplyingSuggestionKey(key);
     try {
@@ -191,6 +224,15 @@ const RecommendationsPage = () => {
       const applied = result.results.filter((item) => item.status === 'APPLIED').length;
       const skipped = result.results.filter((item) => item.status === 'SKIPPED').length;
       const firstSkipReason = result.results.find((item) => item.status === 'SKIPPED')?.reason;
+      const rollbackOps: RollbackOperation[] = result.results
+        .filter((item) => item.status === 'APPLIED' && item.detailId && item.mutation)
+        .map((item) => ({
+          detailId: item.detailId as number,
+          mutation: item.mutation as 'CREATED' | 'UPDATED',
+          previousQuantity: item.previousQuantity,
+          appliedQuantity: item.appliedQuantity,
+        }));
+      if (rollbackOps.length) setLastApplyBatch({ mealPlanId: selectedMealPlanId, operations: rollbackOps });
       setApplyResults((prev) => ({
         ...prev,
         [keyBase]: { applied, skipped, reason: firstSkipReason, mode: applyMode },
@@ -202,6 +244,8 @@ const RecommendationsPage = () => {
       } else {
         toast.error(result.results[0]?.reason || 'Không thể áp dụng đề xuất');
       }
+      const refreshed = await generateRecommendationsByMealPlan({ mealPlanId: selectedMealPlanId });
+      setMealPlanSuggestions(refreshed.recommendations || []);
     } catch {
       toast.error('Không thể áp dụng đề xuất');
     } finally {
@@ -212,12 +256,17 @@ const RecommendationsPage = () => {
   const toggleApplyDay = (day: number) => {
     setSelectedApplyDays((prev) => (prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort((a, b) => a - b)));
   };
+  const setQuickApplyDays = (days: number[]) => {
+    const uniqueDays = Array.from(new Set(days)).filter((d) => d >= 0 && d <= 6).sort((a, b) => a - b);
+    setSelectedApplyDays(uniqueDays);
+  };
 
   const handleApplyAllVisible = async () => {
     if (!selectedMealPlanId || mealPlanSuggestions.length === 0) return;
     setApplyingAllVisible(true);
     let totalApplied = 0;
     let totalSkipped = 0;
+    const collectedOps: RollbackOperation[] = [];
     try {
       for (const suggestion of mealPlanSuggestions) {
         const keyBase = `${suggestion.dayOfWeek}-${suggestion.mealType}-${suggestion.suggestedFoodId}`;
@@ -232,6 +281,16 @@ const RecommendationsPage = () => {
         const applied = result.results.filter((item) => item.status === 'APPLIED').length;
         const skipped = result.results.filter((item) => item.status === 'SKIPPED').length;
         const firstSkipReason = result.results.find((item) => item.status === 'SKIPPED')?.reason;
+        result.results.forEach((item) => {
+          if (item.status === 'APPLIED' && item.detailId && item.mutation) {
+            collectedOps.push({
+              detailId: item.detailId,
+              mutation: item.mutation,
+              previousQuantity: item.previousQuantity,
+              appliedQuantity: item.appliedQuantity,
+            });
+          }
+        });
         totalApplied += applied;
         totalSkipped += skipped;
         setApplyResults((prev) => ({
@@ -240,16 +299,61 @@ const RecommendationsPage = () => {
         }));
       }
       if (totalApplied > 0) {
+        if (collectedOps.length) setLastApplyBatch({ mealPlanId: selectedMealPlanId, operations: collectedOps });
         toast.success(`Áp dụng hàng loạt xong: ${totalApplied} ngày, bỏ qua ${totalSkipped} ngày`);
       } else {
         toast.error('Không có mục nào được áp dụng');
       }
+      const refreshed = await generateRecommendationsByMealPlan({ mealPlanId: selectedMealPlanId });
+      setMealPlanSuggestions(refreshed.recommendations || []);
     } catch {
       toast.error('Áp dụng hàng loạt thất bại');
     } finally {
       setApplyingAllVisible(false);
     }
   };
+
+  const handleRollbackLastApply = async () => {
+    if (!lastApplyBatch?.operations?.length || !lastApplyBatch.mealPlanId) {
+      toast('Chưa có lần áp dụng nào để hoàn tác trong phiên hiện tại');
+      return;
+    }
+    setRollingBack(true);
+    try {
+      const result = await rollbackMealPlanApply({
+        mealPlanId: lastApplyBatch.mealPlanId,
+        operations: lastApplyBatch.operations,
+      });
+      const rolledBackCount = result.results.filter((item) => item.status === 'ROLLED_BACK').length;
+      const skippedCount = result.results.filter((item) => item.status === 'SKIPPED').length;
+      if (rolledBackCount > 0) {
+        toast.success(`Đã hoàn tác ${rolledBackCount} mục${skippedCount ? `, bỏ qua ${skippedCount}` : ''}`);
+      } else {
+        toast.error('Không có mục nào được hoàn tác');
+      }
+      setLastApplyBatch(null);
+      setApplyResults({});
+      sessionStorage.removeItem(LAST_APPLY_BATCH_KEY);
+      if (!selectedMealPlanId || selectedMealPlanId !== lastApplyBatch.mealPlanId) {
+        setSelectedMealPlanId(lastApplyBatch.mealPlanId);
+      }
+      const refreshed = await generateRecommendationsByMealPlan({ mealPlanId: lastApplyBatch.mealPlanId });
+      setMealPlanSuggestions(refreshed.recommendations || []);
+    } catch {
+      toast.error('Hoàn tác thất bại');
+    } finally {
+      setRollingBack(false);
+    }
+  };
+
+  const visibleMealPlanSuggestions = mealPlanSuggestions.filter((item) => {
+    if (!onlyUnapplied) return true;
+    const keyBase = `${item.dayOfWeek}-${item.mealType}-${item.suggestedFoodId}`;
+    const summary = applyResults[keyBase];
+    return !summary || summary.applied === 0;
+  });
+  const totalSuggestions = mealPlanSuggestions.length;
+  const visibleSuggestions = visibleMealPlanSuggestions.length;
 
   const handleViewed = async (item: Recommendation) => {
     if (item.isViewed) return;
@@ -323,6 +427,18 @@ const RecommendationsPage = () => {
             dryRun: false,
           });
 
+      if (result.mealPlanApplyOperation) {
+        setLastApplyBatch({
+          mealPlanId: result.mealPlanApplyOperation.mealPlanId,
+          operations: [{
+            detailId: result.mealPlanApplyOperation.detailId,
+            mutation: result.mealPlanApplyOperation.mutation,
+            previousQuantity: result.mealPlanApplyOperation.previousQuantity,
+            appliedQuantity: result.mealPlanApplyOperation.appliedQuantity,
+          }],
+        });
+      }
+
       setItems((prev) => prev.map((entry) => (
         entry.id === addTarget.id ? { ...entry, isAccepted: true, isViewed: true } : entry
       )));
@@ -391,6 +507,13 @@ const RecommendationsPage = () => {
               {generatingByPlan ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
               Tạo theo meal plan
             </button>
+            <button
+              onClick={handleRollbackLastApply}
+              disabled={rollingBack}
+              className="inline-flex items-center gap-2 rounded-xl bg-rose-100 px-4 py-2 text-sm font-bold text-rose-700 hover:bg-rose-200 disabled:opacity-60 dark:bg-rose-900/30 dark:text-rose-300"
+            >
+              {rollingBack ? 'Đang hoàn tác...' : 'Rollback lần áp dụng gần nhất'}
+            </button>
           </div>
         </div>
 
@@ -416,20 +539,58 @@ const RecommendationsPage = () => {
                   );
                 })}
               </div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                  onClick={() => setQuickApplyDays([1, 2, 3, 4, 5])}
+                  className="rounded-lg bg-gray-100 px-2.5 py-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-200 dark:bg-slate-800 dark:text-slate-200"
+                >
+                  T2-T6
+                </button>
+                <button
+                  onClick={() => setQuickApplyDays([0, 6])}
+                  className="rounded-lg bg-gray-100 px-2.5 py-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-200 dark:bg-slate-800 dark:text-slate-200"
+                >
+                  Cuối tuần
+                </button>
+                <button
+                  onClick={() => setQuickApplyDays([0, 1, 2, 3, 4, 5, 6])}
+                  className="rounded-lg bg-gray-100 px-2.5 py-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-200 dark:bg-slate-800 dark:text-slate-200"
+                >
+                  Tất cả
+                </button>
+                <button
+                  onClick={() => setQuickApplyDays([])}
+                  className="rounded-lg bg-gray-100 px-2.5 py-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-200 dark:bg-slate-800 dark:text-slate-200"
+                >
+                  Xóa chọn
+                </button>
+              </div>
               <p className="mt-2 text-xs text-gray-500 dark:text-slate-400">
                 Không chọn ngày nào thì mỗi card sẽ áp dụng theo ngày gợi ý của card đó.
               </p>
+              <p className="mt-1 text-xs font-semibold text-gray-600 dark:text-slate-300">
+                Hiển thị {visibleSuggestions}/{totalSuggestions} gợi ý
+              </p>
               <button
                 onClick={handleApplyAllVisible}
-                disabled={!!applyingSuggestionKey || applyingAllVisible}
+                disabled={!!applyingSuggestionKey || applyingAllVisible || visibleSuggestions === 0}
                 className="mt-3 rounded-xl bg-gray-900 px-3 py-2 text-xs font-bold text-white hover:bg-gray-800 disabled:opacity-60 dark:bg-slate-100 dark:text-slate-900"
               >
                 {applyingAllVisible ? 'Đang áp dụng hàng loạt...' : 'Áp dụng tất cả gợi ý đang hiển thị'}
               </button>
+              <label className="mt-3 flex items-center gap-2 text-xs font-semibold text-gray-700 dark:text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={onlyUnapplied}
+                  onChange={(event) => setOnlyUnapplied(event.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                />
+                Chỉ hiện gợi ý chưa áp dụng thành công
+              </label>
             </div>
 
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {mealPlanSuggestions.map((item) => {
+            {visibleMealPlanSuggestions.map((item) => {
               const keyBase = `${item.dayOfWeek}-${item.mealType}-${item.suggestedFoodId}`;
               const isApplyingSingle = applyingSuggestionKey === `${keyBase}-SELECTED_DAYS`;
               const isApplyingFill = applyingSuggestionKey === `${keyBase}-FILL_EMPTY`;
@@ -479,6 +640,11 @@ const RecommendationsPage = () => {
               );
             })}
             </div>
+            {visibleSuggestions === 0 && (
+              <div className="rounded-2xl border border-dashed border-gray-200 p-6 text-center text-sm font-semibold text-gray-500 dark:border-slate-700 dark:text-slate-400">
+                Không còn gợi ý phù hợp theo bộ lọc hiện tại.
+              </div>
+            )}
           </div>
         )}
       </section>

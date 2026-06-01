@@ -6,6 +6,13 @@ export type RecommendationResponse = {
   recommendation: Recommendation;
   meal?: Meal | null;
   mealPlanDetail?: MealPlanDetail | null;
+  mealPlanApplyOperation?: {
+    mealPlanId: number;
+    detailId: number;
+    mutation: 'CREATED' | 'UPDATED';
+    previousQuantity: number;
+    appliedQuantity: number;
+  } | null;
   warning?: {
     type: 'OVER_DAILY_TARGET' | 'NEAR_DAILY_TARGET';
     message: string;
@@ -62,7 +69,26 @@ export type ApplyToMealPlanDaysResult = {
   quantity: number;
   targetCalories: number;
   hardDailyCap: number;
-  results: Array<{ dayOfWeek: number; status: 'APPLIED' | 'SKIPPED'; reason?: string; detailId?: number }>;
+  results: Array<{
+    dayOfWeek: number;
+    status: 'APPLIED' | 'SKIPPED';
+    reason?: string;
+    detailId?: number;
+    mutation?: 'CREATED' | 'UPDATED';
+    previousQuantity?: number;
+    appliedQuantity?: number;
+    newQuantity?: number;
+  }>;
+};
+
+export type RollbackMealPlanApplyPayload = {
+  mealPlanId: number;
+  operations: Array<{
+    detailId: number;
+    mutation: 'CREATED' | 'UPDATED';
+    previousQuantity?: number;
+    appliedQuantity?: number;
+  }>;
 };
 
 export const getRecommendations = async (status: 'all' | 'new' | 'accepted' | 'rejected' = 'all') => {
@@ -108,4 +134,12 @@ export const applyRecommendationToMealPlanDays = async (payload: {
 }) => {
   const response = await api.post('/recommendations/apply-to-meal-plan-days', payload);
   return response.data.data as ApplyToMealPlanDaysResult;
+};
+
+export const rollbackMealPlanApply = async (payload: RollbackMealPlanApplyPayload) => {
+  const response = await api.post('/recommendations/rollback-meal-plan-apply', payload);
+  return response.data.data as {
+    mealPlanId: number;
+    results: Array<{ detailId: number; status: 'ROLLED_BACK' | 'SKIPPED'; reason?: string }>;
+  };
 };

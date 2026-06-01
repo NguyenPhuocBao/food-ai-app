@@ -5,6 +5,7 @@ import {
   getRecommendations,
   markRecommendationViewed,
   applyRecommendationToMealPlanDays,
+  rollbackMealPlanApply,
   respondToRecommendation,
 } from '../controllers/recommendation.controller';
 import { authMiddleware } from '../middlewares/auth.middleware';
@@ -15,6 +16,7 @@ router.get('/', authMiddleware, getRecommendations);
 router.post('/generate', authMiddleware, generateRecommendations);
 router.post('/generate-by-meal-plan', authMiddleware, generateRecommendationsByMealPlan);
 router.post('/apply-to-meal-plan-days', authMiddleware, applyRecommendationToMealPlanDays);
+router.post('/rollback-meal-plan-apply', authMiddleware, rollbackMealPlanApply);
 router.put('/:id/viewed', authMiddleware, markRecommendationViewed);
 router.put('/:id/respond', authMiddleware, respondToRecommendation);
 

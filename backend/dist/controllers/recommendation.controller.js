@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.respondToRecommendation = exports.applyRecommendationToMealPlanDays = exports.generateRecommendationsByMealPlan = exports.markRecommendationViewed = exports.getRecommendations = exports.generateRecommendations = void 0;
+exports.respondToRecommendation = exports.rollbackMealPlanApply = exports.applyRecommendationToMealPlanDays = exports.generateRecommendationsByMealPlan = exports.markRecommendationViewed = exports.getRecommendations = exports.generateRecommendations = void 0;
 const client_1 = require("@prisma/client");
 const nutrition_service_1 = require("../services/nutrition.service");
 const personalization_service_1 = require("../services/personalization.service");
@@ -1437,17 +1437,34 @@ const applyRecommendationToMealPlanDays = async (req, res) => {
                 where: { mealPlanId, dayOfWeek, mealType, foodId },
             });
             if (existing) {
+                const nextQuantity = Number((existing.quantity + quantity).toFixed(2));
                 const updated = await prisma.mealPlanDetail.update({
                     where: { id: existing.id },
-                    data: { quantity: Number((existing.quantity + quantity).toFixed(2)) },
+                    data: { quantity: nextQuantity },
                 });
-                results.push({ dayOfWeek, status: 'APPLIED', detailId: updated.id });
+                results.push({
+                    dayOfWeek,
+                    status: 'APPLIED',
+                    detailId: updated.id,
+                    mutation: 'UPDATED',
+                    previousQuantity: existing.quantity,
+                    appliedQuantity: quantity,
+                    newQuantity: nextQuantity,
+                });
             }
             else {
                 const created = await prisma.mealPlanDetail.create({
                     data: { mealPlanId, dayOfWeek, mealType, foodId, quantity },
                 });
-                results.push({ dayOfWeek, status: 'APPLIED', detailId: created.id });
+                results.push({
+                    dayOfWeek,
+                    status: 'APPLIED',
+                    detailId: created.id,
+                    mutation: 'CREATED',
+                    previousQuantity: 0,
+                    appliedQuantity: quantity,
+                    newQuantity: quantity,
+                });
             }
         }
         return res.json({
@@ -1468,6 +1485,58 @@ const applyRecommendationToMealPlanDays = async (req, res) => {
     }
 };
 exports.applyRecommendationToMealPlanDays = applyRecommendationToMealPlanDays;
+const rollbackMealPlanApply = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const mealPlanId = Number(req.body?.mealPlanId || 0);
+        const operations = Array.isArray(req.body?.operations) ? req.body.operations : [];
+        if (!mealPlanId || !operations.length) {
+            return res.status(400).json({ error: 'mealPlanId and operations are required' });
+        }
+        const mealPlan = await prisma.mealPlan.findFirst({ where: { id: mealPlanId, userId } });
+        if (!mealPlan)
+            return res.status(404).json({ error: 'Meal plan not found' });
+        const results = [];
+        // Roll back in reverse order to correctly restore when the same detail is updated multiple times in one batch.
+        for (const op of [...operations].reverse()) {
+            const detailId = Number(op?.detailId || 0);
+            const mutation = String(op?.mutation || '');
+            const previousQuantity = Number(op?.previousQuantity || 0);
+            const appliedQuantity = Number(op?.appliedQuantity || 0);
+            if (!detailId || !['CREATED', 'UPDATED'].includes(mutation)) {
+                continue;
+            }
+            const detail = await prisma.mealPlanDetail.findFirst({ where: { id: detailId, mealPlanId } });
+            if (!detail) {
+                results.push({ detailId, status: 'SKIPPED', reason: 'Detail not found' });
+                continue;
+            }
+            if (mutation === 'CREATED') {
+                await prisma.mealPlanDetail.delete({ where: { id: detailId } });
+                results.push({ detailId, status: 'ROLLED_BACK' });
+                continue;
+            }
+            const targetQuantity = Number.isFinite(previousQuantity)
+                ? previousQuantity
+                : Number((detail.quantity - appliedQuantity).toFixed(2));
+            if (targetQuantity <= 0) {
+                await prisma.mealPlanDetail.delete({ where: { id: detailId } });
+            }
+            else {
+                await prisma.mealPlanDetail.update({
+                    where: { id: detailId },
+                    data: { quantity: Number(targetQuantity.toFixed(2)) },
+                });
+            }
+            results.push({ detailId, status: 'ROLLED_BACK' });
+        }
+        return res.json({ success: true, data: { mealPlanId, results } });
+    }
+    catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+};
+exports.rollbackMealPlanApply = rollbackMealPlanApply;
 const respondToRecommendation = async (req, res) => {
     try {
         const userId = req.user.id;
@@ -1482,6 +1551,7 @@ const respondToRecommendation = async (req, res) => {
             return res.status(404).json({ error: 'Recommendation not found' });
         let createdMeal = null;
         let syncedMealPlanDetail = null;
+        let mealPlanApplyOperation = null;
         let calorieWarning = null;
         if (accepted) {
             const today = startOfToday();
@@ -1581,11 +1651,19 @@ const respondToRecommendation = async (req, res) => {
                     },
                 });
                 if (existingDetail) {
+                    const nextQuantity = Number((existingDetail.quantity + quantity).toFixed(2));
                     syncedMealPlanDetail = await prisma.mealPlanDetail.update({
                         where: { id: existingDetail.id },
-                        data: { quantity: Number((existingDetail.quantity + quantity).toFixed(2)) },
+                        data: { quantity: nextQuantity },
                         include: { food: true },
                     });
+                    mealPlanApplyOperation = {
+                        mealPlanId: planForSync.id,
+                        detailId: existingDetail.id,
+                        mutation: 'UPDATED',
+                        previousQuantity: existingDetail.quantity,
+                        appliedQuantity: quantity,
+                    };
                 }
                 else {
                     syncedMealPlanDetail = await prisma.mealPlanDetail.create({
@@ -1598,6 +1676,13 @@ const respondToRecommendation = async (req, res) => {
                         },
                         include: { food: true },
                     });
+                    mealPlanApplyOperation = {
+                        mealPlanId: planForSync.id,
+                        detailId: syncedMealPlanDetail.id,
+                        mutation: 'CREATED',
+                        previousQuantity: 0,
+                        appliedQuantity: quantity,
+                    };
                 }
             }
             await (0, nutrition_service_1.recalculateDailyNutrition)(userId, createdMeal.eatenAt);
@@ -1616,6 +1701,7 @@ const respondToRecommendation = async (req, res) => {
                 recommendation: updated,
                 meal: createdMeal,
                 mealPlanDetail: syncedMealPlanDetail,
+                mealPlanApplyOperation,
                 warning: calorieWarning,
             },
         });
