@@ -81,14 +81,14 @@ const login = async (req, res) => {
         let password = '';
         try {
             const payload = auth_validation_1.loginSchema.parse(req.body);
-            email = payload.email;
+            email = payload.email.trim().toLowerCase();
             password = payload.password;
         }
         catch (validationError) {
             return res.status(400).json({ error: getValidationMessage(validationError) });
         }
-        const user = await prisma_1.default.user.findUnique({
-            where: { email },
+        const user = await prisma_1.default.user.findFirst({
+            where: { email: { equals: email, mode: 'insensitive' } },
             include: { profile: true }
         });
         if (!user) {

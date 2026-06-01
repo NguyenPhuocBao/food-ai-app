@@ -4,6 +4,7 @@ exports.getTrends = exports.getMonthlyStats = exports.getWeeklyStats = exports.g
 const client_1 = require("@prisma/client");
 const timezone_util_1 = require("../utils/timezone.util");
 const nutrition_service_1 = require("../services/nutrition.service");
+const personalization_service_1 = require("../services/personalization.service");
 const prisma = new client_1.PrismaClient();
 const VN_UTC_OFFSET_HOURS = (0, timezone_util_1.getAppUtcOffsetHours)();
 const toVnDateKey = timezone_util_1.toAppDateKey;
@@ -39,7 +40,7 @@ const getNutritionOverview = async (req, res) => {
         const todayStart = toVnDayStart(new Date());
         const startDate = (0, timezone_util_1.shiftAppDays)(todayStart, -(windowDays - 1));
         const endExclusive = (0, timezone_util_1.shiftAppDays)(todayStart, 1);
-        const [nutritionRows, profile] = await Promise.all([
+        const [nutritionRows, targets] = await Promise.all([
             prisma.dailyNutrition.findMany({
                 where: {
                     userId,
@@ -47,7 +48,7 @@ const getNutritionOverview = async (req, res) => {
                 },
                 orderBy: { date: 'asc' },
             }),
-            prisma.userProfile.findUnique({ where: { userId } }),
+            (0, personalization_service_1.resolvePersonalTargets)(userId),
         ]);
         const nutritionMap = new Map(nutritionRows.map((row) => [toVnDateKey(row.date), row]));
         const daily = Array.from({ length: windowDays }, (_, index) => {
@@ -149,10 +150,10 @@ const getNutritionOverview = async (req, res) => {
                     endDate: toVnDateKey(todayStart),
                 },
                 target: {
-                    calories: profile?.targetCalories || 2000,
-                    protein: profile?.targetProtein || 150,
-                    fat: profile?.targetFat || 55,
-                    carbs: profile?.targetCarbs || 250,
+                    calories: targets.targetCalories,
+                    protein: targets.targetProtein,
+                    fat: targets.targetFat,
+                    carbs: targets.targetCarbs,
                 },
                 summary: {
                     total,
@@ -188,13 +189,13 @@ const getDailyStats = async (req, res) => {
             : req.user.id;
         const targetDate = toVnDayStart(date ? String(date) : new Date());
         const nutrition = await (0, nutrition_service_1.recalculateDailyNutrition)(userId, targetDate);
-        const profile = await prisma.userProfile.findUnique({ where: { userId } });
-        const goal = profile ? {
-            calories: profile.targetCalories,
-            protein: profile.targetProtein,
-            fat: profile.targetFat,
-            carbs: profile.targetCarbs
-        } : { calories: 2000, protein: 150, fat: 55, carbs: 250 };
+        const targets = await (0, personalization_service_1.resolvePersonalTargets)(userId);
+        const goal = {
+            calories: targets.targetCalories,
+            protein: targets.targetProtein,
+            fat: targets.targetFat,
+            carbs: targets.targetCarbs,
+        };
         const progress = nutrition ? {
             calories: Math.min(100, Math.round((nutrition.totalCalories / goal.calories) * 100)),
             protein: Math.min(100, Math.round((nutrition.totalProtein / goal.protein) * 100)),
@@ -432,8 +433,8 @@ const getTrends = async (req, res) => {
             where: { userId, date: { gte: startDate, lt: endExclusive } },
             orderBy: { date: 'asc' }
         });
-        const profile = await prisma.userProfile.findUnique({ where: { userId } });
-        const targetCalories = profile?.targetCalories || 2000;
+        const targets = await (0, personalization_service_1.resolvePersonalTargets)(userId);
+        const targetCalories = targets.targetCalories;
         const nutritionMap = new Map(nutritionData.map((item) => [toVnDateKey(item.date), item]));
         const trend = Array.from({ length: periodDays }, (_, index) => {
             const currentDate = (0, timezone_util_1.shiftAppDays)(startDate, index);

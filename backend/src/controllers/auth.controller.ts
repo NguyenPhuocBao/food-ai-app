@@ -91,14 +91,14 @@ export const login = async (req: Request, res: Response) => {
     let password = '';
     try {
       const payload = loginSchema.parse(req.body);
-      email = payload.email;
+      email = payload.email.trim().toLowerCase();
       password = payload.password;
     } catch (validationError) {
       return res.status(400).json({ error: getValidationMessage(validationError) });
     }
     
-    const user = await prisma.user.findUnique({ 
-      where: { email }, 
+    const user = await prisma.user.findFirst({
+      where: { email: { equals: email, mode: 'insensitive' } },
       include: { profile: true } 
     });
     

@@ -1,7 +1,6 @@
 import { Request, Response } from 'express';
 import { Role } from '@prisma/client';
 import bcrypt from 'bcryptjs';
-import { randomBytes } from 'crypto';
 import {
   getActiveUserIds,
   getActiveProvider,
@@ -833,16 +832,17 @@ export const toggleUserBan = async (req: Request, res: Response) => {
   }
 };
 
-// Reset user password về mật khẩu mặc định (ví dụ "123456")
-const generateTemporaryPassword = () => randomBytes(9).toString('base64url');
+// Reset user password về mật khẩu mặc định.
+// Có thể override bằng biến môi trường ADMIN_DEFAULT_RESET_PASSWORD.
+const ADMIN_DEFAULT_RESET_PASSWORD = (process.env.ADMIN_DEFAULT_RESET_PASSWORD || '123456').trim();
 
 export const resetUserPassword = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const requestedPassword = typeof req.body?.newPassword === 'string' ? req.body.newPassword.trim() : '';
-    const temporaryPassword = requestedPassword || generateTemporaryPassword();
-    if (temporaryPassword.length < 8) {
-      return res.status(400).json({ error: 'newPassword must be at least 8 characters' });
+    const temporaryPassword = requestedPassword || ADMIN_DEFAULT_RESET_PASSWORD;
+    if (temporaryPassword.length < 6) {
+      return res.status(400).json({ error: 'newPassword must be at least 6 characters' });
     }
 
     const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
@@ -869,7 +869,7 @@ export const resetUserPassword = async (req: Request, res: Response) => {
         entity: 'User',
         entityId: user.id,
         newData: {
-          resetMode: requestedPassword ? 'custom' : 'generated_temp_password',
+          resetMode: requestedPassword ? 'custom' : 'default_password',
         },
       }
     });
@@ -878,7 +878,7 @@ export const resetUserPassword = async (req: Request, res: Response) => {
       success: true,
       message: 'Password reset successfully',
       data: {
-        temporaryPassword: requestedPassword ? undefined : temporaryPassword,
+        temporaryPassword,
       },
     });
   } catch (error: any) {

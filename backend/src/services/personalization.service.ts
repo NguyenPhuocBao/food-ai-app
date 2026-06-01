@@ -54,6 +54,14 @@ const goalAdjustment: Record<GoalType, number> = {
   MUSCLE_GAIN: 180,
 };
 
+const calculateBmi = (heightCm?: number | null, weightKg?: number | null) => {
+  const height = Number(heightCm || 0);
+  const weight = Number(weightKg || 0);
+  if (height <= 0 || weight <= 0) return null;
+  const meters = height / 100;
+  return weight / (meters * meters);
+};
+
 const safeJsonParse = <T>(value: string | null | undefined, fallback: T): T => {
   if (!value) return fallback;
   try {
@@ -229,10 +237,21 @@ export const resolvePersonalTargets = async (userId: number) => {
 
   const activity = profile?.activityLevel || 'MODERATE';
   const goalType = goal?.goalType || 'MAINTENANCE';
+  const bmi = calculateBmi(profile?.height, profile?.weight);
 
   const baseCalories = normalizeGoalCalories(goal?.targetCalories || profile?.targetCalories || 2000);
   const adjustedCalories = Math.round(baseCalories * (activityFactor[activity] || 1) + goalAdjustment[goalType]);
-  const targetCalories = normalizeGoalCalories(adjustedCalories);
+  let targetCalories = normalizeGoalCalories(adjustedCalories);
+
+  // Policy:
+  // - BMI béo phì: luôn giữ mục tiêu calo dưới 2000 để ưu tiên kiểm soát cân nặng.
+  // - BMI bình thường + duy trì: mặc định neo quanh 2000 kcal/ngày.
+  if (bmi !== null && bmi >= 30) {
+    const obeseCap = goalType === GoalType.WEIGHT_LOSS ? 1800 : 1900;
+    targetCalories = Math.max(1300, Math.min(targetCalories, obeseCap));
+  } else if (bmi !== null && bmi >= 18.5 && bmi < 25 && goalType === GoalType.MAINTENANCE) {
+    targetCalories = 2000;
+  }
 
   const targetProtein = Math.max(70, Math.round(goal?.targetProtein || profile?.targetProtein || 130));
   const targetFat = Math.max(35, Math.round(goal?.targetFat || profile?.targetFat || 55));

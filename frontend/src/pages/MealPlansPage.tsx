@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useDeferredValue, useEffect, useState } from 'react';
 import { CalendarDays, Eye, Loader2, Plus, Sparkles, Trash2, X, Pencil } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { getAssetUrl } from '../services/api';
 import { getFoods } from '../services/food.service';
 import {
   addDetailToMealPlan,
@@ -74,11 +75,13 @@ const MealPlansPage = () => {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [addingDetailToPreview, setAddingDetailToPreview] = useState<{ dayOfWeek: number; mealType: MealTypeKey } | null>(null);
   const [previewDetailForm, setPreviewDetailForm] = useState({ foodId: 0, quantity: 1 });
+  const [previewFoodKeyword, setPreviewFoodKeyword] = useState('');
   const [editingDetail, setEditingDetail] = useState<MealPlanDetail | null>(null);
   const [editDetailForm, setEditDetailForm] = useState({ foodId: 0, mealType: 'BREAKFAST' as MealTypeKey, dayOfWeek: 1, quantity: 1 });
   const [draggingDetailId, setDraggingDetailId] = useState<number | null>(null);
   const [dragOverTarget, setDragOverTarget] = useState<{ dayOfWeek: number; mealType: MealTypeKey } | null>(null);
   const [insightsByPlanId, setInsightsByPlanId] = useState<Record<number, MealPlanInsights>>({});
+  const deferredPreviewFoodKeyword = useDeferredValue(previewFoodKeyword);
 
   const loadData = async () => {
     setLoading(true);
@@ -336,6 +339,7 @@ const MealPlansPage = () => {
       toast.success('Đã thêm món vào meal plan');
       setAddingDetailToPreview(null);
       setPreviewDetailForm({ foodId: 0, quantity: 1 });
+      setPreviewFoodKeyword('');
 
       await refreshPreviewPlan(previewPlan.id);
       loadData();
@@ -454,6 +458,12 @@ const MealPlansPage = () => {
   };
 
   const formatNumber = (value: number) => Math.round(value);
+  const normalizeText = (value: string) =>
+    value
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/đ/g, 'd');
 
   const updateDetail = (index: number, field: keyof DraftDetail, value: number | DraftDetail['mealType']) => {
     setDetails((current) =>
@@ -826,7 +836,7 @@ const MealPlansPage = () => {
 
       {previewPlanId && (
         <div className="fixed inset-0 z-50 bg-gray-950/60 px-4 py-6 backdrop-blur-sm">
-          <div className="mx-auto flex h-full max-w-7xl flex-col overflow-hidden rounded-[32px] bg-white shadow-2xl">
+          <div className="relative mx-auto flex h-full max-w-7xl flex-col overflow-hidden rounded-[32px] bg-white shadow-2xl">
             <div className="flex flex-col gap-4 border-b border-gray-100 p-5 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-600">Weekly Preview</p>
@@ -1036,31 +1046,6 @@ const MealPlansPage = () => {
                                 handleDropOnCell(dayIndex, mealType);
                               }}
                             >
-                              {addingDetailToPreview?.dayOfWeek === dayIndex && addingDetailToPreview?.mealType === mealType ? (
-                                <form onSubmit={handleAddPreviewDetail} className="bg-white p-3 rounded-2xl shadow-lg border border-emerald-100 mb-2 relative z-20 animate-in fade-in slide-in-from-top-2">
-                                  <button type="button" onClick={() => setAddingDetailToPreview(null)} className="absolute top-2 right-2 text-gray-400 hover:text-gray-600"><X size={14}/></button>
-                                  <p className="text-xs font-bold text-gray-900 mb-2 pr-4">Thêm món</p>
-                                  <select 
-                                    className="w-full text-xs p-2 rounded-xl bg-gray-50 border-0 mb-2"
-                                    value={previewDetailForm.foodId}
-                                    onChange={e => setPreviewDetailForm(c => ({...c, foodId: Number(e.target.value)}))}
-                                    required
-                                  >
-                                    <option value={0}>Chọn món</option>
-                                    {foods.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                                  </select>
-                                  <div className="flex gap-2">
-                                    <input 
-                                      type="number" min="0.5" step="0.5" required
-                                      className="w-16 text-xs p-2 rounded-xl bg-gray-50 border-0"
-                                      value={previewDetailForm.quantity}
-                                      onChange={e => setPreviewDetailForm(c => ({...c, quantity: Number(e.target.value)}))}
-                                    />
-                                    <button type="submit" className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition-colors">Thêm</button>
-                                  </div>
-                                </form>
-                              ) : null}
-
                               {mealDetails.length === 0 ? (
                                 <div className="flex h-full min-h-[92px] items-center justify-center rounded-2xl border border-dashed border-gray-200 text-xs font-semibold text-gray-400">
                                   Trống
@@ -1109,7 +1094,11 @@ const MealPlansPage = () => {
                               
                               {(!addingDetailToPreview || addingDetailToPreview.dayOfWeek !== dayIndex || addingDetailToPreview.mealType !== mealType) && (
                                 <button 
-                                  onClick={() => setAddingDetailToPreview({ dayOfWeek: dayIndex, mealType })}
+                                  onClick={() => {
+                                    setAddingDetailToPreview({ dayOfWeek: dayIndex, mealType });
+                                    setPreviewDetailForm({ foodId: 0, quantity: 1 });
+                                    setPreviewFoodKeyword('');
+                                  }}
                                   className="absolute bottom-1 right-1/2 translate-x-1/2 translate-y-1/2 opacity-0 group-hover:opacity-100 bg-gray-900 text-white rounded-full p-1.5 shadow-md hover:scale-110 transition-all z-20"
                                   title="Thêm món"
                                 >
@@ -1125,6 +1114,113 @@ const MealPlansPage = () => {
                 </table>
               </div>
             </div>
+            {addingDetailToPreview && (
+              <div className="absolute inset-0 z-40 flex items-center justify-center bg-gray-950/30 p-4">
+                <form onSubmit={handleAddPreviewDetail} className="w-full max-w-xl rounded-3xl border border-emerald-200 bg-white p-5 shadow-2xl">
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-[0.16em] text-emerald-600">Thêm món vào meal plan</p>
+                      <p className="mt-1 text-sm font-bold text-gray-900">
+                        {DAY_LABELS[addingDetailToPreview.dayOfWeek]} • {MEAL_LABELS[addingDetailToPreview.mealType]}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAddingDetailToPreview(null);
+                        setPreviewFoodKeyword('');
+                      }}
+                      className="rounded-xl p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+
+                  <input
+                    type="text"
+                    value={previewFoodKeyword}
+                    onChange={(event) => setPreviewFoodKeyword(event.target.value)}
+                    placeholder="Tìm món ăn..."
+                    className="mb-3 w-full rounded-xl border border-gray-300 bg-white p-2.5 text-sm text-gray-900 placeholder:text-gray-500"
+                  />
+                  <div className="mb-3 max-h-72 overflow-y-auto rounded-xl border border-gray-300 bg-white">
+                    {foods
+                      .filter((food) => {
+                        const keyword = deferredPreviewFoodKeyword.trim();
+                        if (!keyword) return true;
+                        const normalizedName = normalizeText(food.name);
+                        const normalizedCategory = normalizeText(food.category || '');
+                        const normalizedKeyword = normalizeText(keyword);
+                        return normalizedName.includes(normalizedKeyword) || normalizedCategory.includes(normalizedKeyword);
+                      })
+                      .slice(0, 10)
+                      .map((food) => (
+                        <button
+                          key={food.id}
+                          type="button"
+                          onClick={() => {
+                            setPreviewDetailForm((current) => ({ ...current, foodId: food.id }));
+                            setPreviewFoodKeyword(food.name);
+                          }}
+                          className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition-colors ${
+                            previewDetailForm.foodId === food.id
+                              ? 'bg-emerald-100 text-emerald-900'
+                              : 'text-gray-800 hover:bg-gray-100'
+                          }`}
+                        >
+                          <div className="flex min-w-0 items-center gap-2">
+                            <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-gray-100">
+                              {food.imageUrl ? (
+                                <img
+                                  src={getAssetUrl(food.imageUrl)}
+                                  alt={food.name}
+                                  className="h-full w-full object-cover"
+                                  loading="lazy"
+                                />
+                              ) : (
+                                <div className="h-full w-full bg-gradient-to-br from-emerald-100 to-slate-100" />
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="truncate font-bold text-gray-900">{food.name}</p>
+                              <p className="truncate text-xs text-gray-500">{food.category}</p>
+                            </div>
+                          </div>
+                          <span className="shrink-0 rounded-full bg-amber-50 px-2 py-1 text-xs font-bold text-amber-700">{food.calories} kcal</span>
+                        </button>
+                      ))}
+                    {foods.filter((food) => {
+                      const keyword = deferredPreviewFoodKeyword.trim();
+                      if (!keyword) return true;
+                      const normalizedName = normalizeText(food.name);
+                      const normalizedCategory = normalizeText(food.category || '');
+                      const normalizedKeyword = normalizeText(keyword);
+                      return normalizedName.includes(normalizedKeyword) || normalizedCategory.includes(normalizedKeyword);
+                    }).length === 0 && (
+                      <div className="px-3 py-2 text-xs font-semibold text-gray-500">Không tìm thấy món phù hợp</div>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      min="0.5"
+                      step="0.5"
+                      required
+                      className="w-24 rounded-xl border border-gray-300 bg-white p-2.5 text-sm text-gray-900"
+                      value={previewDetailForm.quantity}
+                      onChange={(e) => setPreviewDetailForm((c) => ({ ...c, quantity: Number(e.target.value) }))}
+                    />
+                    <button
+                      type="submit"
+                      disabled={previewDetailForm.foodId === 0}
+                      className="flex-1 rounded-xl bg-emerald-500 py-2.5 text-sm font-bold text-white transition-colors hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Thêm vào bữa
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
               </>
             )}
           </div>

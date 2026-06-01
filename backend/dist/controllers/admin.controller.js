@@ -6,7 +6,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.broadcastNotification = exports.sendNotificationToMultipleUsers = exports.sendNotificationToUser = exports.sendToUsers = exports.deleteMealPlan = exports.updateMealPlan = exports.createMealPlan = exports.getUserMealPlans = exports.createRecipe = exports.updateRecipe = exports.updateManySettings = exports.getAllSettings = exports.deleteNotification = exports.getAllNotifications = exports.deleteReview = exports.getAllReviews = exports.deleteRecipe = exports.getAllRecipes = exports.updateUserProfileByAdmin = exports.resetUserPassword = exports.toggleUserBan = exports.getAuditLogs = exports.getSystemStats = exports.deleteFood = exports.updateFood = exports.createFood = exports.getFoodByIdAdmin = exports.getAllFoodsAdmin = exports.deleteUser = exports.updateUserRole = exports.getUserById = exports.createUserByAdmin = exports.getAllUsers = void 0;
 const client_1 = require("@prisma/client");
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
-const crypto_1 = require("crypto");
 const active_user_service_1 = require("../services/active-user.service");
 const prisma_1 = __importDefault(require("../lib/prisma"));
 const timezone_util_1 = require("../utils/timezone.util");
@@ -736,15 +735,16 @@ const toggleUserBan = async (req, res) => {
     }
 };
 exports.toggleUserBan = toggleUserBan;
-// Reset user password về mật khẩu mặc định (ví dụ "123456")
-const generateTemporaryPassword = () => (0, crypto_1.randomBytes)(9).toString('base64url');
+// Reset user password về mật khẩu mặc định.
+// Có thể override bằng biến môi trường ADMIN_DEFAULT_RESET_PASSWORD.
+const ADMIN_DEFAULT_RESET_PASSWORD = (process.env.ADMIN_DEFAULT_RESET_PASSWORD || '123456').trim();
 const resetUserPassword = async (req, res) => {
     try {
         const { id } = req.params;
         const requestedPassword = typeof req.body?.newPassword === 'string' ? req.body.newPassword.trim() : '';
-        const temporaryPassword = requestedPassword || generateTemporaryPassword();
-        if (temporaryPassword.length < 8) {
-            return res.status(400).json({ error: 'newPassword must be at least 8 characters' });
+        const temporaryPassword = requestedPassword || ADMIN_DEFAULT_RESET_PASSWORD;
+        if (temporaryPassword.length < 6) {
+            return res.status(400).json({ error: 'newPassword must be at least 6 characters' });
         }
         const hashedPassword = await bcryptjs_1.default.hash(temporaryPassword, 10);
         const now = new Date();
@@ -766,7 +766,7 @@ const resetUserPassword = async (req, res) => {
                 entity: 'User',
                 entityId: user.id,
                 newData: {
-                    resetMode: requestedPassword ? 'custom' : 'generated_temp_password',
+                    resetMode: requestedPassword ? 'custom' : 'default_password',
                 },
             }
         });
@@ -774,7 +774,7 @@ const resetUserPassword = async (req, res) => {
             success: true,
             message: 'Password reset successfully',
             data: {
-                temporaryPassword: requestedPassword ? undefined : temporaryPassword,
+                temporaryPassword,
             },
         });
     }

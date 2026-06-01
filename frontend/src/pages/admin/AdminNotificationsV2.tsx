@@ -1,5 +1,5 @@
-import { FormEvent, useEffect, useState } from 'react';
-import { Bell, CheckCircle, Info, AlertTriangle, Send, Trash, Users, XCircle, Mail, MailOpen } from 'lucide-react';
+import { type FormEvent, useEffect, useMemo, useState } from 'react';
+import { Bell, CheckCircle, Info, AlertTriangle, Search, Send, Trash, Users, XCircle, Mail, MailOpen } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
 import { formatAdminDateTime } from '../../utils/adminDateTime';
@@ -12,12 +12,14 @@ const TYPE_CONFIG = {
 } as const;
 
 type NotificationType = keyof typeof TYPE_CONFIG;
+const normalize = (value: string) => value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
 const AdminNotificationsV2 = () => {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [selectedUsers, setSelectedUsers] = useState<number[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchInput, setSearchInput] = useState('');
   const [showUserSelector, setShowUserSelector] = useState(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -26,6 +28,24 @@ const AdminNotificationsV2 = () => {
     message: '',
     type: 'INFO' as NotificationType,
   });
+
+  const filteredNotifications = useMemo(() => {
+    if (!searchInput.trim()) return notifications;
+    const keyword = normalize(searchInput);
+    return notifications.filter((n) => {
+      const readStatus = n.isRead ? 'da doc' : 'chua doc';
+      const formattedTime = formatAdminDateTime(n.createdAt);
+      return (
+        String(n.id).includes(keyword) ||
+        normalize(n.title).includes(keyword) ||
+        normalize(n.user?.name || '').includes(keyword) ||
+        normalize(n.message || '').includes(keyword) ||
+        normalize(n.type || '').includes(keyword) ||
+        normalize(readStatus).includes(keyword) ||
+        normalize(formattedTime).includes(keyword)
+      );
+    });
+  }, [notifications, searchInput]);
 
   const loadNotifications = async () => {
     setLoading(true);
@@ -166,7 +186,7 @@ const AdminNotificationsV2 = () => {
               onClick={() => setShowUserSelector(true)}
               className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition"
             >
-              <Users size={18} /> Gui toi user ?? chon
+              <Users size={18} /> Gui toi user da chon
             </button>
           </div>
         </form>
@@ -217,6 +237,17 @@ const AdminNotificationsV2 = () => {
         </div>
       )}
 
+      <div className="relative">
+        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+        <input
+          type="text"
+          placeholder="Tim theo tieu de, nguoi nhan, noi dung..."
+          value={searchInput}
+          onChange={(event) => setSearchInput(event.target.value)}
+          className="w-full pl-12 pr-4 py-3 border border-gray-200 dark:border-slate-700 rounded-2xl focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:bg-slate-900 dark:text-slate-100 transition"
+        />
+      </div>
+
       <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-700 rounded-3xl shadow-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full">
@@ -232,7 +263,7 @@ const AdminNotificationsV2 = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
-              {notifications.map((notification) => {
+              {filteredNotifications.map((notification) => {
                 const config = TYPE_CONFIG[notification.type as NotificationType] || TYPE_CONFIG.INFO;
                 const TypeIcon = config.icon;
 
@@ -249,9 +280,9 @@ const AdminNotificationsV2 = () => {
                     </td>
                     <td className="px-6 py-4 text-center">
                       {notification.isRead ? (
-                        <MailOpen size={16} className="text-emerald-600 dark:text-emerald-400" title="Da doc" />
+                        <span title="Da doc"><MailOpen size={16} className="text-emerald-600 dark:text-emerald-400" /></span>
                       ) : (
-                        <Mail size={16} className="text-amber-600 dark:text-amber-400" title="Chua doc" />
+                        <span title="Chua doc"><Mail size={16} className="text-amber-600 dark:text-amber-400" /></span>
                       )}
                     </td>
                     <td className="px-6 py-4 text-gray-500 dark:text-slate-400">{formatAdminDateTime(notification.createdAt)}</td>

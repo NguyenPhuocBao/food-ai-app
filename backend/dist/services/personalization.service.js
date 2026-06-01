@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PERSONALIZATION_KEYS = exports.getTodayMealWindow = exports.resolvePersonalTargets = exports.getHydrationSummaryForRange = exports.addHydrationLog = exports.getHydrationRecord = exports.updatePersonalRoutine = exports.getPersonalRoutine = void 0;
+const client_1 = require("@prisma/client");
 const timezone_util_1 = require("../utils/timezone.util");
 const health_engine_service_1 = require("./health-engine.service");
 const prisma_1 = __importDefault(require("../lib/prisma"));
@@ -32,6 +33,14 @@ const goalAdjustment = {
     MAINTENANCE: 0,
     WEIGHT_GAIN: 260,
     MUSCLE_GAIN: 180,
+};
+const calculateBmi = (heightCm, weightKg) => {
+    const height = Number(heightCm || 0);
+    const weight = Number(weightKg || 0);
+    if (height <= 0 || weight <= 0)
+        return null;
+    const meters = height / 100;
+    return weight / (meters * meters);
 };
 const safeJsonParse = (value, fallback) => {
     if (!value)
@@ -184,9 +193,20 @@ const resolvePersonalTargets = async (userId) => {
     ]);
     const activity = profile?.activityLevel || 'MODERATE';
     const goalType = goal?.goalType || 'MAINTENANCE';
+    const bmi = calculateBmi(profile?.height, profile?.weight);
     const baseCalories = (0, health_engine_service_1.normalizeGoalCalories)(goal?.targetCalories || profile?.targetCalories || 2000);
     const adjustedCalories = Math.round(baseCalories * (activityFactor[activity] || 1) + goalAdjustment[goalType]);
-    const targetCalories = (0, health_engine_service_1.normalizeGoalCalories)(adjustedCalories);
+    let targetCalories = (0, health_engine_service_1.normalizeGoalCalories)(adjustedCalories);
+    // Policy:
+    // - BMI béo phì: luôn giữ mục tiêu calo dưới 2000 để ưu tiên kiểm soát cân nặng.
+    // - BMI bình thường + duy trì: mặc định neo quanh 2000 kcal/ngày.
+    if (bmi !== null && bmi >= 30) {
+        const obeseCap = goalType === client_1.GoalType.WEIGHT_LOSS ? 1800 : 1900;
+        targetCalories = Math.max(1300, Math.min(targetCalories, obeseCap));
+    }
+    else if (bmi !== null && bmi >= 18.5 && bmi < 25 && goalType === client_1.GoalType.MAINTENANCE) {
+        targetCalories = 2000;
+    }
     const targetProtein = Math.max(70, Math.round(goal?.targetProtein || profile?.targetProtein || 130));
     const targetFat = Math.max(35, Math.round(goal?.targetFat || profile?.targetFat || 55));
     const targetCarbs = Math.max(80, Math.round(goal?.targetCarbs || profile?.targetCarbs || 240));

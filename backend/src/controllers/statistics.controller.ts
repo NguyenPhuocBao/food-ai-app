@@ -8,6 +8,7 @@ import {
   toAppDayStart,
 } from '../utils/timezone.util';
 import { recalculateDailyNutrition } from '../services/nutrition.service';
+import { resolvePersonalTargets } from '../services/personalization.service';
 
 const prisma = new PrismaClient();
 const VN_UTC_OFFSET_HOURS = getAppUtcOffsetHours();
@@ -51,7 +52,7 @@ export const getNutritionOverview = async (req: any, res: Response) => {
     const startDate = shiftAppDays(todayStart, -(windowDays - 1));
     const endExclusive = shiftAppDays(todayStart, 1);
 
-    const [nutritionRows, profile] = await Promise.all([
+    const [nutritionRows, targets] = await Promise.all([
       prisma.dailyNutrition.findMany({
         where: {
           userId,
@@ -59,7 +60,7 @@ export const getNutritionOverview = async (req: any, res: Response) => {
         },
         orderBy: { date: 'asc' },
       }),
-      prisma.userProfile.findUnique({ where: { userId } }),
+      resolvePersonalTargets(userId),
     ]);
 
     const nutritionMap = new Map(
@@ -187,10 +188,10 @@ export const getNutritionOverview = async (req: any, res: Response) => {
           endDate: toVnDateKey(todayStart),
         },
         target: {
-          calories: profile?.targetCalories || 2000,
-          protein: profile?.targetProtein || 150,
-          fat: profile?.targetFat || 55,
-          carbs: profile?.targetCarbs || 250,
+          calories: targets.targetCalories,
+          protein: targets.targetProtein,
+          fat: targets.targetFat,
+          carbs: targets.targetCarbs,
         },
         summary: {
           total,
@@ -228,14 +229,13 @@ export const getDailyStats = async (req: any, res: Response) => {
     
     const nutrition = await recalculateDailyNutrition(userId, targetDate);
     
-    const profile = await prisma.userProfile.findUnique({ where: { userId } });
-    
-    const goal = profile ? {
-      calories: profile.targetCalories,
-      protein: profile.targetProtein,
-      fat: profile.targetFat,
-      carbs: profile.targetCarbs
-    } : { calories: 2000, protein: 150, fat: 55, carbs: 250 };
+    const targets = await resolvePersonalTargets(userId);
+    const goal = {
+      calories: targets.targetCalories,
+      protein: targets.targetProtein,
+      fat: targets.targetFat,
+      carbs: targets.targetCarbs,
+    };
     
     const progress = nutrition ? {
       calories: Math.min(100, Math.round((nutrition.totalCalories / goal.calories) * 100)),
@@ -501,8 +501,8 @@ export const getTrends = async (req: any, res: Response) => {
       orderBy: { date: 'asc' }
     });
     
-    const profile = await prisma.userProfile.findUnique({ where: { userId } });
-    const targetCalories = profile?.targetCalories || 2000;
+    const targets = await resolvePersonalTargets(userId);
+    const targetCalories = targets.targetCalories;
     
     const nutritionMap = new Map(
       nutritionData.map((item) => [toVnDateKey(item.date), item])
