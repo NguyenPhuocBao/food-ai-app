@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.adminMiddleware = exports.authMiddleware = void 0;
+exports.trainerOrAdminMiddleware = exports.adminMiddleware = exports.authMiddleware = void 0;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const active_user_service_1 = require("../services/active-user.service");
 const jwt_util_1 = require("../utils/jwt.util");
@@ -53,3 +53,10 @@ const adminMiddleware = (req, res, next) => {
     next();
 };
 exports.adminMiddleware = adminMiddleware;
+const trainerOrAdminMiddleware = (req, res, next) => {
+    if (!req.user || (req.user.role !== 'ADMIN' && req.user.role !== 'PT')) {
+        return res.status(403).json({ error: 'Forbidden: PT access required' });
+    }
+    next();
+};
+exports.trainerOrAdminMiddleware = trainerOrAdminMiddleware;

@@ -3,7 +3,7 @@ export interface User {
   id: number;
   email: string;
   name: string;
-  role: 'USER' | 'ADMIN' | 'MODERATOR';
+  role: 'USER' | 'ADMIN' | 'MODERATOR' | 'PT';
   token?: string;
   profile?: UserProfile;
   goals?: UserGoal[];
@@ -175,7 +175,7 @@ export interface FoodReview {
     user: {
       id: number;
       name: string;
-      role?: 'USER' | 'ADMIN' | 'MODERATOR';
+      role?: 'USER' | 'ADMIN' | 'MODERATOR' | 'PT';
       profile?: {
         avatar?: string;
       };

@@ -385,8 +385,7 @@ const DiaryPage = () => {
     const hydrationGoal = Number(healthSummary.hydration?.goalMl || 2200);
     const activeWaterCheckpoint = WATER_REMINDER_CHECKPOINTS
       .filter((checkpoint) => !isToday || nowHour >= checkpoint.hour)
-      .reverse()
-      [0];
+      .reverse()[0];
 
     if (!hasMeals && (!isToday || nowHour >= 20)) {
       return {

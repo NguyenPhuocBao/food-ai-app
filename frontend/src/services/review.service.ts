@@ -30,7 +30,7 @@ export const addReviewReply = async (reviewId: number, content: string) => {
     user: {
       id: number;
       name: string;
-      role?: 'USER' | 'ADMIN' | 'MODERATOR';
+      role?: 'USER' | 'ADMIN' | 'MODERATOR' | 'PT';
       profile?: { avatar?: string };
     };
   };

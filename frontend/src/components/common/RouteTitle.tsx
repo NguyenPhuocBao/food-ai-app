@@ -14,6 +14,7 @@ const USER_ROUTES: Array<{ prefix: string; title: string }> = [
   { prefix: '/library', title: 'Library' },
   { prefix: '/recommendations', title: 'Recommendations' },
   { prefix: '/weekly-reports', title: 'Weekly Reports' },
+  { prefix: '/pt/workspaces', title: 'PT Workspace' },
   { prefix: '/onboarding', title: 'Onboarding' },
 ];
 
@@ -43,6 +44,7 @@ const VI_TITLE_MAP: Record<string, string> = {
   Library: 'Thư viện',
   Recommendations: 'Gợi ý',
   'Weekly Reports': 'Báo cáo tuần',
+  'PT Workspace': 'Không gian PT',
   Onboarding: 'Khởi tạo',
   Users: 'Người dùng',
   Reviews: 'Đánh giá',

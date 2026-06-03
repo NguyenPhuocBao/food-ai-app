@@ -13,6 +13,7 @@ enum Role {
   USER
   ADMIN
   MODERATOR
+  PT
 }
 
 enum MealType {
@@ -50,6 +51,27 @@ enum GoalType {
   MUSCLE_GAIN
 }
 
+enum WorkspaceMemberStatus {
+  PENDING
+  ACTIVE
+  LEFT
+  BLOCKED
+}
+
+enum MealPlanTemplateStatus {
+  DRAFT
+  READY
+  ASSIGNED
+  ARCHIVED
+}
+
+enum MealPlanAssignmentStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
 // ==================== 1. USER & AUTH ====================
 model User {
   id            Int            @id @default(autoincrement())
@@ -78,6 +100,14 @@ model User {
   recommendations Recommendation[] // 🔥 Thêm
   auditLogs     AuditLog[]          // admin audit logs
   passwordResetTokens PasswordResetToken[]
+  ptWorkspacesOwned     TrainerWorkspace[]   @relation("TrainerWorkspaceOwner")
+  ptWorkspaceMemberships TrainerWorkspaceMember[] @relation("TrainerWorkspaceMemberUser")
+  mealPlanTemplatesCreated MealPlanTemplate[] @relation("MealPlanTemplateCreator")
+  mealPlanTemplatesTargeted MealPlanTemplate[] @relation("MealPlanTemplateTargetUser")
+  mealPlanAssignmentsAssignedTo MealPlanAssignment[] @relation("MealPlanAssignmentUser")
+  mealPlanAssignmentsAssigned MealPlanAssignment[] @relation("MealPlanAssignmentAssigner")
+  progressCheckinsRecorded ProgressCheckin[] @relation("ProgressCheckinRecorder")
+  progressCheckinsForUser ProgressCheckin[] @relation("ProgressCheckinUser")
   
   @@map("users")
 }
@@ -156,6 +186,114 @@ model PasswordResetToken {
   @@index([userId, expiresAt])
   @@index([expiresAt])
   @@map("password_reset_tokens")
+}
+
+// ==================== 1B. PT WORKSPACE ====================
+model TrainerWorkspace {
+  id            Int      @id @default(autoincrement())
+  ownerUserId   Int
+  name          String
+  description   String?
+  inviteCode    String   @unique
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  owner         User     @relation("TrainerWorkspaceOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  members       TrainerWorkspaceMember[]
+  templates     MealPlanTemplate[]
+  assignments   MealPlanAssignment[]
+  checkins      ProgressCheckin[]
+
+  @@map("trainer_workspaces")
+}
+
+model TrainerWorkspaceMember {
+  id          Int                  @id @default(autoincrement())
+  workspaceId Int
+  userId      Int
+  status      WorkspaceMemberStatus @default(ACTIVE)
+  note        String?
+  joinedAt    DateTime             @default(now())
+  leftAt      DateTime?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  workspace   TrainerWorkspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User                 @relation("TrainerWorkspaceMemberUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@map("trainer_workspace_members")
+}
+
+model MealPlanTemplate {
+  id              Int                    @id @default(autoincrement())
+  workspaceId     Int
+  createdByUserId Int
+  targetUserId    Int?
+  name            String
+  goalType        GoalType
+  targetCalories  Int
+  targetProtein   Float
+  targetFat       Float
+  targetCarbs     Float
+  macroStrategy   String                 @default("BALANCED")
+  previewData     Json?
+  status          MealPlanTemplateStatus @default(DRAFT)
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  workspace       TrainerWorkspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy       User                  @relation("MealPlanTemplateCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  targetUser      User?                 @relation("MealPlanTemplateTargetUser", fields: [targetUserId], references: [id], onDelete: SetNull)
+  assignments     MealPlanAssignment[]
+
+  @@map("meal_plan_templates")
+}
+
+model MealPlanAssignment {
+  id                Int                      @id @default(autoincrement())
+  workspaceId       Int
+  templateId        Int
+  userId            Int
+  assignedByUserId  Int
+  assignedMealPlanId Int?                    @unique
+  startDate         DateTime
+  endDate           DateTime?
+  status            MealPlanAssignmentStatus @default(ACTIVE)
+  notes             String?
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+
+  workspace         TrainerWorkspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  template          MealPlanTemplate         @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  user              User                     @relation("MealPlanAssignmentUser", fields: [userId], references: [id], onDelete: Cascade)
+  assignedBy        User                     @relation("MealPlanAssignmentAssigner", fields: [assignedByUserId], references: [id], onDelete: Cascade)
+  assignedMealPlan   MealPlan?                @relation("MealPlanAssignmentPlan", fields: [assignedMealPlanId], references: [id], onDelete: SetNull)
+
+  @@index([userId, status])
+  @@map("meal_plan_assignments")
+}
+
+model ProgressCheckin {
+  id              Int      @id @default(autoincrement())
+  workspaceId     Int
+  userId          Int
+  recordedByUserId Int?
+  weight          Float?
+  bodyFat         Float?
+  waist           Float?
+  photoUrl        String?
+  note            String?
+  recordedAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  workspace       TrainerWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user            User             @relation("ProgressCheckinUser", fields: [userId], references: [id], onDelete: Cascade)
+  recordedBy      User?            @relation("ProgressCheckinRecorder", fields: [recordedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([userId, recordedAt])
+  @@map("progress_checkins")
 }
 
 // ==================== 2. FOOD & RECIPE ====================
@@ -298,6 +436,7 @@ model MealPlan {
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   details     MealPlanDetail[]
   appliedMeals Meal[]
+  trainerAssignments MealPlanAssignment[] @relation("MealPlanAssignmentPlan")
   
   @@map("meal_plans")
 }

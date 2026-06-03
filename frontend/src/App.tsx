@@ -23,6 +23,7 @@ import MealPlansPage from './pages/MealPlansPage';
 import LibraryPage from './pages/LibraryPage';
 import RecommendationsPage from './pages/RecommendationsPage';
 import WeeklyReportsPage from './pages/WeeklyReportsPage';
+import PTWorkspacePage from './pages/PTWorkspacePage';
 import NotFoundPage from './pages/NotFoundPage';
 import UserLayout from './components/user/UserShell';
 import AdminDashboard from './pages/admin/AdminDashboardV2';
@@ -72,6 +73,7 @@ function App() {
               <Route path="/library" element={<LibraryPage />} />
               <Route path="/recommendations" element={<RecommendationsPage />} />
               <Route path="/weekly-reports" element={<WeeklyReportsPage />} />
+              <Route path="/pt/workspaces" element={<PTWorkspacePage />} />
             </Route>
           </Route>
           <Route element={<AdminRoute />}>

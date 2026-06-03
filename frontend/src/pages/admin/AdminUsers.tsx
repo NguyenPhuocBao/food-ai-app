@@ -9,7 +9,7 @@ type AdminUser = {
   id: number;
   name: string;
   email: string;
-  role: 'USER' | 'MODERATOR' | 'ADMIN';
+  role: 'USER' | 'MODERATOR' | 'ADMIN' | 'PT';
   isActive: boolean;
   isOnline?: boolean;
 };
@@ -248,6 +248,7 @@ const AdminUsers = () => {
                       >
                         <option value="USER">USER</option>
                         <option value="MODERATOR">MODERATOR</option>
+                        <option value="PT">PT</option>
                         <option value="ADMIN">ADMIN</option>
                       </select>
                     </td>
@@ -380,6 +381,7 @@ const AdminUsers = () => {
                   >
                     <option value="USER">USER</option>
                     <option value="MODERATOR">MODERATOR</option>
+                    <option value="PT">PT</option>
                     <option value="ADMIN">ADMIN</option>
                   </select>
                 </div>

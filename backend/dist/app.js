@@ -21,6 +21,7 @@ const analyze_routes_1 = __importDefault(require("./routes/analyze.routes"));
 const mealplan_routes_1 = __importDefault(require("./routes/mealplan.routes"));
 const recommendation_routes_1 = __importDefault(require("./routes/recommendation.routes"));
 const weekly_report_routes_1 = __importDefault(require("./routes/weekly-report.routes"));
+const pt_routes_1 = __importDefault(require("./routes/pt.routes"));
 const error_middleware_1 = require("./middlewares/error.middleware");
 const settings_routes_1 = __importDefault(require("./routes/settings.routes"));
 const health_routes_1 = __importDefault(require("./routes/health.routes"));
@@ -93,6 +94,7 @@ app.use('/api/analyze', analyze_routes_1.default);
 app.use('/api/meal-plans', mealplan_routes_1.default);
 app.use('/api/recommendations', recommendation_routes_1.default);
 app.use('/api/weekly-reports', weekly_report_routes_1.default);
+app.use('/api/pt', pt_routes_1.default);
 app.use('/api/admin/settings', settings_routes_1.default);
 app.use('/api/health', health_routes_1.default);
 // Liveness check (process is alive, DB not required).
@@ -138,6 +140,7 @@ app.get('/', (req, res) => {
             health: '/api/health',
             recommendations: '/api/recommendations',
             weeklyReports: '/api/weekly-reports',
+            pt: '/api/pt',
             admin: '/api/admin'
         }
     });

@@ -67,3 +67,10 @@ export const adminMiddleware = (req: AuthRequest, res: Response, next: NextFunct
   }
   next();
 };
+
+export const trainerOrAdminMiddleware = (req: AuthRequest, res: Response, next: NextFunction) => {
+  if (!req.user || (req.user.role !== 'ADMIN' && req.user.role !== 'PT')) {
+    return res.status(403).json({ error: 'Forbidden: PT access required' });
+  }
+  next();
+};

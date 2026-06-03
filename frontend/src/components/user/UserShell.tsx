@@ -19,6 +19,7 @@ import {
   Sparkles,
   Trash2,
   User as UserIcon,
+  Users,
   UtensilsCrossed,
   X,
 } from 'lucide-react';
@@ -54,10 +55,21 @@ const TYPE_CONFIG = {
   ERROR: { dot: 'bg-red-500' },
 };
 
-const buildNavData = (isEn: boolean) => {
+const buildNavData = (isEn: boolean, isTrainer: boolean) => {
   const directLinks: NavItem[] = [
     { label: isEn ? 'Home' : 'Trang chủ', path: '/', icon: Home, description: isEn ? 'Daily overview and quick actions.' : 'Tổng quan trong ngày và thao tác nhanh.' },
     { label: 'AI Coach', path: '/chat-ai', icon: MessageSquare, description: isEn ? 'Chat with AI for meal suggestions.' : 'Trò chuyện với AI để xin gợi ý bữa ăn.' },
+  ];
+
+  const trainerLinks: NavItem[] = [
+    {
+      label: isEn ? 'PT Workspace' : 'Không gian PT',
+      path: '/pt/workspaces',
+      icon: Users,
+      description: isTrainer
+        ? (isEn ? 'Manage PT groups, meal templates and check-ins.' : 'Quản lý nhóm PT, template meal plan và check-in.')
+        : (isEn ? 'Join a PT workspace with an invite code.' : 'Tham gia workspace PT bằng mã mời.'),
+    },
   ];
 
   const navGroups: NavGroup[] = [
@@ -88,6 +100,7 @@ const buildNavData = (isEn: boolean) => {
       label: isEn ? 'Planning' : 'Kế hoạch',
       icon: CalendarDays,
       items: [
+        ...trainerLinks,
         { label: 'Meal Plan', path: '/meal-plans', icon: CalendarDays, description: isEn ? 'Plan meals by day and meal type.' : 'Lập kế hoạch ăn uống theo ngày và bữa.' },
       ],
     },
@@ -126,7 +139,8 @@ const UserShell = () => {
   const { user, logoutUser } = useAuth();
   const { language } = useLanguage();
   const isEn = language === 'en';
-  const { directLinks, navGroups, mobileSections } = buildNavData(isEn);
+  const isTrainer = user?.role === 'PT' || user?.role === 'ADMIN';
+  const { directLinks, navGroups, mobileSections } = buildNavData(isEn, isTrainer);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
