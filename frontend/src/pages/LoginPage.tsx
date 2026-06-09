@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Mail, Lock, ArrowRight, Bot } from 'lucide-react';
+import { resolveAuthErrorMessage } from '../services/auth.service';
 
 const LoginPage = () => {
   const [email, setEmail] = useState('');
@@ -21,7 +22,7 @@ const LoginPage = () => {
       const loggedInUser = await login(email, password);
       navigate(loggedInUser.role === 'ADMIN' ? '/admin' : '/');
     } catch (error: any) {
-      setErrorMsg(error.response?.data?.error || 'Đăng nhập thất bại. Vui lòng thử lại!');
+      setErrorMsg(resolveAuthErrorMessage(error, 'login'));
     } finally {
       setIsLoading(false);
     }

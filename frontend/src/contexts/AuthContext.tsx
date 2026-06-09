@@ -1,6 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { User } from '../types';
-import { login as apiLogin, register as apiRegister } from '../services/auth.service';
+import {
+  login as apiLogin,
+  register as apiRegister,
+  resolveAuthErrorMessage,
+} from '../services/auth.service';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 import {
@@ -88,7 +92,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       return freshUser;
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Dang nhap that bai');
+      toast.error(resolveAuthErrorMessage(error, 'login'));
       throw error;
     }
   }, []);
@@ -103,7 +107,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(freshUser);
       toast.success('Dang ky thanh cong!');
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Dang ky that bai');
+      toast.error(resolveAuthErrorMessage(error, 'register'));
       throw error;
     }
   }, []);

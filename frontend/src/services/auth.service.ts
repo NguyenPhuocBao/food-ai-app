@@ -6,6 +6,57 @@ export interface UpdateProfilePayload extends Partial<UserProfile> {
   targetWeight?: number;
 }
 
+export const resolveAuthErrorMessage = (
+  error: any,
+  mode: 'login' | 'register' = 'login',
+) => {
+  const fallback =
+    mode === 'register'
+      ? 'Không thể đăng ký lúc này. Vui lòng thử lại sau.'
+      : 'Không thể đăng nhập lúc này. Vui lòng thử lại sau.';
+
+  const status = error?.response?.status;
+  const rawMessage = String(error?.response?.data?.error || error?.message || '').trim();
+  const normalized = rawMessage.toLowerCase();
+
+  if (status === 401 || status === 403) {
+    return mode === 'login'
+      ? 'Email hoặc mật khẩu không đúng.'
+      : fallback;
+  }
+
+  if (status === 400 || status === 409) {
+    if (
+      normalized.includes('email') ||
+      normalized.includes('mật khẩu') ||
+      normalized.includes('mat khau') ||
+      normalized.includes('không hợp lệ') ||
+      normalized.includes('khong hop le') ||
+      normalized.includes('đã tồn tại') ||
+      normalized.includes('da ton tai')
+    ) {
+      return rawMessage;
+    }
+  }
+
+  if (
+    status >= 500 ||
+    normalized.includes('prisma') ||
+    normalized.includes('database') ||
+    normalized.includes('sql') ||
+    normalized.includes('econnrefused') ||
+    normalized.includes('timeout') ||
+    normalized.includes('failed to fetch') ||
+    normalized.includes('network error')
+  ) {
+    return mode === 'register'
+      ? 'Hệ thống đang tạm gián đoạn. Vui lòng thử đăng ký lại sau.'
+      : 'Hệ thống đang tạm gián đoạn. Vui lòng thử đăng nhập lại sau.';
+  }
+
+  return rawMessage || fallback;
+};
+
 export const register = async (email: string, password: string, name: string): Promise<User> => {
   const response = await api.post('/auth/register', { email, password, name });
   return response.data.data;
