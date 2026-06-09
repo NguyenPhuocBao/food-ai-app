@@ -28,6 +28,7 @@ const computeWeeklySnapshot = async (userId, weekStart, weekEndExclusive) => {
         select: {
             id: true,
             eatenAt: true,
+            quantity: true,
             calories: true,
             protein: true,
             fat: true,
@@ -58,6 +59,12 @@ const computeWeeklySnapshot = async (userId, weekStart, weekEndExclusive) => {
         };
     });
     const dayMap = new Map(daily.map((item) => [item.date, item]));
+    const dailyMeals = daily.map((item) => ({
+        date: item.date,
+        day: item.day,
+        items: [],
+    }));
+    const dailyMealMap = new Map(dailyMeals.map((item) => [item.date, item]));
     meals.forEach((meal) => {
         const key = (0, timezone_util_1.toAppDateKey)(meal.eatenAt);
         const bucket = dayMap.get(key);
@@ -68,6 +75,20 @@ const computeWeeklySnapshot = async (userId, weekStart, weekEndExclusive) => {
         bucket.fat += meal.fat;
         bucket.carbs += meal.carbs;
         bucket.meals += 1;
+        const mealBucket = dailyMealMap.get(key);
+        mealBucket?.items.push({
+            id: meal.id,
+            eatenAt: meal.eatenAt.toISOString(),
+            mealType: meal.mealType,
+            quantity: meal.quantity,
+            calories: meal.calories,
+            protein: meal.protein,
+            fat: meal.fat,
+            carbs: meal.carbs,
+            notes: meal.notes,
+            foodName: meal.food?.name || 'Mon an',
+            foodCategory: meal.food?.category || null,
+        });
     });
     const totals = daily.reduce((acc, day) => ({
         calories: acc.calories + day.calories,
@@ -111,6 +132,7 @@ const computeWeeklySnapshot = async (userId, weekStart, weekEndExclusive) => {
             daily,
             bestDay,
             worstDay,
+            dailyMeals,
             dailyHealth,
             healthScore: weeklyHealth.avgScore,
             alerts: weeklyHealth.alerts,

@@ -3,12 +3,15 @@ import {
   assignMealPlanTemplate,
   createMealPlanTemplate,
   createProgressCheckin,
+  createWorkspaceChatMessage,
   createWorkspace,
+  deleteWorkspace,
   deleteMealPlanTemplate,
   deleteAssignedMealPlanDetail,
   getMyWorkspaces,
   getMemberAssignedMealPlan,
   getProgressCheckins,
+  getWorkspaceChatMessages,
   getWorkspaceById,
   joinWorkspaceByCode,
   inviteWorkspaceMemberByEmail,
@@ -21,8 +24,9 @@ import {
   addAssignedMealPlanDetail,
   updateAssignedMealPlanDetail,
   updateWorkspace,
+  streamWorkspaceEvents,
 } from '../controllers/pt.controller';
-import { authMiddleware, trainerOrAdminMiddleware } from '../middlewares/auth.middleware';
+import { authMiddleware, authMiddlewareAllowQueryToken, trainerOrAdminMiddleware } from '../middlewares/auth.middleware';
 
 const router = Router();
 
@@ -30,6 +34,7 @@ router.get('/workspaces', authMiddleware, getMyWorkspaces);
 router.post('/workspaces', authMiddleware, trainerOrAdminMiddleware, createWorkspace);
 router.get('/workspaces/:id', authMiddleware, getWorkspaceById);
 router.patch('/workspaces/:id', authMiddleware, trainerOrAdminMiddleware, updateWorkspace);
+router.delete('/workspaces/:id', authMiddleware, trainerOrAdminMiddleware, deleteWorkspace);
 router.post('/workspaces/:id/invite-code', authMiddleware, trainerOrAdminMiddleware, regenerateInviteCode);
 router.post('/workspaces/:id/invite-email', authMiddleware, trainerOrAdminMiddleware, inviteWorkspaceMemberByEmail);
 router.get('/workspaces/:id/members', authMiddleware, listWorkspaceMembers);
@@ -49,5 +54,8 @@ router.post('/workspaces/:id/templates/:templateId/assign', authMiddleware, trai
 
 router.get('/workspaces/:id/checkins', authMiddleware, getProgressCheckins);
 router.post('/workspaces/:id/checkins', authMiddleware, createProgressCheckin);
+router.get('/workspaces/:id/events', authMiddlewareAllowQueryToken, streamWorkspaceEvents);
+router.get('/workspaces/:id/chat/messages', authMiddleware, getWorkspaceChatMessages);
+router.post('/workspaces/:id/chat/messages', authMiddleware, createWorkspaceChatMessage);
 
 export default router;

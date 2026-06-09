@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { clearAdminToken, clearUserToken, getAdminToken, getUserToken } from './authStorage';
 
 const configuredApiBaseUrl = String(import.meta.env.VITE_API_BASE_URL || '').trim();
 export const API_BASE_URL = configuredApiBaseUrl || 'http://localhost:5000/api';
@@ -24,8 +25,8 @@ api.interceptors.request.use((config) => {
     config.url?.includes('userId=') ||
     (isAdminRoute && !isAuthRequest);
   
-  const adminToken = localStorage.getItem('admin_token');
-  const userToken = localStorage.getItem('token');
+  const adminToken = getAdminToken();
+  const userToken = getUserToken();
 
   // Tach rieng token theo role, khong fallback cheo:
   // - Request admin chi dung admin_token
@@ -54,14 +55,14 @@ api.interceptors.response.use(
         (isAdminRoute && !isAuthRequest);
 
       if (isAdminRequest) {
-        localStorage.removeItem('admin_token');
+        clearAdminToken();
       } else {
-        localStorage.removeItem('token');
+        clearUserToken();
       }
 
       // Nếu cả 2 đều mất thì mới redirect về login, 
       // hoặc nếu đang ở route protected tương ứng
-      const hasAnyToken = localStorage.getItem('token') || localStorage.getItem('admin_token');
+      const hasAnyToken = getUserToken() || getAdminToken();
       if (!hasAnyToken && !window.location.pathname.includes('/login')) {
         window.location.href = '/login';
       }

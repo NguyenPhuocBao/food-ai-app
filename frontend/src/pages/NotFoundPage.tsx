@@ -25,7 +25,7 @@ const NotFoundPage = () => {
                 {isEn ? 'Error 404' : 'Lỗi 404'}
               </div>
 
-              <p className="text-7xl font-black leading-none tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 via-sky-600 to-indigo-600 sm:text-8xl">
+              <p className="text-7xl font-black leading-none tracking-tight text-slate-900 sm:text-8xl">
                 404
               </p>
               <h1 className="mt-4 text-3xl font-black text-gray-900 sm:text-4xl">

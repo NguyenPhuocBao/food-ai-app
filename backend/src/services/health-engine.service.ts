@@ -292,12 +292,25 @@ export const buildWeeklyRecommendations = (
   const alerts = new Set<string>();
 
   const activeDays = dailyResults.filter((item) => item.stats.meals > 0);
-  const avgScore = activeDays.length > 0
+  const qualityScore = activeDays.length > 0
     ? activeDays.reduce((sum, item) => sum + item.score, 0) / activeDays.length
+    : 0;
+  const adherenceRatio = dailyResults.length > 0 ? activeDays.length / dailyResults.length : 0;
+  const avgScore = dailyResults.length > 0
+    ? dailyResults.reduce((sum, item) => sum + item.score, 0) / dailyResults.length
     : 0;
 
   if (avgScore < 70) {
     recommendations.push('Uu tien can doi bua chinh: them rau + nguon dam nac trong bua trua/toi.');
+  }
+
+  if (adherenceRatio < 0.7) {
+    alerts.add(`Muc do tuan thu ghi nhat ky an uong moi dat ${activeDays.length}/${dailyResults.length} ngay trong tuan.`);
+    recommendations.push('Can ghi nhat ky deu hon moi ngay de diem suc khoe tuan phan anh dung thoi quen an uong.');
+  }
+
+  if (qualityScore >= 80 && adherenceRatio < 0.5) {
+    alerts.add('Chat luong bua an o ngay da ghi nhan kha tot, nhung du lieu tuan con qua it de danh gia on dinh.');
   }
 
   const lateDays = dailyResults.filter((item) => item.stats.lateMeals > 0).length;

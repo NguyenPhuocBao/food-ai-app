@@ -64,7 +64,7 @@ const Sidebar = () => {
       className="fixed left-0 top-0 h-full w-64 bg-gray-900/90 dark:bg-black/90 backdrop-blur-xl text-white shadow-2xl z-20 flex flex-col border-r border-gray-800"
     >
       <div className="p-5 text-2xl font-bold border-b border-gray-800 flex items-center justify-between">
-        <span className="bg-gradient-to-r from-blue-400 to-violet-400 bg-clip-text text-transparent">
+        <span className="text-slate-900 dark:text-slate-100">
           {isEn ? 'Food AI Admin' : 'Quản trị Food AI'}
         </span>
         <button onClick={toggleTheme} className="p-2 rounded-xl hover:bg-gray-800 transition-colors">

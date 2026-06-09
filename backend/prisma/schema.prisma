@@ -108,6 +108,7 @@ model User {
   mealPlanAssignmentsAssigned MealPlanAssignment[] @relation("MealPlanAssignmentAssigner")
   progressCheckinsRecorded ProgressCheckin[] @relation("ProgressCheckinRecorder")
   progressCheckinsForUser ProgressCheckin[] @relation("ProgressCheckinUser")
+  workspaceChatMessages WorkspaceChatMessage[]
   
   @@map("users")
 }
@@ -204,6 +205,7 @@ model TrainerWorkspace {
   templates     MealPlanTemplate[]
   assignments   MealPlanAssignment[]
   checkins      ProgressCheckin[]
+  chatMessages  WorkspaceChatMessage[]
 
   @@map("trainer_workspaces")
 }
@@ -294,6 +296,21 @@ model ProgressCheckin {
 
   @@index([userId, recordedAt])
   @@map("progress_checkins")
+}
+
+model WorkspaceChatMessage {
+  id          Int      @id @default(autoincrement())
+  workspaceId Int
+  userId      Int
+  content     String   @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace   TrainerWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
+  @@map("workspace_chat_messages")
 }
 
 // ==================== 2. FOOD & RECIPE ====================

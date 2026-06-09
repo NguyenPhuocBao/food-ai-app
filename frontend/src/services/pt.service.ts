@@ -118,6 +118,25 @@ export type PTProgressCheckin = {
   recordedBy?: { id: number; name: string; email: string } | null;
 };
 
+export type PTWorkspaceChatMessage = {
+  id: number;
+  workspaceId: number;
+  userId: number;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+  user: {
+    id: number;
+    name: string;
+    email: string;
+    role: string;
+    profile?: {
+      fullName?: string | null;
+      avatar?: string | null;
+    } | null;
+  };
+};
+
 export type PTAssignedMealPlanPreview = {
   assignment: {
     id: number;
@@ -168,6 +187,11 @@ export const getMyWorkspaces = async (): Promise<PTWorkspace[]> => {
 
 export const createWorkspace = async (payload: { name: string; description?: string }): Promise<PTWorkspace> => {
   const response = await api.post('/pt/workspaces', payload);
+  return response.data.data;
+};
+
+export const deleteWorkspace = async (id: number): Promise<PTWorkspace> => {
+  const response = await api.delete(`/pt/workspaces/${id}`);
   return response.data.data;
 };
 
@@ -344,4 +368,14 @@ export const createProgressCheckin = async (
 ) => {
   const response = await api.post(`/pt/workspaces/${workspaceId}/checkins`, payload);
   return response.data.data as PTProgressCheckin;
+};
+
+export const getWorkspaceChatMessages = async (workspaceId: number): Promise<PTWorkspaceChatMessage[]> => {
+  const response = await api.get(`/pt/workspaces/${workspaceId}/chat/messages`);
+  return response.data.data;
+};
+
+export const sendWorkspaceChatMessage = async (workspaceId: number, content: string): Promise<PTWorkspaceChatMessage> => {
+  const response = await api.post(`/pt/workspaces/${workspaceId}/chat/messages`, { content });
+  return response.data.data;
 };

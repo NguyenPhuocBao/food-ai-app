@@ -1,7 +1,12 @@
-import { GoalType, MealType, MealPlanAssignmentStatus, MealPlanTemplateStatus } from '@prisma/client';
+import { GoalType, MealType, MealPlanAssignmentStatus, MealPlanTemplateStatus, Prisma } from '@prisma/client';
 import { Request, Response } from 'express';
 import crypto from 'crypto';
 import prisma from '../lib/prisma';
+import {
+  addWorkspaceEventClient,
+  publishWorkspaceEvent,
+  removeWorkspaceEventClient,
+} from '../services/pt-workspace-events.service';
 
 type PreviewDetail = {
   foodId: number;
@@ -74,7 +79,10 @@ export const getMyWorkspaces = async (req: any, res: Response) => {
           ],
         };
     const workspaces = await prisma.trainerWorkspace.findMany({
-      where,
+      where: {
+        ...where,
+        isActive: true,
+      },
       include: {
         owner: { select: { id: true, name: true, email: true } },
         _count: { select: { members: true, templates: true, assignments: true, checkins: true } },
@@ -163,6 +171,29 @@ export const updateWorkspace = async (req: any, res: Response) => {
   }
 };
 
+export const deleteWorkspace = async (req: any, res: Response) => {
+  try {
+    const workspaceId = Number(req.params.id);
+    const userId = req.user.id;
+    const role = req.user.role;
+    const allowed = await isWorkspaceOwnerOrAdmin(workspaceId, userId, role);
+    if (!allowed) return res.status(403).json({ error: 'Forbidden' });
+
+    const workspace = await prisma.trainerWorkspace.update({
+      where: { id: workspaceId },
+      data: { isActive: false },
+      include: {
+        owner: { select: { id: true, name: true, email: true, role: true } },
+        _count: { select: { members: true, templates: true, assignments: true, checkins: true } },
+      },
+    });
+
+    res.json({ success: true, data: workspace });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 export const regenerateInviteCode = async (req: any, res: Response) => {
   try {
     const workspaceId = Number(req.params.id);
@@ -196,7 +227,7 @@ export const getWorkspaceById = async (req: any, res: Response) => {
     const allowed = await canViewWorkspace(workspaceId, req.user.id, req.user.role) || req.user.role === 'ADMIN';
     if (!allowed) return res.status(403).json({ error: 'Forbidden' });
     const workspace = await getWorkspaceDetails(workspaceId);
-    if (!workspace) return res.status(404).json({ error: 'Workspace not found' });
+    if (!workspace || !workspace.isActive) return res.status(404).json({ error: 'Workspace not found' });
     res.json({ success: true, data: workspace });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -620,12 +651,134 @@ export const getProgressCheckins = async (req: any, res: Response) => {
   }
 };
 
+export const getWorkspaceChatMessages = async (req: any, res: Response) => {
+  try {
+    const workspaceId = Number(req.params.id);
+    const userId = req.user.id;
+    const role = req.user.role;
+    const allowed = await isWorkspaceOwnerOrAdmin(workspaceId, userId, role) || await canViewWorkspace(workspaceId, userId, role);
+    if (!allowed) return res.status(403).json({ error: 'Forbidden' });
+
+    const messages = await prisma.$queryRaw<any[]>(Prisma.sql`
+      SELECT
+        m.id,
+        m."workspaceId",
+        m."userId",
+        m.content,
+        m."createdAt",
+        m."updatedAt",
+        json_build_object(
+          'id', u.id,
+          'name', u.name,
+          'email', u.email,
+          'role', u.role,
+          'profile', json_build_object(
+            'fullName', p."fullName",
+            'avatar', p.avatar
+          )
+        ) AS "user"
+      FROM workspace_chat_messages m
+      JOIN users u ON u.id = m."userId"
+      LEFT JOIN user_profiles p ON p."userId" = u.id
+      WHERE m."workspaceId" = ${workspaceId}
+      ORDER BY m."createdAt" ASC
+      LIMIT 200
+    `);
+
+    res.json({ success: true, data: messages });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const streamWorkspaceEvents = async (req: any, res: Response) => {
+  try {
+    const workspaceId = Number(req.params.id);
+    const userId = req.user.id;
+    const role = req.user.role;
+    const allowed = await isWorkspaceOwnerOrAdmin(workspaceId, userId, role) || await canViewWorkspace(workspaceId, userId, role);
+    if (!allowed) return res.status(403).json({ error: 'Forbidden' });
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders?.();
+
+    addWorkspaceEventClient(workspaceId, res);
+    res.write(`event: connected\ndata: ${JSON.stringify({ workspaceId, timestamp: new Date().toISOString() })}\n\n`);
+
+    const heartbeat = setInterval(() => {
+      res.write(`event: heartbeat\ndata: ${JSON.stringify({ timestamp: new Date().toISOString() })}\n\n`);
+    }, 25000);
+
+    req.on('close', () => {
+      clearInterval(heartbeat);
+      removeWorkspaceEventClient(workspaceId, res);
+      res.end();
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const createWorkspaceChatMessage = async (req: any, res: Response) => {
+  try {
+    const workspaceId = Number(req.params.id);
+    const userId = req.user.id;
+    const role = req.user.role;
+    const allowed = await isWorkspaceOwnerOrAdmin(workspaceId, userId, role) || await canViewWorkspace(workspaceId, userId, role);
+    if (!allowed) return res.status(403).json({ error: 'Forbidden' });
+
+    const content = String(req.body?.content || '').trim();
+    if (!content) return res.status(400).json({ error: 'content is required' });
+
+    const [message] = await prisma.$queryRaw<any[]>(Prisma.sql`
+      WITH inserted AS (
+        INSERT INTO workspace_chat_messages ("workspaceId", "userId", content, "createdAt", "updatedAt")
+        VALUES (${workspaceId}, ${userId}, ${content}, NOW(), NOW())
+        RETURNING id, "workspaceId", "userId", content, "createdAt", "updatedAt"
+      )
+      SELECT
+        i.id,
+        i."workspaceId",
+        i."userId",
+        i.content,
+        i."createdAt",
+        i."updatedAt",
+        json_build_object(
+          'id', u.id,
+          'name', u.name,
+          'email', u.email,
+          'role', u.role,
+          'profile', json_build_object(
+            'fullName', p."fullName",
+            'avatar', p.avatar
+          )
+        ) AS "user"
+      FROM inserted i
+      JOIN users u ON u.id = i."userId"
+      LEFT JOIN user_profiles p ON p."userId" = u.id
+    `);
+
+    publishWorkspaceEvent({
+      type: 'chat_message_created',
+      workspaceId,
+      payload: message,
+      timestamp: new Date().toISOString(),
+    });
+
+    res.status(201).json({ success: true, data: message });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 export const getMemberAssignedMealPlan = async (req: any, res: Response) => {
   try {
     const workspaceId = Number(req.params.id);
     const memberUserId = Number(req.params.userId);
     const role = req.user.role;
-    const allowed = await isWorkspaceOwnerOrAdmin(workspaceId, req.user.id, role);
+    const allowed = await isWorkspaceOwnerOrAdmin(workspaceId, req.user.id, role) || await canViewWorkspace(workspaceId, req.user.id, role);
     if (!allowed) return res.status(403).json({ error: 'Forbidden' });
     if (!Number.isFinite(memberUserId)) return res.status(400).json({ error: 'Invalid user id' });
 
@@ -661,15 +814,76 @@ export const getMemberAssignedMealPlan = async (req: any, res: Response) => {
       },
     });
 
-    if (!assignment?.assignedMealPlan) {
+    if (assignment?.assignedMealPlan) {
+      return res.json({
+        success: true,
+        data: {
+          assignment,
+          mealPlan: assignment.assignedMealPlan,
+        },
+      });
+    }
+
+    const fallbackMealPlan = await prisma.mealPlan.findFirst({
+      where: { userId: memberUserId },
+      orderBy: [{ isActive: 'desc' }, { createdAt: 'desc' }],
+      include: {
+        details: {
+          include: { food: true },
+          orderBy: [{ dayOfWeek: 'asc' }, { mealType: 'asc' }],
+        },
+      },
+    });
+
+    if (!fallbackMealPlan) {
       return res.status(404).json({ error: 'Assigned meal plan not found' });
     }
+
+    const fallbackAssignment = await prisma.mealPlanAssignment.findFirst({
+      where: {
+        workspaceId,
+        userId: memberUserId,
+      },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        template: {
+          select: {
+            id: true,
+            name: true,
+            goalType: true,
+            targetCalories: true,
+            targetProtein: true,
+            targetFat: true,
+            targetCarbs: true,
+            macroStrategy: true,
+          },
+        },
+        user: { select: { id: true, name: true, email: true } },
+      },
+    });
 
     res.json({
       success: true,
       data: {
-        assignment,
-        mealPlan: assignment.assignedMealPlan,
+        assignment: fallbackAssignment
+          ? {
+              ...fallbackAssignment,
+              assignedMealPlanId: fallbackMealPlan.id,
+            }
+          : {
+              id: 0,
+              workspaceId,
+              templateId: 0,
+              userId: memberUserId,
+              assignedByUserId: req.user.id,
+              assignedMealPlanId: fallbackMealPlan.id,
+              startDate: fallbackMealPlan.startDate,
+              endDate: fallbackMealPlan.endDate,
+              status: MealPlanAssignmentStatus.ACTIVE,
+              template: null,
+              user: { id: memberUserId, name: '', email: '' },
+            },
+        mealPlan: fallbackMealPlan,
       },
     });
   } catch (error: any) {
@@ -833,7 +1047,7 @@ export const createProgressCheckin = async (req: any, res: Response) => {
     const allowed = actorIsAdmin || actorIsOwner || actorIsSelf;
     if (!allowed) return res.status(403).json({ error: 'Forbidden' });
 
-    const checkin = await prisma.progressCheckin.create({
+    const createdCheckin = await prisma.progressCheckin.create({
       data: {
         workspaceId,
         userId,
@@ -845,6 +1059,22 @@ export const createProgressCheckin = async (req: any, res: Response) => {
         note: req.body?.note || null,
       },
     });
+
+    const checkin = await prisma.progressCheckin.findUnique({
+      where: { id: createdCheckin.id },
+      include: {
+        user: { select: { id: true, name: true, email: true, profile: true } },
+        recordedBy: { select: { id: true, name: true, email: true } },
+      },
+    });
+
+    publishWorkspaceEvent({
+      type: 'progress_checkin_created',
+      workspaceId,
+      payload: checkin,
+      timestamp: new Date().toISOString(),
+    });
+
     res.status(201).json({ success: true, data: checkin });
   } catch (error: any) {
     res.status(500).json({ error: error.message });

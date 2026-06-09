@@ -134,7 +134,7 @@ const AdminChatHistoryV2 = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-4xl font-bold bg-gradient-to-r from-emerald-600 to-cyan-600 bg-clip-text text-transparent">Ho tro khach hang</h1>
+        <h1 className="text-4xl font-bold text-slate-900 dark:text-slate-100">Ho tro khach hang</h1>
         <p className="text-gray-500 dark:text-gray-400 mt-1">Admin co the tra loi song song cho nhieu nguoi dung</p>
       </div>
 

@@ -3,6 +3,14 @@ import type { User } from '../types';
 import { login as apiLogin, register as apiRegister } from '../services/auth.service';
 import api from '../services/api';
 import toast from 'react-hot-toast';
+import {
+  clearAdminToken,
+  clearUserToken,
+  getAdminToken,
+  getUserToken,
+  setAdminToken,
+  setUserToken,
+} from '../services/authStorage';
 
 interface AuthContextType {
   user: User | null;
@@ -32,8 +40,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     const initAuth = async () => {
-      const userToken = localStorage.getItem('token');
-      const adminToken = localStorage.getItem('admin_token');
+      const userToken = getUserToken();
+      const adminToken = getAdminToken();
 
       try {
         const [adminResult, userResult] = await Promise.all([
@@ -45,14 +53,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setAdmin(adminResult);
         } else {
           setAdmin(null);
-          if (adminToken) localStorage.removeItem('admin_token');
+          if (adminToken) clearAdminToken();
         }
 
         if (userResult && userResult.role !== 'ADMIN') {
           setUser(userResult);
         } else {
           setUser(null);
-          if (userToken) localStorage.removeItem('token');
+          if (userToken) clearUserToken();
         }
       } finally {
         setLoading(false);
@@ -69,11 +77,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const freshUser = await getMeWithToken(token);
 
       if (freshUser.role === 'ADMIN') {
-        localStorage.setItem('admin_token', token);
+        setAdminToken(token);
         setAdmin(freshUser);
         toast.success(`Chao mung Admin, ${freshUser.name}!`);
       } else {
-        localStorage.setItem('token', token);
+        setUserToken(token);
         setUser(freshUser);
         toast.success(`Chao mung, ${freshUser.name}!`);
       }
@@ -89,7 +97,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const registerData = await apiRegister(email, password, name);
       const token = registerData.token!;
-      localStorage.setItem('token', token);
+      setUserToken(token);
 
       const freshUser = await getMeWithToken(token);
       setUser(freshUser);
@@ -101,7 +109,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const logoutUser = useCallback(() => {
-    localStorage.removeItem('token');
+    clearUserToken();
     setUser(null);
     toast.success('Dang xuat tai kho?n nguoi dung thanh cong');
     if (!window.location.pathname.includes('/login')) {
@@ -110,11 +118,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const logoutAdmin = useCallback(() => {
-    localStorage.removeItem('admin_token');
+    clearAdminToken();
     setAdmin(null);
     toast.success('Dang xuat quyen quan tri thanh cong');
     if (window.location.pathname.startsWith('/admin')) {
-      const hasUserToken = Boolean(localStorage.getItem('token'));
+      const hasUserToken = Boolean(getUserToken());
       window.location.href = hasUserToken ? '/' : '/login';
     }
   }, []);
@@ -128,34 +136,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [logoutUser, logoutAdmin]);
 
   const refreshUser = useCallback(async () => {
-    const userToken = localStorage.getItem('token');
+    const userToken = getUserToken();
     if (userToken) {
       try {
         const u = await getMeWithToken(userToken);
         if (u.role !== 'ADMIN') {
           setUser(u);
         } else {
-          localStorage.removeItem('token');
+          clearUserToken();
           setUser(null);
         }
       } catch {
-        localStorage.removeItem('token');
+        clearUserToken();
         setUser(null);
       }
     }
 
-    const adminToken = localStorage.getItem('admin_token');
+    const adminToken = getAdminToken();
     if (adminToken) {
       try {
         const a = await getMeWithToken(adminToken);
         if (a.role === 'ADMIN') {
           setAdmin(a);
         } else {
-          localStorage.removeItem('admin_token');
+          clearAdminToken();
           setAdmin(null);
         }
       } catch {
-        localStorage.removeItem('admin_token');
+        clearAdminToken();
         setAdmin(null);
       }
     }

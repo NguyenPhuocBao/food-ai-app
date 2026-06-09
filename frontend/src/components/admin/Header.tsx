@@ -45,7 +45,7 @@ const Header = () => {
   return (
     <header className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl border-b border-gray-100 dark:border-gray-700 sticky top-0 z-10">
       <div className="flex justify-between items-center px-6 py-3">
-        <div className="text-xl font-semibold bg-gradient-to-r from-blue-600 to-violet-600 bg-clip-text text-transparent">
+        <div className="text-xl font-semibold text-slate-900 dark:text-slate-100">
           {isEn ? 'Hello' : 'Chào'}, {admin?.name || 'Admin'}
         </div>
 
@@ -114,4 +114,3 @@ const Header = () => {
 };
 
 export default Header;
-

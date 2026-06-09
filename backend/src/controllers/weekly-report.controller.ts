@@ -42,6 +42,7 @@ const computeWeeklySnapshot = async (userId: number, weekStart: Date, weekEndExc
     select: {
       id: true,
       eatenAt: true,
+      quantity: true,
       calories: true,
       protein: true,
       fat: true,
@@ -74,6 +75,25 @@ const computeWeeklySnapshot = async (userId: number, weekStart: Date, weekEndExc
   });
 
   const dayMap = new Map(daily.map((item) => [item.date, item]));
+  const dailyMeals = daily.map((item) => ({
+    date: item.date,
+    day: item.day,
+    items: [] as Array<{
+      id: number;
+      eatenAt: string;
+      mealType: string;
+      quantity: number;
+      calories: number;
+      protein: number;
+      fat: number;
+      carbs: number;
+      notes: string | null;
+      foodName: string;
+      foodCategory: string | null;
+    }>,
+  }));
+  const dailyMealMap = new Map(dailyMeals.map((item) => [item.date, item]));
+
   meals.forEach((meal) => {
     const key = toAppDateKey(meal.eatenAt);
     const bucket = dayMap.get(key);
@@ -83,6 +103,21 @@ const computeWeeklySnapshot = async (userId: number, weekStart: Date, weekEndExc
     bucket.fat += meal.fat;
     bucket.carbs += meal.carbs;
     bucket.meals += 1;
+
+    const mealBucket = dailyMealMap.get(key);
+    mealBucket?.items.push({
+      id: meal.id,
+      eatenAt: meal.eatenAt.toISOString(),
+      mealType: meal.mealType,
+      quantity: meal.quantity,
+      calories: meal.calories,
+      protein: meal.protein,
+      fat: meal.fat,
+      carbs: meal.carbs,
+      notes: meal.notes,
+      foodName: meal.food?.name || 'Mon an',
+      foodCategory: meal.food?.category || null,
+    });
   });
 
   const totals = daily.reduce((acc, day) => ({
@@ -133,6 +168,7 @@ const computeWeeklySnapshot = async (userId: number, weekStart: Date, weekEndExc
       daily,
       bestDay,
       worstDay,
+      dailyMeals,
       dailyHealth,
       healthScore: weeklyHealth.avgScore,
       alerts: weeklyHealth.alerts,

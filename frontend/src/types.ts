@@ -282,6 +282,23 @@ export interface WeeklyReport {
         lateMeals: number;
       };
     }>;
+    dailyMeals?: Array<{
+      date: string;
+      day: string;
+      items: Array<{
+        id: number;
+        eatenAt: string;
+        mealType: 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK';
+        quantity: number;
+        calories: number;
+        protein: number;
+        fat: number;
+        carbs: number;
+        notes?: string;
+        foodName: string;
+        foodCategory?: string;
+      }>;
+    }>;
   };
   createdAt: string;
 }

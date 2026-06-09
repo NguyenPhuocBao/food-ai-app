@@ -168,7 +168,7 @@ const AdminFoodDetail = () => {
           <button onClick={() => navigate(backTo)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800">
             <ArrowLeft size={24} />
           </button>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-violet-600 bg-clip-text text-transparent">{food.name}</h1>
+          <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100">{food.name}</h1>
         </div>
         <div className="flex gap-2">
           <button

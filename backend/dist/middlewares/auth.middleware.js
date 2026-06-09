@@ -3,15 +3,14 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.trainerOrAdminMiddleware = exports.adminMiddleware = exports.authMiddleware = void 0;
+exports.trainerOrAdminMiddleware = exports.adminMiddleware = exports.authMiddlewareAllowQueryToken = exports.authMiddleware = void 0;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const active_user_service_1 = require("../services/active-user.service");
 const jwt_util_1 = require("../utils/jwt.util");
 const prisma_1 = __importDefault(require("../lib/prisma"));
-const authMiddleware = async (req, res, next) => {
+const authenticateRequest = async (req, res, next, token) => {
     try {
         const jwtSecret = (0, jwt_util_1.resolveJwtSecret)();
-        const token = req.headers.authorization?.split(' ')[1];
         if (!token) {
             return res.status(401).json({ error: 'Unauthorized: No token provided' });
         }
@@ -45,7 +44,17 @@ const authMiddleware = async (req, res, next) => {
         return res.status(401).json({ error: 'Unauthorized: Invalid token' });
     }
 };
+const authMiddleware = async (req, res, next) => {
+    const token = req.headers.authorization?.split(' ')[1];
+    return authenticateRequest(req, res, next, token);
+};
 exports.authMiddleware = authMiddleware;
+const authMiddlewareAllowQueryToken = async (req, res, next) => {
+    const tokenFromHeader = req.headers.authorization?.split(' ')[1];
+    const tokenFromQuery = typeof req.query.token === 'string' ? req.query.token : undefined;
+    return authenticateRequest(req, res, next, tokenFromHeader || tokenFromQuery);
+};
+exports.authMiddlewareAllowQueryToken = authMiddlewareAllowQueryToken;
 const adminMiddleware = (req, res, next) => {
     if (req.user?.role !== 'ADMIN') {
         return res.status(403).json({ error: 'Forbidden: Admin access required' });

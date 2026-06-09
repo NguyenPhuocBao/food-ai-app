@@ -114,7 +114,7 @@ const AdminAuditLogsV2 = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-violet-600 bg-clip-text text-transparent">
+        <h1 className="text-4xl font-bold text-slate-900 dark:text-slate-100">
           Audit Logs
         </h1>
         <p className="text-gray-500 dark:text-slate-400 mt-1">

@@ -12,11 +12,14 @@ export interface AuthRequest extends Request {
   };
 }
 
-export const authMiddleware = async (req: AuthRequest, res: Response, next: NextFunction) => {
+const authenticateRequest = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction,
+  token: string | undefined,
+) => {
   try {
     const jwtSecret = resolveJwtSecret();
-
-    const token = req.headers.authorization?.split(' ')[1];
     
     if (!token) {
       return res.status(401).json({ error: 'Unauthorized: No token provided' });
@@ -59,6 +62,17 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
     }
     return res.status(401).json({ error: 'Unauthorized: Invalid token' });
   }
+};
+
+export const authMiddleware = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  return authenticateRequest(req, res, next, token);
+};
+
+export const authMiddlewareAllowQueryToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  const tokenFromHeader = req.headers.authorization?.split(' ')[1];
+  const tokenFromQuery = typeof req.query.token === 'string' ? req.query.token : undefined;
+  return authenticateRequest(req, res, next, tokenFromHeader || tokenFromQuery);
 };
 
 export const adminMiddleware = (req: AuthRequest, res: Response, next: NextFunction) => {

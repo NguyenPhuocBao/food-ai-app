@@ -52,6 +52,8 @@ const dedupeFoods = (foods: ScanFoodSuggestion[]) => {
   return Array.from(map.values());
 };
 
+const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
 const extractHistoryName = (item: ScanHistoryItem) =>
   item.result?.confirmed?.foodName ||
   item.result?.meta?.candidateNames?.[0] ||
@@ -78,6 +80,7 @@ const ScanRealPageV2 = () => {
   const [foodQuery, setFoodQuery] = useState('');
   const [suggestedFoods, setSuggestedFoods] = useState<ScanFoodSuggestion[]>([]);
   const [selectedFoodId, setSelectedFoodId] = useState<number | null>(null);
+  const [scanStageIndex, setScanStageIndex] = useState(0);
 
   const selectedFood = useMemo(
     () => suggestedFoods.find((food) => food.id === selectedFoodId) || null,
@@ -110,6 +113,19 @@ const ScanRealPageV2 = () => {
     setPreviewUrl(url);
     return () => URL.revokeObjectURL(url);
   }, [selectedFile]);
+
+  useEffect(() => {
+    if (!isScanning) {
+      setScanStageIndex(0);
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      setScanStageIndex((current) => (current + 1) % 4);
+    }, 950);
+
+    return () => window.clearInterval(interval);
+  }, [isScanning]);
 
   useEffect(() => {
     if (!scanResult) {
@@ -156,7 +172,13 @@ const ScanRealPageV2 = () => {
     setIsScanning(true);
 
     try {
+      const startedAt = Date.now();
       const result = await analyzeFoodImage(file);
+      const elapsed = Date.now() - startedAt;
+      const minimumScanMs = 3000;
+      if (elapsed < minimumScanMs) {
+        await wait(minimumScanMs - elapsed);
+      }
       setScanResult(result);
       await loadHistory();
       if (result.fallback || result?.prediction?.meta?.aiError) {
@@ -201,6 +223,13 @@ const ScanRealPageV2 = () => {
 
   const displayImage =
     previewUrl || 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&q=80&w=1200';
+  const hasUploadedPreview = Boolean(previewUrl);
+  const scanStages = [
+    'Đang căn khung và nhận diện vùng món ăn',
+    'Đang trích xuất đặc trưng hình ảnh',
+    'Đang đối chiếu với cơ sở dữ liệu món ăn',
+    'Đang tổng hợp dinh dưỡng và chuẩn bị kết quả',
+  ];
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 h-full">
@@ -221,30 +250,70 @@ const ScanRealPageV2 = () => {
         onChange={handleFileChange}
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 min-h-[640px]">
-        <div className="lg:col-span-8 bg-black rounded-[32px] overflow-hidden relative shadow-lg h-full flex flex-col">
-          <img src={displayImage} alt="Scan preview" className="absolute inset-0 w-full h-full object-cover opacity-70" />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-black/20" />
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        <div className="lg:col-span-7 xl:col-span-7 bg-slate-950 rounded-[32px] overflow-hidden relative shadow-lg min-h-[460px] lg:min-h-[520px] flex flex-col">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.18),transparent_28%),linear-gradient(180deg,rgba(15,23,42,0.98),rgba(2,6,23,0.98))]" />
+          <img
+            src={displayImage}
+            alt="Scan preview"
+            className={`absolute inset-6 h-[calc(100%-3rem)] w-[calc(100%-3rem)] rounded-[28px] ${
+              hasUploadedPreview ? 'object-contain opacity-100' : 'object-cover opacity-55'
+            }`}
+          />
+          <div className={`absolute inset-0 ${hasUploadedPreview ? 'bg-gradient-to-t from-slate-950/28 via-transparent to-slate-950/12' : 'bg-gradient-to-t from-black/50 via-black/10 to-black/20'}`} />
+          {isScanning && (
+            <div className="absolute inset-0 z-[9] bg-emerald-500/12 backdrop-blur-[2px]" />
+          )}
 
           <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
-            <div className="w-80 h-80 sm:w-96 sm:h-96 border-2 border-dashed border-white/50 rounded-3xl relative">
+            <div className="w-64 h-64 sm:w-72 sm:h-72 lg:w-80 lg:h-80 border-2 border-dashed border-white/50 rounded-3xl relative overflow-hidden">
               <div className="absolute -top-1 -left-1 w-8 h-8 border-t-4 border-l-4 border-emerald-400 rounded-tl-3xl" />
               <div className="absolute -top-1 -right-1 w-8 h-8 border-t-4 border-r-4 border-emerald-400 rounded-tr-3xl" />
               <div className="absolute -bottom-1 -left-1 w-8 h-8 border-b-4 border-l-4 border-emerald-400 rounded-bl-3xl" />
               <div className="absolute -bottom-1 -right-1 w-8 h-8 border-b-4 border-r-4 border-emerald-400 rounded-br-3xl" />
 
               {isScanning && (
-                <motion.div
-                  initial={{ top: 0 }}
-                  animate={{ top: '100%' }}
-                  transition={{ repeat: Infinity, duration: 2, ease: 'linear' }}
-                  className="absolute w-full h-1 bg-emerald-400 shadow-[0_0_20px_4px_#10B981] z-20"
-                />
+                <>
+                  <motion.div
+                    initial={{ opacity: 0.35 }}
+                    animate={{ opacity: 0.82 }}
+                    transition={{ repeat: Infinity, repeatType: 'reverse', duration: 0.55 }}
+                    className="absolute inset-0 bg-emerald-400/16"
+                  />
+                  <motion.div
+                    initial={{ top: '-8%' }}
+                    animate={{ top: '100%' }}
+                    transition={{ repeat: Infinity, duration: 1.2, ease: 'linear' }}
+                    className="absolute left-0 z-20 h-2 w-full bg-emerald-300 shadow-[0_0_28px_8px_#10B981]"
+                  />
+                  <motion.div
+                    initial={{ opacity: 0.25, scale: 0.94 }}
+                    animate={{ opacity: 0.65, scale: 1.02 }}
+                    transition={{ repeat: Infinity, repeatType: 'reverse', duration: 0.7 }}
+                    className="absolute inset-3 rounded-[22px] border border-emerald-300/40"
+                  />
+                  <motion.div
+                    initial={{ opacity: 0.25 }}
+                    animate={{ opacity: 0.55 }}
+                    transition={{ repeat: Infinity, repeatType: 'reverse', duration: 0.45 }}
+                    className="absolute inset-0 bg-[linear-gradient(transparent_0%,rgba(16,185,129,0.09)_48%,transparent_100%)]"
+                  />
+                  <div className="absolute inset-x-4 bottom-4 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-center backdrop-blur-md">
+                    <p className="text-[11px] font-black uppercase tracking-[0.22em] text-emerald-300">AI Scan đang hoạt động</p>
+                    <p className="mt-1 text-sm font-semibold text-white">{scanStages[scanStageIndex]}</p>
+                  </div>
+                </>
               )}
             </div>
           </div>
 
-          <div className="relative z-20 mt-auto p-8 flex flex-wrap items-center justify-center gap-4">
+          {isScanning && (
+            <div className="absolute left-1/2 top-8 z-20 -translate-x-1/2 rounded-full border border-emerald-300/30 bg-slate-950/75 px-4 py-2 text-xs font-black uppercase tracking-[0.24em] text-emerald-300 shadow-[0_0_24px_rgba(16,185,129,0.28)] backdrop-blur-md">
+              Đang quét ảnh...
+            </div>
+          )}
+
+          <div className="relative z-20 mt-auto p-6 sm:p-8 flex flex-wrap items-center justify-center gap-4">
             <button
               onClick={() => inputRef.current?.click()}
               className="bg-white/20 hover:bg-white/30 backdrop-blur-md text-white px-5 py-3 rounded-2xl font-medium transition-colors flex items-center gap-2"
@@ -267,7 +336,7 @@ const ScanRealPageV2 = () => {
           </div>
         </div>
 
-        <div className="lg:col-span-4 space-y-6">
+        <div className="lg:col-span-5 xl:col-span-5 space-y-6">
           <div className="bg-white border border-gray-100 rounded-[32px] p-6 shadow-sm flex flex-col min-h-[420px]">
             {scanResult ? (
               <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="flex-1">
