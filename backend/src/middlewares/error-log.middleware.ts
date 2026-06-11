@@ -17,6 +17,27 @@ const safeStringify = (value: unknown) => {
 
 const truncate = (value: string, max = 800) => (value.length > max ? `${value.slice(0, max)}...` : value);
 
+const ANSI = {
+  reset: '\x1b[0m',
+  dim: '\x1b[2m',
+  green: '\x1b[32m',
+  cyan: '\x1b[36m',
+  yellow: '\x1b[33m',
+  red: '\x1b[31m',
+  brightRed: '\x1b[91m',
+  white: '\x1b[37m',
+};
+
+const colorize = (value: string, color: string) => `${color}${value}${ANSI.reset}`;
+
+const getStatusColor = (status: number) => {
+  if (status >= 500) return ANSI.brightRed;
+  if (status >= 400) return ANSI.yellow;
+  if (status >= 300) return ANSI.cyan;
+  if (status >= 200) return ANSI.green;
+  return ANSI.white;
+};
+
 export const errorResponseLogger = (req: Request, res: Response, next: NextFunction) => {
   let responseBody: ResponseBodySnapshot | undefined;
   const startedAt = Date.now();
@@ -32,9 +53,13 @@ export const errorResponseLogger = (req: Request, res: Response, next: NextFunct
     const path = req.originalUrl || req.url;
     const status = res.statusCode;
     const durationMs = Date.now() - startedAt;
+    const statusColor = getStatusColor(status);
+    const methodLabel = colorize(method.padEnd(7, ' '), ANSI.white);
+    const statusLabel = colorize(String(status), statusColor);
+    const durationLabel = colorize(`${durationMs}ms`, ANSI.dim);
 
     if (status < 400) {
-      console.log(`[api] ${method} ${path} -> ${status} (${durationMs}ms)`);
+      console.log(`[api] ${methodLabel} ${path} -> ${statusLabel} (${durationLabel})`);
       return;
     }
 
@@ -55,7 +80,7 @@ export const errorResponseLogger = (req: Request, res: Response, next: NextFunct
     };
 
     console.error(
-      `[api-error] ${method} ${path} -> ${status} (${durationMs}ms) | ${truncate(safeStringify(payload))}`,
+      `${colorize('[api-error]', ANSI.red)} ${methodLabel} ${path} -> ${statusLabel} (${durationLabel}) | ${truncate(safeStringify(payload))}`,
     );
   });
 
