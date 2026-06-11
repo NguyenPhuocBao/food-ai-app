@@ -17,10 +17,17 @@ const shutdownSchedulers = () => {
     (0, review_retention_service_1.stopReviewReplyRetentionScheduler)();
     process.exit(0);
 };
+process.on('unhandledRejection', (reason) => {
+    console.error('[process] Unhandled Promise Rejection:', reason);
+});
+process.on('uncaughtException', (error) => {
+    console.error('[process] Uncaught Exception:', error);
+});
 process.on('SIGINT', shutdownSchedulers);
 process.on('SIGTERM', shutdownSchedulers);
 app_1.default.listen(port, () => {
     console.log(`[server] Food AI API running on http://localhost:${port}`);
     console.log('[server] Endpoints: auth, foods, meals, statistics, chat, admin');
     console.log('[server] Health: /health, /health/live, /health/ready');
+    console.log('[server] Error response logger enabled for all 4xx/5xx responses');
 });

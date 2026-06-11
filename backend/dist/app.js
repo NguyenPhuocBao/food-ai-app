@@ -23,6 +23,7 @@ const recommendation_routes_1 = __importDefault(require("./routes/recommendation
 const weekly_report_routes_1 = __importDefault(require("./routes/weekly-report.routes"));
 const pt_routes_1 = __importDefault(require("./routes/pt.routes"));
 const error_middleware_1 = require("./middlewares/error.middleware");
+const error_log_middleware_1 = require("./middlewares/error-log.middleware");
 const settings_routes_1 = __importDefault(require("./routes/settings.routes"));
 const health_routes_1 = __importDefault(require("./routes/health.routes"));
 const audit_middleware_1 = require("./middlewares/audit.middleware");
@@ -70,6 +71,7 @@ app.use((0, cors_1.default)({
 }));
 app.use(express_1.default.json({ limit: '10mb' }));
 app.use(express_1.default.urlencoded({ extended: true, limit: '10mb' }));
+app.use(error_log_middleware_1.errorResponseLogger);
 app.use(audit_middleware_1.auditMutationMiddleware);
 // Static files
 app.use('/uploads', express_1.default.static(path_1.default.join(__dirname, '../uploads'), {
