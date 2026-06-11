@@ -823,69 +823,55 @@ export const getMemberAssignedMealPlan = async (req: any, res: Response) => {
         },
       });
     }
+    return res.status(404).json({ error: 'Học viên chưa được PT gán meal plan' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
 
-    const fallbackMealPlan = await prisma.mealPlan.findFirst({
-      where: { userId: memberUserId },
-      orderBy: [{ isActive: 'desc' }, { createdAt: 'desc' }],
+export const getMemberOwnedMealPlans = async (req: any, res: Response) => {
+  try {
+    const workspaceId = Number(req.params.id);
+    const memberUserId = Number(req.params.userId);
+    if (!Number.isFinite(workspaceId) || !Number.isFinite(memberUserId)) {
+      return res.status(400).json({ error: 'Invalid workspace or user id' });
+    }
+
+    const allowed = await isWorkspaceOwnerOrAdmin(workspaceId, req.user.id, req.user.role);
+    if (!allowed) return res.status(403).json({ error: 'Forbidden' });
+
+    const membership = await prisma.trainerWorkspaceMember.findFirst({
+      where: {
+        workspaceId,
+        userId: memberUserId,
+        status: 'ACTIVE',
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!membership) {
+      return res.status(404).json({ error: 'Workspace member not found' });
+    }
+
+    const mealPlans = await prisma.mealPlan.findMany({
+      where: {
+        userId: memberUserId,
+        trainerAssignments: {
+          none: {},
+        },
+      },
       include: {
         details: {
           include: { food: true },
           orderBy: [{ dayOfWeek: 'asc' }, { mealType: 'asc' }],
         },
       },
+      orderBy: [{ isActive: 'desc' }, { createdAt: 'desc' }],
     });
 
-    if (!fallbackMealPlan) {
-      return res.status(404).json({ error: 'Assigned meal plan not found' });
-    }
-
-    const fallbackAssignment = await prisma.mealPlanAssignment.findFirst({
-      where: {
-        workspaceId,
-        userId: memberUserId,
-      },
-      orderBy: { createdAt: 'desc' },
-      include: {
-        template: {
-          select: {
-            id: true,
-            name: true,
-            goalType: true,
-            targetCalories: true,
-            targetProtein: true,
-            targetFat: true,
-            targetCarbs: true,
-            macroStrategy: true,
-          },
-        },
-        user: { select: { id: true, name: true, email: true } },
-      },
-    });
-
-    res.json({
-      success: true,
-      data: {
-        assignment: fallbackAssignment
-          ? {
-              ...fallbackAssignment,
-              assignedMealPlanId: fallbackMealPlan.id,
-            }
-          : {
-              id: 0,
-              workspaceId,
-              templateId: 0,
-              userId: memberUserId,
-              assignedByUserId: req.user.id,
-              assignedMealPlanId: fallbackMealPlan.id,
-              startDate: fallbackMealPlan.startDate,
-              endDate: fallbackMealPlan.endDate,
-              status: MealPlanAssignmentStatus.ACTIVE,
-              template: null,
-              user: { id: memberUserId, name: '', email: '' },
-            },
-        mealPlan: fallbackMealPlan,
-      },
-    });
+    res.json({ success: true, data: mealPlans });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

@@ -14,6 +14,7 @@ import {
   addAssignedMealPlanDetail,
   getMyWorkspaces,
   getMemberAssignedMealPlan,
+  getMemberOwnedMealPlans,
   getProgressCheckins,
   getWorkspaceById,
   inviteWorkspaceMemberByEmail,
@@ -40,6 +41,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { getAssetUrl } from '../services/api';
 import PTCheckinHistoryPanel from '../components/pt-workspace/PTCheckinHistoryPanel';
 import PTWorkspaceChatPanel from '../components/pt-workspace/PTWorkspaceChatPanel';
+import { useConfirm } from '../contexts/ConfirmContext';
 
 type BuilderDetail = {
   foodId: number;
@@ -167,6 +169,7 @@ type PTWorkspaceAssignedPlanExport = {
 
 const PTWorkspacePage = () => {
   const { user, refreshUser } = useAuth();
+  const confirm = useConfirm();
   const isTrainer = user?.role === 'PT' || user?.role === 'ADMIN';
   const canManageWorkspace = isTrainer;
   const [loading, setLoading] = useState(true);
@@ -218,6 +221,12 @@ const PTWorkspacePage = () => {
   const [lastAssignedUserIds, setLastAssignedUserIds] = useState<number[]>([]);
   const [assignedMealPlanPreview, setAssignedMealPlanPreview] = useState<Awaited<ReturnType<typeof getMemberAssignedMealPlan>> | null>(null);
   const [assignedMealPlanPreviewLoading, setAssignedMealPlanPreviewLoading] = useState(false);
+  const [memberOwnedMealPlansPreview, setMemberOwnedMealPlansPreview] = useState<{
+    member: PTWorkspaceMember;
+    mealPlans: Awaited<ReturnType<typeof getMemberOwnedMealPlans>>;
+    selectedMealPlanId: number | null;
+  } | null>(null);
+  const [memberOwnedMealPlansPreviewLoading, setMemberOwnedMealPlansPreviewLoading] = useState(false);
   const [myAssignedMealPlanPreview, setMyAssignedMealPlanPreview] = useState<Awaited<ReturnType<typeof getMemberAssignedMealPlan>> | null>(null);
   const [assignedMealPlanEditingIndex, setAssignedMealPlanEditingIndex] = useState<number | null>(null);
   const [assignedMealPlanEditSaving, setAssignedMealPlanEditSaving] = useState(false);
@@ -1044,6 +1053,23 @@ const PTWorkspacePage = () => {
     }
   };
 
+  const openMemberOwnedMealPlansPreview = async (member: PTWorkspaceMember) => {
+    if (!selectedWorkspaceId) return;
+    setMemberOwnedMealPlansPreviewLoading(true);
+    try {
+      const mealPlans = await getMemberOwnedMealPlans(selectedWorkspaceId, member.userId);
+      setMemberOwnedMealPlansPreview({
+        member,
+        mealPlans,
+        selectedMealPlanId: mealPlans[0]?.id ?? null,
+      });
+    } catch (error: any) {
+      toast.error(error?.response?.data?.error || 'Không tải được meal plan tự tạo của học viên');
+    } finally {
+      setMemberOwnedMealPlansPreviewLoading(false);
+    }
+  };
+
   const openAssignedMealPlanPreviewEdit = (detailIndex: number) => {
     if (!assignedMealPlanPreview?.mealPlan.details?.[detailIndex]) return;
     const detail = assignedMealPlanPreview.mealPlan.details[detailIndex];
@@ -1313,7 +1339,12 @@ const PTWorkspacePage = () => {
   };
 
   const handleDeleteWorkspace = async (workspaceId: number, workspaceName: string) => {
-    const shouldDelete = window.confirm(`Xóa workspace "${workspaceName}"? Workspace sẽ bị ẩn khỏi danh sách.`);
+    const shouldDelete = await confirm({
+      title: 'Xóa workspace',
+      message: `Xóa workspace "${workspaceName}"? Workspace sẽ bị ẩn khỏi danh sách.`,
+      confirmText: 'Xóa workspace',
+      tone: 'danger',
+    });
     if (!shouldDelete) return;
     try {
       await deletePTWorkspace(workspaceId);
@@ -1469,7 +1500,12 @@ const PTWorkspacePage = () => {
 
   const handleDeleteTemplate = async (template: PTMealPlanTemplate) => {
     if (!selectedWorkspaceId) return;
-    const shouldDelete = window.confirm(`Xóa template "${template.name}"? Hành động này không khôi phục được.`);
+    const shouldDelete = await confirm({
+      title: 'Xóa template meal plan',
+      message: `Xóa template "${template.name}"? Hành động này không khôi phục được.`,
+      confirmText: 'Xóa template',
+      tone: 'danger',
+    });
     if (!shouldDelete) return;
     try {
       await deleteMealPlanTemplate(selectedWorkspaceId, template.id);
@@ -2027,7 +2063,7 @@ const PTWorkspacePage = () => {
                       </div>
                     <div className="mt-4 grid gap-3">
                       {members.map((member) => (
-                        <label
+                        <div
                           key={member.id}
                           className={`flex items-start gap-3 rounded-2xl border p-3 ${
                             assignUserIds.includes(member.userId)
@@ -2035,29 +2071,49 @@ const PTWorkspacePage = () => {
                               : 'border-white/10 bg-slate-900/35'
                           }`}
                         >
-                          <input
-                            type="checkbox"
-                            checked={assignUserIds.includes(member.userId)}
-                            onChange={(event) => {
-                              setAssignUserIds((prev) => (
-                                event.target.checked
-                                  ? Array.from(new Set([...prev, member.userId]))
-                                  : prev.filter((id) => id !== member.userId)
-                              ));
-                            }}
-                            className="mt-1 h-4 w-4 rounded border-gray-300 text-indigo-600"
-                          />
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="font-black text-white">{member.user.name}</p>
-                              <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold text-indigo-100">{member.status}</span>
+                          <label className="flex min-w-0 flex-1 items-start gap-3">
+                            <input
+                              type="checkbox"
+                              checked={assignUserIds.includes(member.userId)}
+                              onChange={(event) => {
+                                setAssignUserIds((prev) => (
+                                  event.target.checked
+                                    ? Array.from(new Set([...prev, member.userId]))
+                                    : prev.filter((id) => id !== member.userId)
+                                ));
+                              }}
+                              className="mt-1 h-4 w-4 rounded border-gray-300 text-indigo-600"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="font-black text-white">{member.user.name}</p>
+                                <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold text-indigo-100">{member.status}</span>
+                              </div>
+                              <p className="text-xs text-indigo-100/70">{member.user.email}</p>
+                              <p className="mt-1 text-xs text-indigo-100/70">
+                                BMI/target: {member.user.profile?.height && member.user.profile?.weight ? `${member.user.profile.height}cm / ${member.user.profile.weight}kg` : 'Chưa có dữ liệu'}
+                              </p>
                             </div>
-                            <p className="text-xs text-indigo-100/70">{member.user.email}</p>
-                            <p className="mt-1 text-xs text-indigo-100/70">
-                              BMI/target: {member.user.profile?.height && member.user.profile?.weight ? `${member.user.profile.height}cm / ${member.user.profile.weight}kg` : 'Chưa có dữ liệu'}
-                            </p>
+                          </label>
+                          <div className="ml-auto flex shrink-0 flex-col gap-2">
+                            <button
+                              type="button"
+                              onClick={() => openMemberOwnedMealPlansPreview(member)}
+                              disabled={memberOwnedMealPlansPreviewLoading}
+                              className="rounded-xl border border-cyan-300/25 bg-cyan-400/10 px-3 py-2 text-[11px] font-bold text-cyan-100 hover:bg-cyan-400/20 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              Plan tự tạo
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => openAssignedMealPlanPreview(member.userId)}
+                              disabled={assignedMealPlanPreviewLoading}
+                              className="rounded-xl border border-indigo-300/25 bg-indigo-400/10 px-3 py-2 text-[11px] font-bold text-indigo-50 hover:bg-indigo-400/20 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              Plan PT giao
+                            </button>
                           </div>
-                        </label>
+                        </div>
                       ))}
                       {!members.length && (
                         <div className="rounded-2xl border border-dashed border-gray-200 p-5 text-sm text-gray-500 dark:border-slate-700 dark:text-slate-400">
@@ -3127,6 +3183,255 @@ const PTWorkspacePage = () => {
                     </div>
                   );
                 })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {memberOwnedMealPlansPreview && (
+        <div
+          className="fixed inset-0 z-[60] bg-slate-950/70 px-4 py-6 backdrop-blur-sm"
+          onClick={() => setMemberOwnedMealPlansPreview(null)}
+        >
+          <div
+            className="relative mx-auto flex h-full max-w-7xl flex-col overflow-hidden rounded-[32px] border border-cyan-400/20 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.16),transparent_24%),linear-gradient(180deg,rgba(8,47,73,0.98),rgba(15,23,42,0.96))] shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex flex-col gap-4 border-b border-white/10 p-5 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-cyan-200">Owned Meal Plans</p>
+                <h2 className="mt-1 text-2xl font-black text-white">
+                  {memberOwnedMealPlansPreview.member.user.name}
+                </h2>
+                <p className="mt-1 text-sm text-cyan-100/70">
+                  Meal plan do học viên tự tạo • {memberOwnedMealPlansPreview.mealPlans.length} kế hoạch
+                </p>
+              </div>
+              <button
+                onClick={() => setMemberOwnedMealPlansPreview(null)}
+                className="rounded-2xl bg-white/10 p-3 text-white hover:bg-white/15"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="grid flex-1 gap-0 overflow-hidden lg:grid-cols-[300px_minmax(0,1fr)]">
+              <div className="border-b border-white/10 bg-slate-950/20 p-4 lg:border-b-0 lg:border-r">
+                <div className="space-y-3 overflow-auto pr-1">
+                  {memberOwnedMealPlansPreview.mealPlans.length ? (
+                    memberOwnedMealPlansPreview.mealPlans.map((mealPlan) => {
+                      const latestOwnedMealPlan = memberOwnedMealPlansPreview.mealPlans.reduce((latest, current) => (
+                        new Date(current.createdAt).getTime() > new Date(latest.createdAt).getTime()
+                          ? current
+                          : latest
+                      ), memberOwnedMealPlansPreview.mealPlans[0]);
+                      const isLatestOwnedMealPlan = mealPlan.id === latestOwnedMealPlan.id;
+
+                      return (
+                      <button
+                        key={mealPlan.id}
+                        type="button"
+                        onClick={() => setMemberOwnedMealPlansPreview((current) => (
+                          current
+                            ? { ...current, selectedMealPlanId: mealPlan.id }
+                            : current
+                        ))}
+                        className={`w-full rounded-2xl border p-4 text-left transition ${
+                          memberOwnedMealPlansPreview.selectedMealPlanId === mealPlan.id
+                            ? 'border-cyan-300/40 bg-cyan-400/15'
+                            : 'border-white/10 bg-white/5 hover:bg-white/10'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="line-clamp-2 text-sm font-black text-white">{mealPlan.name}</p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <span className="rounded-full bg-cyan-400/15 px-2 py-1 text-[10px] font-bold text-cyan-100">
+                                Tự tạo
+                              </span>
+                              {mealPlan.isActive && (
+                                <span className="rounded-full bg-emerald-400/20 px-2 py-1 text-[10px] font-bold text-emerald-100">
+                                  Đang áp dụng
+                                </span>
+                              )}
+                              {isLatestOwnedMealPlan && (
+                                <span className="rounded-full bg-amber-400/20 px-2 py-1 text-[10px] font-bold text-amber-100">
+                                  Gần nhất
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-bold ${
+                            mealPlan.isActive
+                              ? 'bg-emerald-400/20 text-emerald-100'
+                              : 'bg-white/10 text-cyan-100'
+                          }`}>
+                            {mealPlan.isActive ? 'ACTIVE' : 'LƯU'}
+                          </span>
+                        </div>
+                        <p className="mt-2 text-xs text-cyan-100/70">
+                          {new Date(mealPlan.startDate).toLocaleDateString('vi-VN')} đến {new Date(mealPlan.endDate).toLocaleDateString('vi-VN')}
+                        </p>
+                        <p className="mt-1 text-[11px] text-cyan-100/60">{mealPlan.details.length} món • tạo {new Date(mealPlan.createdAt).toLocaleDateString('vi-VN')}</p>
+                      </button>
+                      );
+                    })
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-white/15 bg-white/5 p-5 text-sm text-cyan-100/70">
+                      Học viên này chưa tự tạo meal plan riêng.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="overflow-auto p-5">
+                {(() => {
+                  const selectedMealPlan = memberOwnedMealPlansPreview.mealPlans.find((mealPlan) => mealPlan.id === memberOwnedMealPlansPreview.selectedMealPlanId) || null;
+                  const latestOwnedMealPlan = memberOwnedMealPlansPreview.mealPlans.length
+                    ? memberOwnedMealPlansPreview.mealPlans.reduce((latest, current) => (
+                        new Date(current.createdAt).getTime() > new Date(latest.createdAt).getTime()
+                          ? current
+                          : latest
+                      ), memberOwnedMealPlansPreview.mealPlans[0])
+                    : null;
+                  const isLatestOwnedMealPlan = Boolean(selectedMealPlan && latestOwnedMealPlan && selectedMealPlan.id === latestOwnedMealPlan.id);
+                  if (!selectedMealPlan) {
+                    return (
+                      <div className="flex h-full items-center justify-center rounded-[28px] border border-dashed border-white/15 bg-white/5 p-8 text-center text-cyan-100/70">
+                        Chọn một meal plan để xem chi tiết.
+                      </div>
+                    );
+                  }
+
+                  const totals = selectedMealPlan.details.reduce(
+                    (acc, detail) => {
+                      const quantity = Number(detail.quantity || 1);
+                      acc.calories += Number(detail.food?.calories || 0) * quantity;
+                      acc.protein += Number(detail.food?.protein || 0) * quantity;
+                      acc.fat += Number(detail.food?.fat || 0) * quantity;
+                      acc.carbs += Number(detail.food?.carbs || 0) * quantity;
+                      return acc;
+                    },
+                    { calories: 0, protein: 0, fat: 0, carbs: 0 }
+                  );
+
+                  return (
+                    <div>
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div>
+                          <p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-200">Chi tiết meal plan</p>
+                          <h3 className="mt-1 text-2xl font-black text-white">{selectedMealPlan.name}</h3>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <span className="rounded-full bg-cyan-400/15 px-3 py-1 text-[11px] font-bold text-cyan-100">
+                              Tự tạo
+                            </span>
+                            {selectedMealPlan.isActive && (
+                              <span className="rounded-full bg-emerald-400/20 px-3 py-1 text-[11px] font-bold text-emerald-100">
+                                Đang áp dụng
+                              </span>
+                            )}
+                            {isLatestOwnedMealPlan && (
+                              <span className="rounded-full bg-amber-400/20 px-3 py-1 text-[11px] font-bold text-amber-100">
+                                Gần nhất
+                              </span>
+                            )}
+                          </div>
+                          <p className="mt-1 text-sm text-cyan-100/70">
+                            {new Date(selectedMealPlan.startDate).toLocaleDateString('vi-VN')} đến {new Date(selectedMealPlan.endDate).toLocaleDateString('vi-VN')}
+                          </p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-center text-xs font-bold md:grid-cols-4">
+                          <div className="rounded-2xl bg-white/10 px-4 py-3">
+                            <p className="text-cyan-100/60">Món</p>
+                            <p className="text-lg text-white">{selectedMealPlan.details.length}</p>
+                          </div>
+                          <div className="rounded-2xl bg-amber-400/10 px-4 py-3">
+                            <p className="text-amber-200">Kcal</p>
+                            <p className="text-lg text-white">{Math.round(totals.calories)}</p>
+                          </div>
+                          <div className="rounded-2xl bg-emerald-400/10 px-4 py-3">
+                            <p className="text-emerald-200">Protein</p>
+                            <p className="text-lg text-white">{Math.round(totals.protein)}g</p>
+                          </div>
+                          <div className="rounded-2xl bg-fuchsia-400/10 px-4 py-3">
+                            <p className="text-fuchsia-200">Trạng thái</p>
+                            <p className="text-sm text-white">{selectedMealPlan.isActive ? 'Đang áp dụng' : 'Đã lưu'}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-5 grid gap-4 xl:grid-cols-2 2xl:grid-cols-4">
+                        {DAY_LABELS.map((dayLabel, dayIndex) => {
+                          const dayDetails = selectedMealPlan.details.filter((detail) => detail.dayOfWeek === dayIndex);
+                          const dayTotals = dayDetails.reduce(
+                            (acc, detail) => {
+                              const quantity = Number(detail.quantity || 1);
+                              acc.calories += Number(detail.food?.calories || 0) * quantity;
+                              acc.protein += Number(detail.food?.protein || 0) * quantity;
+                              acc.fat += Number(detail.food?.fat || 0) * quantity;
+                              acc.carbs += Number(detail.food?.carbs || 0) * quantity;
+                              return acc;
+                            },
+                            { calories: 0, protein: 0, fat: 0, carbs: 0 }
+                          );
+
+                          return (
+                            <div key={`${selectedMealPlan.id}-${dayLabel}`} className="rounded-[24px] border border-white/10 bg-white/10 p-4 shadow-sm backdrop-blur-sm">
+                              <div className="flex items-center justify-between gap-3">
+                                <p className="text-sm font-black text-white">{dayLabel}</p>
+                                <span className="text-[11px] font-bold text-cyan-200">{Math.round(dayTotals.calories)} kcal</span>
+                              </div>
+                              <p className="mt-1 text-xs text-cyan-100/70">
+                                {Math.round(dayTotals.protein)}P / {Math.round(dayTotals.carbs)}C / {Math.round(dayTotals.fat)}F
+                              </p>
+                              <div className="mt-4 space-y-3">
+                                {dayDetails.length ? (
+                                  dayDetails.map((detail) => (
+                                    <div key={detail.id} className="rounded-2xl border border-white/10 bg-slate-950/30 p-3">
+                                      <div className="flex items-start gap-3">
+                                        <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-white/10">
+                                          {detail.food?.imageUrl ? (
+                                            <img
+                                              src={getAssetUrl(detail.food.imageUrl)}
+                                              alt={detail.food.name}
+                                              className="h-full w-full object-cover"
+                                            />
+                                          ) : (
+                                            <div className="flex h-full w-full items-center justify-center text-xs font-black text-cyan-100/60">?</div>
+                                          )}
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                          <div className="flex items-center justify-between gap-2">
+                                            <p className="truncate text-sm font-black text-white">{detail.food.name}</p>
+                                            <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold text-cyan-100">
+                                              {detail.mealType}
+                                            </span>
+                                          </div>
+                                          <p className="mt-1 text-xs text-cyan-100/70">
+                                            {detail.quantity || 1}x • {Math.round(Number(detail.food.calories || 0) * Number(detail.quantity || 1))} kcal
+                                          </p>
+                                          <p className="mt-1 text-[11px] text-cyan-100/55">
+                                            {Math.round(Number(detail.food.protein || 0) * Number(detail.quantity || 1))}P /
+                                            {' '}{Math.round(Number(detail.food.carbs || 0) * Number(detail.quantity || 1))}C /
+                                            {' '}{Math.round(Number(detail.food.fat || 0) * Number(detail.quantity || 1))}F
+                                          </p>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <div className="rounded-2xl border border-dashed border-white/15 bg-white/5 p-4 text-xs text-cyan-100/60">
+                                    Không có món trong ngày này.
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </div>

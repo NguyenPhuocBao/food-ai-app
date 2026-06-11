@@ -9,6 +9,7 @@ import {
   getWeeklyReports,
 } from '../services/weekly-report.service';
 import { getMealsByDate } from '../services/meal.service';
+import { useConfirm } from '../contexts/ConfirmContext';
 
 const formatDate = (value: string) =>
   new Intl.DateTimeFormat('vi-VN', {
@@ -455,6 +456,7 @@ const healthGradeStyles: Record<'A' | 'B' | 'C' | 'D', string> = {
 };
 
 const WeeklyReportsPage = () => {
+  const confirm = useConfirm();
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [reports, setReports] = useState<WeeklyReport[]>([]);
@@ -571,7 +573,12 @@ const WeeklyReportsPage = () => {
   };
 
   const handleDelete = async (id: number) => {
-    const confirmed = window.confirm('Xóa weekly report này?');
+    const confirmed = await confirm({
+      title: 'Xóa weekly report',
+      message: 'Bạn có chắc muốn xóa weekly report này?',
+      confirmText: 'Xóa báo cáo',
+      tone: 'danger',
+    });
     if (!confirmed) return;
 
     try {

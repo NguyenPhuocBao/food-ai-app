@@ -180,6 +180,25 @@ export type PTAssignedMealPlanPreview = {
   };
 };
 
+export type PTOwnedMealPlanPreview = {
+  id: number;
+  userId: number;
+  name: string;
+  startDate: string;
+  endDate: string;
+  isActive: boolean;
+  createdAt: string;
+  details: Array<{
+    id: number;
+    mealPlanId: number;
+    foodId: number;
+    mealType: 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK';
+    dayOfWeek: number;
+    quantity: number;
+    food: FoodItem;
+  }>;
+};
+
 export const getMyWorkspaces = async (): Promise<PTWorkspace[]> => {
   const response = await api.get('/pt/workspaces');
   return response.data.data;
@@ -329,6 +348,11 @@ export const getProgressCheckins = async (workspaceId: number): Promise<PTProgre
 
 export const getMemberAssignedMealPlan = async (workspaceId: number, userId: number): Promise<PTAssignedMealPlanPreview> => {
   const response = await api.get(`/pt/workspaces/${workspaceId}/members/${userId}/meal-plan`);
+  return response.data.data;
+};
+
+export const getMemberOwnedMealPlans = async (workspaceId: number, userId: number): Promise<PTOwnedMealPlanPreview[]> => {
+  const response = await api.get(`/pt/workspaces/${workspaceId}/members/${userId}/owned-meal-plans`);
   return response.data.data;
 };
 

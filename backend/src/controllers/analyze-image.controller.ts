@@ -8,6 +8,7 @@ import { deleteLocalUploadIfExists, uploadImageToCloudinary } from '../services/
 const AI_API_URL = String(process.env.AI_API_URL || '').trim();
 const AI_SCAN_MODE = String(process.env.AI_SCAN_MODE || 'auto').trim().toLowerCase();
 const LOCAL_AI_API_URL = 'http://localhost:8000';
+const DEFAULT_MAX_SCANS_PER_DAY_FREE = 10;
 
 const resolveAiScanConfig = () => {
   if (AI_SCAN_MODE === 'disabled') {
@@ -84,6 +85,27 @@ const parsePositiveInt = (value: unknown, fallback: number, min: number, max: nu
   const parsed = Number.parseInt(String(value ?? ''), 10);
   if (!Number.isInteger(parsed)) return fallback;
   return Math.min(max, Math.max(min, parsed));
+};
+
+const getVietnamDayRange = (value = new Date()) => {
+  const shifted = new Date(value.getTime() + 7 * 60 * 60 * 1000);
+  const year = shifted.getUTCFullYear();
+  const month = shifted.getUTCMonth();
+  const day = shifted.getUTCDate();
+
+  return {
+    start: new Date(Date.UTC(year, month, day, -7, 0, 0, 0)),
+    endExclusive: new Date(Date.UTC(year, month, day + 1, -7, 0, 0, 0)),
+  };
+};
+
+const loadMaxScansPerDayFree = async () => {
+  const row = await prisma.systemSetting.findUnique({
+    where: { key: 'max_scans_per_day_free' },
+    select: { value: true },
+  });
+
+  return parsePositiveInt(row?.value, DEFAULT_MAX_SCANS_PER_DAY_FREE, 1, 1000);
 };
 
 const expandCandidateNames = (candidateNames: string[]) => {
@@ -231,6 +253,32 @@ export const analyzeImage = async (req: any, res: Response) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No image uploaded' });
+    }
+
+    if (req.user?.role === 'USER') {
+      const { start, endExclusive } = getVietnamDayRange();
+      const maxScansPerDayFree = await loadMaxScansPerDayFree();
+      const scansToday = await prisma.scanHistory.count({
+        where: {
+          userId: req.user.id,
+          createdAt: {
+            gte: start,
+            lt: endExclusive,
+          },
+        },
+      });
+
+      if (scansToday >= maxScansPerDayFree) {
+        await deleteLocalUploadIfExists(req.file.path);
+        return res.status(429).json({
+          error: `Bạn đã dùng hết ${maxScansPerDayFree} lượt scan miễn phí trong hôm nay.`,
+          code: 'SCAN_DAILY_LIMIT_REACHED',
+          data: {
+            scansToday,
+            maxScansPerDayFree,
+          },
+        });
+      }
     }
 
     const imagePath = req.file.path;

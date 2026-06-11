@@ -26,6 +26,7 @@ import {
   type ChatbotTrainingBenchmark,
   type ChatbotTrainingExample,
 } from '../../services/chatbot-admin.service';
+import { useConfirm } from '../../contexts/ConfirmContext';
 
 const DEFAULT_TEST_QUESTION = 'Toi bi tieu duong type 2, bua toi nen an gi?';
 type ProviderKey = 'retrieval' | 'grok' | 'gemini' | 'openai';
@@ -100,6 +101,7 @@ const formatFileSize = (size: number) => {
 };
 
 const AdminChatbotOps = () => {
+  const confirm = useConfirm();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const quickFileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -208,7 +210,13 @@ const AdminChatbotOps = () => {
   }, [health, providerLabels]);
 
   const handleBootstrapDefaults = async () => {
-    if (!window.confirm('Ghi de training hien tai bang bo default?')) return;
+    const confirmed = await confirm({
+      title: 'Khôi phục bộ training mặc định',
+      message: 'Ghi đè training hiện tại bằng bộ default?',
+      confirmText: 'Ghi đè dữ liệu',
+      tone: 'warning',
+    });
+    if (!confirmed) return;
     try {
       await bootstrapChatbotTrainingDefaults();
       toast.success('Da bootstrap default training');

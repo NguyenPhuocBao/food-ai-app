@@ -4,6 +4,7 @@ import { Plus, Search, Trash, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
 import EmptyState from '../../components/admin/EmptyState';
+import { useConfirm } from '../../contexts/ConfirmContext';
 
 const MEAL_TIME_OPTIONS = [
   { value: 'BREAKFAST', label: 'Sang' },
@@ -75,6 +76,7 @@ function removeAccents(str: string) {
 }
 
 const AdminFoods = () => {
+  const confirm = useConfirm();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -134,7 +136,13 @@ const AdminFoods = () => {
   }, [page, searchInput, searchParams, setSearchParams]);
 
   const handleDelete = async (id: number) => {
-    if (!window.confirm('Xoa mon an nay?')) return;
+    const confirmed = await confirm({
+      title: 'Xóa món ăn',
+      message: 'Bạn có chắc muốn xóa món ăn này?',
+      confirmText: 'Xóa món',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
 
     try {
       await api.delete(`/admin/foods/${id}`);

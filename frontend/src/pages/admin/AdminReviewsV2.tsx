@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import api from '../../services/api';
 import EmptyState from '../../components/admin/EmptyState';
 import { formatAdminDate } from '../../utils/adminDateTime';
+import { useConfirm } from '../../contexts/ConfirmContext';
 
 function removeAccents(str: string) {
   return str
@@ -16,6 +17,7 @@ function removeAccents(str: string) {
 const normalize = (value: string) => removeAccents(String(value || '').toLowerCase());
 
 const AdminReviewsV2 = () => {
+  const confirm = useConfirm();
   const [allReviews, setAllReviews] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -78,7 +80,12 @@ const AdminReviewsV2 = () => {
   const paginatedReviews = filteredReviews.slice((page - 1) * itemsPerPage, page * itemsPerPage);
 
   const handleDelete = async (reviewId: number) => {
-    const confirmed = window.confirm('Xoa danh gia nay?');
+    const confirmed = await confirm({
+      title: 'Xóa đánh giá',
+      message: 'Bạn có chắc muốn xóa đánh giá này?',
+      confirmText: 'Xóa đánh giá',
+      tone: 'danger',
+    });
     if (!confirmed) return;
 
     try {

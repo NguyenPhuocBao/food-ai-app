@@ -3,6 +3,7 @@ import { Bell, CheckCircle, Info, AlertTriangle, Search, Send, Trash, Users, XCi
 import toast from 'react-hot-toast';
 import api from '../../services/api';
 import { formatAdminDateTime } from '../../utils/adminDateTime';
+import { useConfirm } from '../../contexts/ConfirmContext';
 
 const TYPE_CONFIG = {
   INFO: { icon: Info, badge: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' },
@@ -15,6 +16,7 @@ type NotificationType = keyof typeof TYPE_CONFIG;
 const normalize = (value: string) => value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
 const AdminNotificationsV2 = () => {
+  const confirm = useConfirm();
   const [notifications, setNotifications] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [selectedUsers, setSelectedUsers] = useState<number[]>([]);
@@ -111,7 +113,12 @@ const AdminNotificationsV2 = () => {
   };
 
   const handleDelete = async (notificationId: number) => {
-    const confirmed = window.confirm('Xoa thong bao nay?');
+    const confirmed = await confirm({
+      title: 'Xóa thông báo',
+      message: 'Bạn có chắc muốn xóa thông báo này?',
+      confirmText: 'Xóa thông báo',
+      tone: 'danger',
+    });
     if (!confirmed) return;
 
     try {

@@ -14,6 +14,7 @@ import {
   type DbTableRowsResponse,
   type DbTableSummary,
 } from '../../services/admin-db.service';
+import { useConfirm } from '../../contexts/ConfirmContext';
 
 type SortOrder = 'asc' | 'desc';
 type EditorMode = 'create' | 'edit' | null;
@@ -88,6 +89,7 @@ const parseValue = (raw: string, col: DbTableColumn) => {
 };
 
 const AdminSettings = () => {
+  const confirm = useConfirm();
   const [tables, setTables] = useState<DbTableSummary[]>([]);
   const [selectedTable, setSelectedTable] = useState('');
   const [tableSearch, setTableSearch] = useState('');
@@ -257,7 +259,13 @@ const AdminSettings = () => {
     if (!selectedTable || !schema?.hasSinglePrimaryKey || !schema.primaryKeyColumn) return toast.error('Bang nay khong th? xoa an toan');
     const pk = row[schema.primaryKeyColumn];
     if (pk === undefined || pk === null) return toast.error('Khong t?m th?y primary key cua row');
-    if (!window.confirm(`Xoa row ${schema.primaryKeyColumn}=${pk}?`)) return;
+    const confirmed = await confirm({
+      title: 'Xóa dữ liệu',
+      message: `Xoa row ${schema.primaryKeyColumn}=${pk}?`,
+      confirmText: 'Xóa row',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
 
     try {
       await deleteDbRow(selectedTable, String(pk));

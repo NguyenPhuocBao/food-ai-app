@@ -5,6 +5,7 @@ import api from '../../services/api';
 import toast from 'react-hot-toast';
 import EmptyState from '../../components/admin/EmptyState';
 import ImageUpload from '../../components/admin/ImageUpload';
+import { useConfirm } from '../../contexts/ConfirmContext';
 
 const MEAL_TIME_OPTIONS = [
   { value: 'BREAKFAST', label: 'Bữa sáng' },
@@ -31,6 +32,7 @@ const COOKING_METHOD_OPTIONS = ['', 'BOILED', 'STEAMED', 'GRILLED', 'STIR_FRIED'
 const PORTION_TYPE_OPTIONS = ['', 'FULL_MEAL', 'COMPONENT', 'LIGHT'];
 
 const AdminFoodDetail = () => {
+  const confirm = useConfirm();
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -147,11 +149,16 @@ const AdminFoodDetail = () => {
   };
 
   const handleDeleteFood = async () => {
-    if (confirm('Xóa món ăn này? Hành động không thể hoàn tác.')) {
-      await api.delete(`/admin/foods/${id}`);
-      toast.success('Đã xóa món ăn');
-      navigate(backTo);
-    }
+    const confirmed = await confirm({
+      title: 'Xóa món ăn',
+      message: 'Xóa món ăn này? Hành động không thể hoàn tác.',
+      confirmText: 'Xóa món ăn',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
+    await api.delete(`/admin/foods/${id}`);
+    toast.success('Đã xóa món ăn');
+    navigate(backTo);
   };
 
   if (loading) return <div className="p-6 text-center">Đang tải...</div>;

@@ -4,6 +4,7 @@ import { Edit, Key, Lock, Plus, Search, Trash, Unlock, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
 import EmptyState from '../../components/admin/EmptyState';
+import { useConfirm } from '../../contexts/ConfirmContext';
 
 type AdminUser = {
   id: number;
@@ -22,6 +23,7 @@ const getApiErrorMessage = (error: any, fallback: string) => {
 };
 
 const AdminUsers = () => {
+  const confirm = useConfirm();
   const navigate = useNavigate();
   const [allUsers, setAllUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -81,7 +83,12 @@ const AdminUsers = () => {
   };
 
   const handleBanToggle = async (userId: number, isActive: boolean) => {
-    const confirmed = window.confirm(isActive ? 'Khoa tai kho?n nay?' : 'Mo khoa tai kho?n nay?');
+    const confirmed = await confirm({
+      title: isActive ? 'Khóa tài khoản' : 'Mở khóa tài khoản',
+      message: isActive ? 'Bạn có chắc muốn khóa tài khoản này?' : 'Bạn có chắc muốn mở khóa tài khoản này?',
+      confirmText: isActive ? 'Khóa tài khoản' : 'Mở khóa',
+      tone: 'warning',
+    });
     if (!confirmed) return;
 
     try {
@@ -96,7 +103,12 @@ const AdminUsers = () => {
   };
 
   const handleResetPassword = async (userId: number) => {
-    const confirmed = window.confirm('Reset mat khau ve 123456?');
+    const confirmed = await confirm({
+      title: 'Reset mật khẩu',
+      message: 'Đặt lại mật khẩu tài khoản này về 123456?',
+      confirmText: 'Reset mật khẩu',
+      tone: 'warning',
+    });
     if (!confirmed) return;
 
     try {
@@ -108,7 +120,12 @@ const AdminUsers = () => {
   };
 
   const handleDelete = async (userId: number) => {
-    const confirmed = window.confirm('Xoa tai kho?n nay vinh vien?');
+    const confirmed = await confirm({
+      title: 'Xóa tài khoản',
+      message: 'Bạn có chắc muốn xóa vĩnh viễn tài khoản này?',
+      confirmText: 'Xóa tài khoản',
+      tone: 'danger',
+    });
     if (!confirmed) return;
 
     try {

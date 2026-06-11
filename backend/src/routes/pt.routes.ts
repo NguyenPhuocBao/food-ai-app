@@ -10,6 +10,7 @@ import {
   deleteAssignedMealPlanDetail,
   getMyWorkspaces,
   getMemberAssignedMealPlan,
+  getMemberOwnedMealPlans,
   getProgressCheckins,
   getWorkspaceChatMessages,
   getWorkspaceById,
@@ -39,6 +40,7 @@ router.post('/workspaces/:id/invite-code', authMiddleware, trainerOrAdminMiddlew
 router.post('/workspaces/:id/invite-email', authMiddleware, trainerOrAdminMiddleware, inviteWorkspaceMemberByEmail);
 router.get('/workspaces/:id/members', authMiddleware, listWorkspaceMembers);
 router.get('/workspaces/:id/members/:userId/meal-plan', authMiddleware, getMemberAssignedMealPlan);
+router.get('/workspaces/:id/members/:userId/owned-meal-plans', authMiddleware, getMemberOwnedMealPlans);
 router.post('/workspaces/:id/members/:userId/meal-plan/details', authMiddleware, addAssignedMealPlanDetail);
 router.patch('/workspaces/:id/members/:userId/meal-plan/details/:detailId', authMiddleware, updateAssignedMealPlanDetail);
 router.delete('/workspaces/:id/members/:userId/meal-plan/details/:detailId', authMiddleware, deleteAssignedMealPlanDetail);

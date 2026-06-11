@@ -4,6 +4,7 @@ import { Eye, Search, Trash } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
 import EmptyState from '../../components/admin/EmptyState';
+import { useConfirm } from '../../contexts/ConfirmContext';
 
 function removeAccents(str: string) {
   return str
@@ -14,6 +15,7 @@ function removeAccents(str: string) {
 }
 
 const AdminRecipes = () => {
+  const confirm = useConfirm();
   const navigate = useNavigate();
   const [allRecipes, setAllRecipes] = useState<any[]>([]);
   const [filteredRecipes, setFilteredRecipes] = useState<any[]>([]);
@@ -57,7 +59,13 @@ const AdminRecipes = () => {
   const paginatedRecipes = filteredRecipes.slice((page - 1) * itemsPerPage, page * itemsPerPage);
 
   const handleDelete = async (id: number) => {
-    if (!window.confirm('Xoa cong thuc nay?')) return;
+    const confirmed = await confirm({
+      title: 'Xóa công thức',
+      message: 'Bạn có chắc muốn xóa công thức này?',
+      confirmText: 'Xóa công thức',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
 
     try {
       await api.delete(`/admin/recipes/${id}`);

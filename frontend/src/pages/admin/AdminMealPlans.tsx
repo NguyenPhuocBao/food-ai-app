@@ -4,8 +4,10 @@ import { ArrowLeft, Plus, Trash2, Edit, Save, X } from 'lucide-react';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
 import { formatAdminDate } from '../../utils/adminDateTime';
+import { useConfirm } from '../../contexts/ConfirmContext';
 
 const AdminMealPlans = () => {
+  const confirm = useConfirm();
   const { userId } = useParams();
   const navigate = useNavigate();
   const [plans, setPlans] = useState<any[]>([]);
@@ -44,11 +46,16 @@ const AdminMealPlans = () => {
   };
 
   const handleDelete = async (id: number) => {
-    if (confirm('Xóa kế hoạch này?')) {
-      await api.delete(`/admin/meal-plans/${id}`);
-      toast.success('Đã xóa');
-      fetchPlans();
-    }
+    const confirmed = await confirm({
+      title: 'Xóa kế hoạch',
+      message: 'Bạn có chắc muốn xóa kế hoạch này?',
+      confirmText: 'Xóa kế hoạch',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
+    await api.delete(`/admin/meal-plans/${id}`);
+    toast.success('Đã xóa');
+    fetchPlans();
   };
 
   const handleEdit = (plan: any) => {

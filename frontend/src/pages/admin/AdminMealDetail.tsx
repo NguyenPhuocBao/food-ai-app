@@ -4,8 +4,10 @@ import { ArrowLeft, CalendarClock, Trash2, User, Utensils } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api, { getAssetUrl } from '../../services/api';
 import { formatAdminDateTime } from '../../utils/adminDateTime';
+import { useConfirm } from '../../contexts/ConfirmContext';
 
 const AdminMealDetail = () => {
+  const confirm = useConfirm();
   const { id } = useParams();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -28,7 +30,12 @@ const AdminMealDetail = () => {
 
   const handleDelete = async () => {
     if (!meal) return;
-    const confirmed = window.confirm('Xoa bua an nay?');
+    const confirmed = await confirm({
+      title: 'Xóa bữa ăn',
+      message: 'Bạn có chắc muốn xóa bữa ăn này?',
+      confirmText: 'Xóa bữa ăn',
+      tone: 'danger',
+    });
     if (!confirmed) return;
 
     try {

@@ -21,6 +21,23 @@ const getErrorMessage = (error: unknown, fallback: string) => {
   return e?.response?.data?.error || e?.message || fallback;
 };
 
+const getSupportSeenStorageKey = (userId: number) => `support_seen_user_${userId}`;
+
+const readSeenMap = (userId?: number | null) => {
+  if (!userId || typeof window === 'undefined') return {} as Record<number, number>;
+  try {
+    const raw = window.localStorage.getItem(getSupportSeenStorageKey(userId));
+    return raw ? JSON.parse(raw) as Record<number, number> : {};
+  } catch {
+    return {};
+  }
+};
+
+const writeSeenMap = (userId: number, next: Record<number, number>) => {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(getSupportSeenStorageKey(userId), JSON.stringify(next));
+};
+
 const SupportChatWidget = () => {
   const { user, loading } = useAuth();
   const { language } = useLanguage();
@@ -32,6 +49,7 @@ const SupportChatWidget = () => {
   const [sessions, setSessions] = useState<SupportSession[]>([]);
   const [activeSession, setActiveSession] = useState<SessionDetail | null>(null);
   const [message, setMessage] = useState('');
+  const [unreadCount, setUnreadCount] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const displayName = (user?.name || (isEn ? 'you' : 'bạn')).split(' ').pop() || (isEn ? 'you' : 'bạn');
@@ -41,8 +59,8 @@ const SupportChatWidget = () => {
   }, [activeSession?.messages]);
 
   useEffect(() => {
-    if (!open || !user) return;
-    void loadChatState(!activeSession);
+    if (!user) return;
+    void loadChatState(open && !activeSession, !open);
   }, [open, user]);
 
   useEffect(() => {
@@ -51,25 +69,58 @@ const SupportChatWidget = () => {
       setSessions([]);
       setActiveSession(null);
       setMessage('');
+      setUnreadCount(0);
     }
   }, [user]);
 
   useEffect(() => {
-    if (!open || !user) return;
+    if (!user) return;
 
     const interval = setInterval(() => {
-      if (activeSession?.id) {
+      if (open && activeSession?.id) {
         void syncActiveSession(activeSession.id);
       } else {
-        void loadChatState(false);
+        void loadChatState(false, true);
       }
     }, 3000);
 
     return () => clearInterval(interval);
   }, [open, user, activeSession?.id]);
 
-  const loadChatState = async (autoOpenLatest: boolean) => {
-    setIsLoading(true);
+  const markSessionSeen = (session: SessionDetail) => {
+    if (!user?.id) return;
+    const latestAdminMessage = [...(session.messages || [])]
+      .reverse()
+      .find((item) => item.role === 'ADMIN');
+    if (!latestAdminMessage) return;
+    const current = readSeenMap(user.id);
+    if ((current[session.id] || 0) >= latestAdminMessage.id) return;
+    const next = { ...current, [session.id]: latestAdminMessage.id };
+    writeSeenMap(user.id, next);
+  };
+
+  const updateUnreadCount = async (list: SupportSession[]) => {
+    if (!user?.id || list.length === 0) {
+      setUnreadCount(0);
+      return;
+    }
+
+    const seenMap = readSeenMap(user.id);
+    const details = await Promise.all(
+      list.map((session) => getSupportSession(session.id).catch(() => null))
+    );
+
+    const nextUnreadCount = details.reduce((sum, detail) => {
+      if (!detail) return sum;
+      const seenId = seenMap[detail.id] || 0;
+      return sum + detail.messages.filter((item) => item.role === 'ADMIN' && item.id > seenId).length;
+    }, 0);
+
+    setUnreadCount(nextUnreadCount);
+  };
+
+  const loadChatState = async (autoOpenLatest: boolean, silent = false) => {
+    if (!silent) setIsLoading(true);
     try {
       const list = await getSupportSessions();
       setSessions(list);
@@ -77,16 +128,21 @@ const SupportChatWidget = () => {
       if (autoOpenLatest && list.length > 0) {
         const full = await getSupportSession(list[0].id);
         setActiveSession(full);
+        markSessionSeen(full);
       }
 
       if (list.length === 0) {
         setActiveSession(null);
       }
 
+      await updateUnreadCount(list);
+
     } catch (error) {
-      toast.error(getErrorMessage(error, isEn ? 'Cannot load support chat data' : 'Không thể tải dữ liệu chat CSKH'));
+      if (!silent) {
+        toast.error(getErrorMessage(error, isEn ? 'Cannot load support chat data' : 'Không thể tải dữ liệu chat CSKH'));
+      }
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   };
 
@@ -94,10 +150,18 @@ const SupportChatWidget = () => {
     try {
       const full = await getSupportSession(sessionId);
       setActiveSession(full);
+       if (open) {
+        markSessionSeen(full);
+      }
       setSessions((prev) => {
         const without = prev.filter((item) => item.id !== full.id);
         return [full, ...without];
       });
+      await updateUnreadCount(
+        sessions.some((item) => item.id === full.id)
+          ? sessions.map((item) => (item.id === full.id ? full : item))
+          : [full, ...sessions]
+      );
     } catch {
       // ignore background polling errors
     }
@@ -106,9 +170,10 @@ const SupportChatWidget = () => {
   const createNewSession = async () => {
     const created = await createSupportSession({ title: isEn ? 'Customer support' : 'Hỗ trợ khách hàng' });
     setSessions((prev) => [created, ...prev]);
-    const full = await getSupportSession(created.id);
-    setActiveSession(full);
-    return full;
+      const full = await getSupportSession(created.id);
+      setActiveSession(full);
+      markSessionSeen(full);
+      return full;
   };
 
   const handleSend = async () => {
@@ -295,9 +360,9 @@ const SupportChatWidget = () => {
         )}
       </AnimatePresence>
 
-      {!open && sessions.length > 0 && (
+      {!open && unreadCount > 0 && (
         <span className="absolute -top-1 -right-1 h-4 min-w-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold inline-flex items-center justify-center">
-          {sessions.length > 9 ? '9+' : sessions.length}
+          {unreadCount > 9 ? '9+' : unreadCount}
         </span>
       )}
     </div>

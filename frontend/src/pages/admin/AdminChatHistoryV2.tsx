@@ -19,6 +19,23 @@ const getErrorMessage = (error: unknown, fallback: string) => {
   return e?.response?.data?.error || e?.message || fallback;
 };
 
+const ADMIN_SUPPORT_SEEN_KEY = 'support_seen_admin';
+
+const readAdminSeenMap = () => {
+  if (typeof window === 'undefined') return {} as Record<number, number>;
+  try {
+    const raw = window.localStorage.getItem(ADMIN_SUPPORT_SEEN_KEY);
+    return raw ? JSON.parse(raw) as Record<number, number> : {};
+  } catch {
+    return {};
+  }
+};
+
+const writeAdminSeenMap = (next: Record<number, number>) => {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(ADMIN_SUPPORT_SEEN_KEY, JSON.stringify(next));
+};
+
 const statusLabel = (status: string) => {
   if (status === 'SUPPORT_PENDING') return 'Cho admin';
   if (status === 'SUPPORT_CLOSED') return 'Da dong';
@@ -35,15 +52,53 @@ const AdminChatHistoryV2 = () => {
   const [sessions, setSessions] = useState<SupportSession[]>([]);
   const [selectedSession, setSelectedSession] = useState<SessionDetail | null>(null);
   const [messages, setMessages] = useState<SupportMessage[]>([]);
+  const [sessionUnreadCounts, setSessionUnreadCounts] = useState<Record<number, number>>({});
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [reply, setReply] = useState('');
   const [sendingReply, setSendingReply] = useState(false);
 
+  const markSessionSeen = (session: SessionDetail) => {
+    const latestUserMessage = [...(session.messages || [])]
+      .reverse()
+      .find((item) => item.role === 'USER');
+    if (!latestUserMessage) return;
+    const current = readAdminSeenMap();
+    if ((current[session.id] || 0) >= latestUserMessage.id) return;
+    const next = { ...current, [session.id]: latestUserMessage.id };
+    writeAdminSeenMap(next);
+    setSessionUnreadCounts((prev) => ({ ...prev, [session.id]: 0 }));
+  };
+
+  const hydrateUnreadCounts = async (list: SupportSession[]) => {
+    const seenMap = readAdminSeenMap();
+    const candidates = list.filter((session) => session.messages?.[0]?.role === 'USER' || session.status === 'SUPPORT_PENDING');
+
+    if (candidates.length === 0) {
+      setSessionUnreadCounts({});
+      return;
+    }
+
+    const details = await Promise.all(candidates.map((session) => getSupportSession(session.id).catch(() => null)));
+    const nextCounts: Record<number, number> = {};
+
+    details.forEach((detail) => {
+      if (!detail) return;
+      const seenId = seenMap[detail.id] || 0;
+      const unread = detail.messages.filter((item) => item.role === 'USER' && item.id > seenId).length;
+      if (unread > 0) {
+        nextCounts[detail.id] = unread;
+      }
+    });
+
+    setSessionUnreadCounts(nextCounts);
+  };
+
   const loadSessions = async () => {
     try {
       const data = await getSupportSessions();
       setSessions(data || []);
+      void hydrateUnreadCounts(data || []);
     } catch {
       // ignore list reload errors
     } finally {
@@ -78,6 +133,7 @@ const AdminChatHistoryV2 = () => {
       const data = await getSupportSession(id);
       setSelectedSession(data);
       setMessages(data.messages || []);
+      markSessionSeen(data);
     } catch (error) {
       if (!silent) {
         toast.error(getErrorMessage(error, 'Khong th? tai cuoc tro chuyen CSKH'));
@@ -131,10 +187,19 @@ const AdminChatHistoryV2 = () => {
     return <EmptyState icon={MessageSquare} title="Chua co ticket CSKH" description="Chua co user nao gui tin nhan ho tro." />;
   }
 
+  const totalUnreadCount = Object.values(sessionUnreadCounts).reduce((sum, value) => sum + value, 0);
+
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-4xl font-bold text-slate-900 dark:text-slate-100">Ho tro khach hang</h1>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-4xl font-bold text-slate-900 dark:text-slate-100">Ho tro khach hang</h1>
+          {totalUnreadCount > 0 && (
+            <span className="inline-flex items-center gap-2 rounded-full bg-rose-100 px-3 py-1 text-sm font-bold text-rose-700 dark:bg-rose-900/30 dark:text-rose-200">
+              {totalUnreadCount > 99 ? '99+' : totalUnreadCount} tin nhắn mới
+            </span>
+          )}
+        </div>
         <p className="text-gray-500 dark:text-gray-400 mt-1">Admin co the tra loi song song cho nhieu nguoi dung</p>
       </div>
 
@@ -173,7 +238,14 @@ const AdminChatHistoryV2 = () => {
                 </div>
                 <div className="mt-2 flex items-center justify-between gap-2">
                   <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${statusClass(s.status)}`}>{statusLabel(s.status)}</span>
-                  <span className="text-xs text-gray-500 dark:text-slate-400">Tin nhan: {s._count?.messages || 0}</span>
+                  <div className="flex items-center gap-2">
+                    {sessionUnreadCounts[s.id] > 0 && (
+                      <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                        {sessionUnreadCounts[s.id] > 9 ? '9+' : sessionUnreadCounts[s.id]}
+                      </span>
+                    )}
+                    <span className="text-xs text-gray-500 dark:text-slate-400">Tin nhan: {s._count?.messages || 0}</span>
+                  </div>
                 </div>
               </div>
             ))}
